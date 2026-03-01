@@ -1,15 +1,12 @@
 package com.example.helpTree.dto;
 
-import lombok.Data;
+import com.example.helpTree.enums.PostStatus;
 import lombok.Builder;
-import lombok.NoArgsConstructor;
-import lombok.AllArgsConstructor;
+import lombok.Data;
 import java.time.LocalDateTime;
 
 @Data
 @Builder
-@NoArgsConstructor
-@AllArgsConstructor
 public class PostDto {
     private Long id;
     private String title;
@@ -17,9 +14,12 @@ public class PostDto {
     private String authorName;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
-
-    // Информация об авторе
     private Long userId;
     private String userEmail;
     private Double userRating;
+    private Long helperId;
+    private String helperName;
+
+    // 👇 ДОБАВИТЬ
+    private PostStatus status;
 }

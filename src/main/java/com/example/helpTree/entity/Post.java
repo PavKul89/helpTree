@@ -1,5 +1,6 @@
 package com.example.helpTree.entity;
 
+import com.example.helpTree.enums.PostStatus;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -17,23 +18,20 @@ public class Post {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false)
     private String title;
-
-    @Column(length = 2000)
     private String description;
-
-    @Column(name = "author_name", nullable = false)
     private String authorName;
-
-    @Column(name = "created_at")
     private LocalDateTime createdAt;
-
-    @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
-    // Связь с пользователем (автор поста)
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
+    @ManyToOne
+    @JoinColumn(name = "user_id")
     private User user;
+
+    @ManyToOne
+    @JoinColumn(name = "helper_id")
+    private User helper;
+
+    @Enumerated(EnumType.STRING)
+    private PostStatus status;
 }

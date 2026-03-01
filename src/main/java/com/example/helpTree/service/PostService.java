@@ -5,6 +5,7 @@ import com.example.helpTree.dto.PostDto;
 import com.example.helpTree.dto.UpdatePostRequest;
 import com.example.helpTree.entity.Post;
 import com.example.helpTree.entity.User;
+import com.example.helpTree.enums.PostStatus;
 import com.example.helpTree.repository.PostRepository;
 import com.example.helpTree.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -23,9 +24,8 @@ public class PostService {
     private final UserRepository userRepository;
 
     public PostDto createPost(CreatePostRequest request) {
-        // Находим пользователя по ID
         User user = userRepository.findById(request.getUserId())
-                .orElseThrow(() -> new RuntimeException("Пользователь не найден с id: " + request.getUserId()));
+                .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
 
         Post post = new Post();
         post.setUser(user);
@@ -34,6 +34,9 @@ public class PostService {
         post.setAuthorName(request.getAuthorName());
         post.setCreatedAt(LocalDateTime.now());
         post.setUpdatedAt(LocalDateTime.now());
+
+        // 👇 ДОБАВЬ ЭТУ СТРОКУ
+        post.setStatus(PostStatus.OPEN);  // новый пост открыт для помощи
 
         Post savedPost = postRepository.save(post);
         return mapToDto(savedPost);
@@ -71,6 +74,10 @@ public class PostService {
         if (request.getAuthorName() != null) {
             post.setAuthorName(request.getAuthorName());
         }
+        // 👇 ДОБАВИТЬ
+        if (request.getStatus() != null) {
+            post.setStatus(request.getStatus());
+        }
 
         post.setUpdatedAt(LocalDateTime.now());
         Post updatedPost = postRepository.save(post);
@@ -90,7 +97,7 @@ public class PostService {
     }
 
     private PostDto mapToDto(Post post) {
-        return PostDto.builder()
+        PostDto.PostDtoBuilder builder = PostDto.builder()
                 .id(post.getId())
                 .title(post.getTitle())
                 .description(post.getDescription())
@@ -100,7 +107,15 @@ public class PostService {
                 .userId(post.getUser().getId())
                 .userEmail(post.getUser().getEmail())
                 .userRating(post.getUser().getRating())
-                .build();
+                // 👇 ДОБАВИТЬ
+                .status(post.getStatus());
+
+        if (post.getHelper() != null) {
+            builder.helperId(post.getHelper().getId())
+                    .helperName(post.getHelper().getName());
+        }
+
+        return builder.build();
     }
 }
 
