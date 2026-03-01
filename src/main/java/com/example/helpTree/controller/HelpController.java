@@ -1,7 +1,7 @@
 package com.example.helpTree.controller;
 
-import com.example.helpTree.dto.HelpRequest;
-import com.example.helpTree.dto.HelpResponse;
+import com.example.helpTree.dto.helps.HelpRequest;
+import com.example.helpTree.dto.helps.HelpResponse;
 import com.example.helpTree.service.HelpService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;

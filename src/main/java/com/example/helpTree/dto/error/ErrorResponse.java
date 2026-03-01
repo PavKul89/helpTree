@@ -1,4 +1,4 @@
-package com.example.helpTree.dto;
+package com.example.helpTree.dto.error;
 
 import lombok.Builder;
 import lombok.Data;

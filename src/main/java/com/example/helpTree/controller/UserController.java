@@ -1,8 +1,8 @@
 package com.example.helpTree.controller;
 
-import com.example.helpTree.dto.CreateUserRequest;
-import com.example.helpTree.dto.UpdateUserRequest;
-import com.example.helpTree.dto.UserDto;
+import com.example.helpTree.dto.users.CreateUserRequest;
+import com.example.helpTree.dto.users.UpdateUserRequest;
+import com.example.helpTree.dto.users.UserDto;
 import com.example.helpTree.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;

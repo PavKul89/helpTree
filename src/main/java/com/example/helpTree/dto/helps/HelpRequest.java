@@ -1,4 +1,4 @@
-package com.example.helpTree.dto;
+package com.example.helpTree.dto.helps;
 
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;

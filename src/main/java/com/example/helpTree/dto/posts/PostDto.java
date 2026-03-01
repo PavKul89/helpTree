@@ -1,4 +1,4 @@
-package com.example.helpTree.dto;
+package com.example.helpTree.dto.posts;
 
 import com.example.helpTree.enums.PostStatus;
 import lombok.Builder;

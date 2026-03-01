@@ -1,4 +1,4 @@
-package com.example.helpTree.dto;
+package com.example.helpTree.dto.users;
 
 import com.example.helpTree.enums.UserStatus;
 import lombok.Data;

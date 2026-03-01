@@ -1,8 +1,8 @@
 package com.example.helpTree.controller;
 
-import com.example.helpTree.dto.CreatePostRequest;
-import com.example.helpTree.dto.PostDto;
-import com.example.helpTree.dto.UpdatePostRequest;
+import com.example.helpTree.dto.posts.CreatePostRequest;
+import com.example.helpTree.dto.posts.PostDto;
+import com.example.helpTree.dto.posts.UpdatePostRequest;
 import com.example.helpTree.service.PostService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;

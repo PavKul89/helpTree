@@ -1,6 +1,6 @@
 package com.example.helpTree.exception;
 
-import com.example.helpTree.dto.ErrorResponse;
+import com.example.helpTree.dto.error.ErrorResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
