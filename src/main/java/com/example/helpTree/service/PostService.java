@@ -6,6 +6,7 @@ import com.example.helpTree.dto.posts.UpdatePostRequest;
 import com.example.helpTree.entity.Post;
 import com.example.helpTree.entity.User;
 import com.example.helpTree.enums.PostStatus;
+import com.example.helpTree.mapper.PostMapper;
 import com.example.helpTree.repository.PostRepository;
 import com.example.helpTree.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +23,7 @@ public class PostService {
 
     private final PostRepository postRepository;
     private final UserRepository userRepository;
+    private final PostMapper postMapper;
 
     public PostDto createPost(CreatePostRequest request) {
         User user = userRepository.findById(request.getUserId())
@@ -39,26 +41,26 @@ public class PostService {
         post.setStatus(PostStatus.OPEN);  // новый пост открыт для помощи
 
         Post savedPost = postRepository.save(post);
-        return mapToDto(savedPost);
+        return postMapper.toDto(savedPost);
     }
 
     @Transactional(readOnly = true)
     public List<PostDto> getPostsByUser(Long userId) {
         return postRepository.findAll().stream()
                 .filter(post -> post.getUser().getId().equals(userId))
-                .map(this::mapToDto)
+                .map(postMapper::toDto)
                 .collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)
     public PostDto getPostById(Long id) {
-        return mapToDto(getPostEntityById(id));
+        return postMapper.toDto(getPostEntityById(id));
     }
 
     @Transactional(readOnly = true)
     public List<PostDto> getAllPosts() {
         return postRepository.findAll().stream()
-                .map(this::mapToDto)
+                .map(postMapper::toDto)
                 .collect(Collectors.toList());
     }
 
@@ -81,7 +83,7 @@ public class PostService {
 
         post.setUpdatedAt(LocalDateTime.now());
         Post updatedPost = postRepository.save(post);
-        return mapToDto(updatedPost);
+        return postMapper.toDto(updatedPost);
     }
 
     public void deletePost(Long id) {
@@ -95,27 +97,4 @@ public class PostService {
         return postRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Пост не найден с id: " + id));
     }
-
-    private PostDto mapToDto(Post post) {
-        PostDto.PostDtoBuilder builder = PostDto.builder()
-                .id(post.getId())
-                .title(post.getTitle())
-                .description(post.getDescription())
-                .authorName(post.getAuthorName())
-                .createdAt(post.getCreatedAt())
-                .updatedAt(post.getUpdatedAt())
-                .userId(post.getUser().getId())
-                .userEmail(post.getUser().getEmail())
-                .userRating(post.getUser().getRating())
-                // 👇 ДОБАВИТЬ
-                .status(post.getStatus());
-
-        if (post.getHelper() != null) {
-            builder.helperId(post.getHelper().getId())
-                    .helperName(post.getHelper().getName());
-        }
-
-        return builder.build();
-    }
 }
-

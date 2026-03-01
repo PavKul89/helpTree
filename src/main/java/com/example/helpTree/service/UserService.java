@@ -5,6 +5,7 @@ import com.example.helpTree.dto.users.UpdateUserRequest;
 import com.example.helpTree.dto.users.UserDto;
 import com.example.helpTree.entity.User;
 import com.example.helpTree.enums.UserStatus;
+import com.example.helpTree.mapper.UserMapper;
 import com.example.helpTree.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -19,6 +20,7 @@ import java.util.stream.Collectors;
 public class UserService {
 
     private final UserRepository userRepository;
+    private final UserMapper userMapper;
 
     public UserDto createUser(CreateUserRequest request) {
         // Проверяем, нет ли уже такого email
@@ -39,25 +41,25 @@ public class UserService {
         user.setUpdatedAt(LocalDateTime.now());
 
         User savedUser = userRepository.save(user);
-        return mapToDto(savedUser);
+        return userMapper.toDto(savedUser);
     }
 
     @Transactional(readOnly = true)
     public UserDto getUserById(Long id) {
-        return mapToDto(getUserEntityById(id));
+        return userMapper.toDto(getUserEntityById(id));
     }
 
     @Transactional(readOnly = true)
     public UserDto getUserByEmail(String email) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("Пользователь не найден с email: " + email));
-        return mapToDto(user);
+        return userMapper.toDto(user);
     }
 
     @Transactional(readOnly = true)
     public List<UserDto> getAllUsers() {
         return userRepository.findAll().stream()
-                .map(this::mapToDto)
+                .map(userMapper::toDto)
                 .collect(Collectors.toList());
     }
 
@@ -84,7 +86,7 @@ public class UserService {
 
         user.setUpdatedAt(LocalDateTime.now());
         User updatedUser = userRepository.save(user);
-        return mapToDto(updatedUser);
+        return userMapper.toDto(updatedUser);
     }
 
     public void deleteUser(Long id) {
@@ -170,20 +172,5 @@ public class UserService {
 
         System.out.println("✅ Цепочка: пользователь " + helperId +
                 " помог пользователю " + receiverId);
-    }
-
-    private UserDto mapToDto(User user) {
-        return UserDto.builder()
-                .id(user.getId())
-                .name(user.getName())
-                .email(user.getEmail())
-                .phone(user.getPhone())
-                .city(user.getCity())
-                .helpedCount(user.getHelpedCount())
-                .debtCount(user.getDebtCount())
-                .rating(user.getRating())
-                .status(user.getStatus())
-                .createdAt(user.getCreatedAt())
-                .build();
     }
 }

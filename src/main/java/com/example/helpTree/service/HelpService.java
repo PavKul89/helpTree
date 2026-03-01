@@ -7,6 +7,7 @@ import com.example.helpTree.entity.Post;
 import com.example.helpTree.entity.User;
 import com.example.helpTree.enums.HelpStatus;
 import com.example.helpTree.enums.PostStatus;
+import com.example.helpTree.mapper.HelpMapper;
 import com.example.helpTree.repository.HelpRepository;
 import com.example.helpTree.repository.PostRepository;
 import com.example.helpTree.repository.UserRepository;
@@ -26,6 +27,7 @@ public class HelpService {
     private final PostRepository postRepository;
     private final UserRepository userRepository;
     private final UserService userService;
+    private final HelpMapper helpMapper;
 
     /**
      * 1. Помощник откликается на пост
@@ -68,7 +70,7 @@ public class HelpService {
         postRepository.save(post);
 
         Help savedHelp = helpRepository.save(help);
-        return mapToResponse(savedHelp);
+        return helpMapper.toResponse(savedHelp);
     }
 
     /**
@@ -99,7 +101,7 @@ public class HelpService {
         help.setUpdatedAt(LocalDateTime.now());
 
         Help updatedHelp = helpRepository.save(help);
-        return mapToResponse(updatedHelp);
+        return helpMapper.toResponse(updatedHelp);
     }
 
     /**
@@ -136,7 +138,7 @@ public class HelpService {
         userService.userHelpedSomeone(help.getHelper().getId());
 
         Help updatedHelp = helpRepository.save(help);
-        return mapToResponse(updatedHelp);
+        return helpMapper.toResponse(updatedHelp);
     }
 
     /**
@@ -157,7 +159,7 @@ public class HelpService {
         postRepository.save(post);
 
         Help updatedHelp = helpRepository.save(help);
-        return mapToResponse(updatedHelp);
+        return helpMapper.toResponse(updatedHelp);
     }
 
     /**
@@ -169,7 +171,7 @@ public class HelpService {
                 .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
 
         return helpRepository.findByHelper(helper).stream()
-                .map(this::mapToResponse)
+                .map(helpMapper::toResponse)
                 .collect(Collectors.toList());
     }
 
@@ -182,7 +184,7 @@ public class HelpService {
                 .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
 
         return helpRepository.findByReceiver(receiver).stream()
-                .map(this::mapToResponse)
+                .map(helpMapper::toResponse)
                 .collect(Collectors.toList());
     }
 
@@ -201,22 +203,5 @@ public class HelpService {
         if (help.getStatus() == forbiddenStatus) {
             throw new RuntimeException(errorMessage);
         }
-    }
-
-    private HelpResponse mapToResponse(Help help) {
-        return HelpResponse.builder()
-                .id(help.getId())
-                .postId(help.getPost().getId())
-                .postTitle(help.getPost().getTitle())
-                .helperId(help.getHelper().getId())
-                .helperName(help.getHelper().getName())
-                .receiverId(help.getReceiver().getId())
-                .receiverName(help.getReceiver().getName())
-                .status(help.getStatus().toString())
-                .acceptedAt(help.getAcceptedAt())
-                .completedAt(help.getCompletedAt())
-                .confirmedAt(help.getConfirmedAt())
-                .createdAt(help.getCreatedAt())
-                .build();
     }
 }
