@@ -9,6 +9,7 @@ import lombok.AllArgsConstructor;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.Map;
 
 @Data
 @Builder
@@ -23,6 +24,8 @@ public class ErrorResponse {
     private String error;
     private String message;
     private String path;
+    // Дополнительные детали ошибок (напр. поле -> сообщение) — опционально
+    private Map<String, String> errors;
 
     // Удобный фабричный метод для быстрого создания ответа об ошибке
     public static ErrorResponse of(int status, String error, String message, String path) {

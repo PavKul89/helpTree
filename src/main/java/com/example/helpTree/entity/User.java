@@ -2,6 +2,9 @@ package com.example.helpTree.entity;
 
 import com.example.helpTree.enums.UserStatus;
 import jakarta.persistence.*;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
@@ -18,14 +21,21 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @NotBlank
+    @Size(max = 100)
     @Column(nullable = false)
     private String name;
 
+    @NotBlank
+    @Email
+    @Size(max = 200)
     @Column(unique = true, nullable = false)
     private String email;
 
+    @Size(max = 30)
     private String phone;
 
+    @Size(max = 100)
     private String city;
 
     @Column(name = "helped_count")
@@ -44,4 +54,16 @@ public class User {
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+    @PrePersist
+    protected void onCreate() {
+        LocalDateTime now = LocalDateTime.now();
+        this.createdAt = now;
+        this.updatedAt = now;
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        this.updatedAt = LocalDateTime.now();
+    }
 }

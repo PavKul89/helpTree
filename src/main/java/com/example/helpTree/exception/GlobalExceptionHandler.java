@@ -1,6 +1,7 @@
 package com.example.helpTree.exception;
 
 import com.example.helpTree.dto.error.ErrorResponse;
+import com.example.helpTree.enums.ErrorType;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -22,7 +23,7 @@ public class GlobalExceptionHandler {
         log.info("Resource not found: {}", ex.getMessage());
         ErrorResponse error = ErrorResponse.builder()
                 .status(HttpStatus.NOT_FOUND.value())
-                .error("Not Found")
+                .error(ErrorType.NOT_FOUND.getTitle())
                 .message(ex.getMessage())
                 .path(request.getRequestURI())
                 .build();
@@ -34,7 +35,7 @@ public class GlobalExceptionHandler {
         log.info("Conflict: {}", ex.getMessage());
         ErrorResponse error = ErrorResponse.builder()
                 .status(HttpStatus.CONFLICT.value())
-                .error("Conflict")
+                .error(ErrorType.CONFLICT.getTitle())
                 .message(ex.getMessage())
                 .path(request.getRequestURI())
                 .build();
@@ -46,7 +47,7 @@ public class GlobalExceptionHandler {
         log.info("Bad request: {}", ex.getMessage());
         ErrorResponse error = ErrorResponse.builder()
                 .status(HttpStatus.BAD_REQUEST.value())
-                .error("Bad Request")
+                .error(ErrorType.BAD_REQUEST.getTitle())
                 .message(ex.getMessage())
                 .path(request.getRequestURI())
                 .build();
@@ -54,15 +55,26 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<Map<String, String>> handleValidationExceptions(
-            MethodArgumentNotValidException ex) {
+    public ResponseEntity<ErrorResponse> handleValidationExceptions(
+            MethodArgumentNotValidException ex, HttpServletRequest request) {
         Map<String, String> errors = new HashMap<>();
         ex.getBindingResult().getAllErrors().forEach((error) -> {
             String fieldName = ((FieldError) error).getField();
             String errorMessage = error.getDefaultMessage();
             errors.put(fieldName, errorMessage);
         });
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errors);
+
+        log.warn("Validation failed for request {}: {}", request.getRequestURI(), errors);
+
+        ErrorResponse response = ErrorResponse.builder()
+                .status(HttpStatus.BAD_REQUEST.value())
+                .error(ErrorType.VALIDATION_FAILED.getTitle())
+                .message("Request validation failed. See 'errors' for details.")
+                .path(request.getRequestURI())
+                .errors(errors)
+                .build();
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
     }
 
     @ExceptionHandler(RuntimeException.class)
@@ -70,7 +82,7 @@ public class GlobalExceptionHandler {
         log.error("Unexpected runtime exception", ex);
         ErrorResponse error = ErrorResponse.builder()
                 .status(HttpStatus.INTERNAL_SERVER_ERROR.value())
-                .error("Internal Server Error")
+                .error(ErrorType.INTERNAL_SERVER_ERROR.getTitle())
                 .message(ex.getMessage())
                 .path(request.getRequestURI())
                 .build();
