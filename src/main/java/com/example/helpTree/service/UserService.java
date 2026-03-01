@@ -5,9 +5,12 @@ import com.example.helpTree.dto.users.UpdateUserRequest;
 import com.example.helpTree.dto.users.UserDto;
 import com.example.helpTree.entity.User;
 import com.example.helpTree.enums.UserStatus;
+import com.example.helpTree.exception.ConflictException;
+import com.example.helpTree.exception.NotFoundException;
 import com.example.helpTree.mapper.UserMapper;
 import com.example.helpTree.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
@@ -17,6 +20,7 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 @Transactional
+@Slf4j
 public class UserService {
 
     private final UserRepository userRepository;
@@ -25,7 +29,7 @@ public class UserService {
     public UserDto createUser(CreateUserRequest request) {
         // Проверяем, нет ли уже такого email
         if (userRepository.existsByEmail(request.getEmail())) {
-            throw new RuntimeException("Пользователь с таким email уже существует");
+            throw new ConflictException("Пользователь с таким email уже существует");
         }
 
         User user = new User();
@@ -52,7 +56,7 @@ public class UserService {
     @Transactional(readOnly = true)
     public UserDto getUserByEmail(String email) {
         User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("Пользователь не найден с email: " + email));
+                .orElseThrow(() -> new NotFoundException("Пользователь не найден с email: " + email));
         return userMapper.toDto(user);
     }
 
@@ -73,7 +77,7 @@ public class UserService {
             // Проверяем, не занят ли email другим пользователем
             if (!request.getEmail().equals(user.getEmail()) &&
                     userRepository.existsByEmail(request.getEmail())) {
-                throw new RuntimeException("Email уже используется");
+                throw new ConflictException("Email уже используется");
             }
             user.setEmail(request.getEmail());
         }
@@ -91,7 +95,7 @@ public class UserService {
 
     public void deleteUser(Long id) {
         if (!userRepository.existsById(id)) {
-            throw new RuntimeException("Пользователь не найден с id: " + id);
+            throw new NotFoundException("Пользователь не найден с id: " + id);
         }
         userRepository.deleteById(id);
     }
@@ -121,13 +125,12 @@ public class UserService {
         receiver.setUpdatedAt(LocalDateTime.now());
         userRepository.save(receiver);
 
-        System.out.println("✅ Пользователь " + receiver.getName() +
-                " теперь должен помочь " + receiver.getDebtCount() + " людям");
+        log.info("✅ Пользователь {} теперь должен помочь {} людям", receiver.getName(), receiver.getDebtCount());
     }
 
     private User getUserEntityById(Long id) {
         return userRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Пользователь не найден с id: " + id));
+                .orElseThrow(() -> new NotFoundException("Пользователь не найден с id: " + id));
     }
 
     /**
@@ -153,8 +156,7 @@ public class UserService {
         helper.setUpdatedAt(LocalDateTime.now());
         userRepository.save(helper);
 
-        System.out.println("✅ Пользователь " + helper.getName() +
-                " помог кому-то. Осталось помочь: " + helper.getDebtCount());
+        log.info("✅ Пользователь {} помог кому-то. Осталось помочь: {}", helper.getName(), helper.getDebtCount());
     }
 
     /**
@@ -170,7 +172,6 @@ public class UserService {
         // 2. Тот, кому помогли (receiver) - у него увеличивается долг
         incrementHelpedCount(receiverId);
 
-        System.out.println("✅ Цепочка: пользователь " + helperId +
-                " помог пользователю " + receiverId);
+        log.info("✅ Цепочка: пользователь {} помог пользователю {}", helperId, receiverId);
     }
 }

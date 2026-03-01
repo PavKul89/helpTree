@@ -7,6 +7,9 @@ import com.example.helpTree.entity.Post;
 import com.example.helpTree.entity.User;
 import com.example.helpTree.enums.HelpStatus;
 import com.example.helpTree.enums.PostStatus;
+import com.example.helpTree.exception.BadRequestException;
+import com.example.helpTree.exception.ConflictException;
+import com.example.helpTree.exception.NotFoundException;
 import com.example.helpTree.mapper.HelpMapper;
 import com.example.helpTree.repository.HelpRepository;
 import com.example.helpTree.repository.PostRepository;
@@ -34,24 +37,24 @@ public class HelpService {
      */
     public HelpResponse acceptHelp(HelpRequest request) {
         Post post = postRepository.findById(request.getPostId())
-                .orElseThrow(() -> new RuntimeException("Пост не найден"));
+                .orElseThrow(() -> new NotFoundException("Пост не найден"));
 
         User helper = userRepository.findById(request.getHelperId())
-                .orElseThrow(() -> new RuntimeException("Помощник не найден"));
+                .orElseThrow(() -> new NotFoundException("Помощник не найден"));
 
         User receiver = post.getUser(); // Автор поста
 
         // Проверки
         if (helper.getId().equals(receiver.getId())) {
-            throw new RuntimeException("Нельзя помочь самому себе");
+            throw new BadRequestException("Нельзя помочь самому себе");
         }
 
         if (helpRepository.existsByPostAndHelper(post, helper)) {
-            throw new RuntimeException("Вы уже откликались на этот пост");
+            throw new ConflictException("Вы уже откликались на этот пост");
         }
 
         if (post.getHelper() != null) {
-            throw new RuntimeException("На этот пост уже кто-то откликнулся");
+            throw new ConflictException("На этот пост уже кто-то откликнулся");
         }
 
         // Создаем запись о помощи
@@ -81,19 +84,19 @@ public class HelpService {
 
         // 👇 ПРОВЕРКИ
         if (help.getStatus() == HelpStatus.COMPLETED) {
-            throw new RuntimeException("Помощь уже отмечена как выполненная");
+            throw new ConflictException("Помощь уже отмечена как выполненная");
         }
 
         if (help.getStatus() == HelpStatus.CANCELLED) {
-            throw new RuntimeException("Нельзя завершить отмененную помощь");
+            throw new ConflictException("Нельзя завершить отмененную помощь");
         }
 
         if (help.getStatus() == HelpStatus.CONFIRMED) {
-            throw new RuntimeException("Помощь уже подтверждена");
+            throw new ConflictException("Помощь уже подтверждена");
         }
 
         if (help.getStatus() != HelpStatus.ACCEPTED) {
-            throw new RuntimeException("Помощь не в статусе ACCEPTED");
+            throw new BadRequestException("Помощь не в статусе ACCEPTED");
         }
 
         help.setStatus(HelpStatus.COMPLETED);
@@ -113,15 +116,15 @@ public class HelpService {
 
         // 👇 ПРОВЕРКИ
         if (help.getStatus() == HelpStatus.CONFIRMED) {
-            throw new RuntimeException("Помощь уже подтверждена");
+            throw new ConflictException("Помощь уже подтверждена");
         }
 
         if (help.getStatus() == HelpStatus.CANCELLED) {
-            throw new RuntimeException("Нельзя подтвердить отмененную помощь");
+            throw new ConflictException("Нельзя подтвердить отмененную помощь");
         }
 
         if (help.getStatus() != HelpStatus.COMPLETED) {
-            throw new RuntimeException("Помощь не в статусе COMPLETED");
+            throw new BadRequestException("Помощь не в статусе COMPLETED");
         }
 
         help.setStatus(HelpStatus.CONFIRMED);
@@ -168,7 +171,7 @@ public class HelpService {
     @Transactional(readOnly = true)
     public List<HelpResponse> getHelpsByHelper(Long helperId) {
         User helper = userRepository.findById(helperId)
-                .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
+                .orElseThrow(() -> new NotFoundException("Пользователь не найден"));
 
         return helpRepository.findByHelper(helper).stream()
                 .map(helpMapper::toResponse)
@@ -181,7 +184,7 @@ public class HelpService {
     @Transactional(readOnly = true)
     public List<HelpResponse> getHelpsByReceiver(Long receiverId) {
         User receiver = userRepository.findById(receiverId)
-                .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
+                .orElseThrow(() -> new NotFoundException("Пользователь не найден"));
 
         return helpRepository.findByReceiver(receiver).stream()
                 .map(helpMapper::toResponse)
@@ -190,18 +193,18 @@ public class HelpService {
 
     private Help getHelpById(Long id) {
         return helpRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Помощь не найдена с id: " + id));
+                .orElseThrow(() -> new NotFoundException("Помощь не найдена с id: " + id));
     }
 
     private void validateHelpStatus(Help help, HelpStatus expectedStatus, String errorMessage) {
         if (help.getStatus() != expectedStatus) {
-            throw new RuntimeException(errorMessage);
+            throw new BadRequestException(errorMessage);
         }
     }
 
     private void validateHelpNotInStatus(Help help, HelpStatus forbiddenStatus, String errorMessage) {
         if (help.getStatus() == forbiddenStatus) {
-            throw new RuntimeException(errorMessage);
+            throw new ConflictException(errorMessage);
         }
     }
 }

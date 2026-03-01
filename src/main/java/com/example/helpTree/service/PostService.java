@@ -6,6 +6,7 @@ import com.example.helpTree.dto.posts.UpdatePostRequest;
 import com.example.helpTree.entity.Post;
 import com.example.helpTree.entity.User;
 import com.example.helpTree.enums.PostStatus;
+import com.example.helpTree.exception.NotFoundException;
 import com.example.helpTree.mapper.PostMapper;
 import com.example.helpTree.repository.PostRepository;
 import com.example.helpTree.repository.UserRepository;
@@ -27,7 +28,7 @@ public class PostService {
 
     public PostDto createPost(CreatePostRequest request) {
         User user = userRepository.findById(request.getUserId())
-                .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
+                .orElseThrow(() -> new NotFoundException("Пользователь не найден"));
 
         Post post = new Post();
         post.setUser(user);
@@ -46,8 +47,7 @@ public class PostService {
 
     @Transactional(readOnly = true)
     public List<PostDto> getPostsByUser(Long userId) {
-        return postRepository.findAll().stream()
-                .filter(post -> post.getUser().getId().equals(userId))
+        return postRepository.findByUserId(userId).stream()
                 .map(postMapper::toDto)
                 .collect(Collectors.toList());
     }
@@ -88,13 +88,13 @@ public class PostService {
 
     public void deletePost(Long id) {
         if (!postRepository.existsById(id)) {
-            throw new RuntimeException("Пост не найден с id: " + id);
+            throw new NotFoundException("Пост не найден с id: " + id);
         }
         postRepository.deleteById(id);
     }
 
     private Post getPostEntityById(Long id) {
         return postRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Пост не найден с id: " + id));
+                .orElseThrow(() -> new NotFoundException("Пост не найден с id: " + id));
     }
 }

@@ -6,9 +6,9 @@ spring:
     name: helpTree
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/helpTree_db
-    username: helpTree
-    password: helpTree
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/helpTree_db}
+    username: ${DB_USER:helpTree}
+    password: ${DB_PASS:helpTree}
     driver-class-name: org.postgresql.Driver
 
   jpa:
