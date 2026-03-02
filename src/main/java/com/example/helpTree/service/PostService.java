@@ -9,8 +9,12 @@ import com.example.helpTree.enums.PostStatus;
 import com.example.helpTree.exception.NotFoundException;
 import com.example.helpTree.mapper.PostMapper;
 import com.example.helpTree.repository.PostRepository;
+import com.example.helpTree.repository.PostSpecification;
 import com.example.helpTree.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
@@ -62,6 +66,12 @@ public class PostService {
         return postRepository.findAll().stream()
                 .map(postMapper::toDto)
                 .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public Page<PostDto> getPosts(Long userId, PostStatus status, String title, String authorName, Pageable pageable) {
+        Specification<Post> spec = PostSpecification.filter(userId, status, title, authorName);
+        return postRepository.findAll(spec, pageable).map(postMapper::toDto);
     }
 
     public PostDto updatePost(Long id, UpdatePostRequest request) {

@@ -13,5 +13,6 @@ public interface PostMapper {
     @Mapping(source = "user.rating", target = "userRating")
     @Mapping(source = "helper.id", target = "helperId")
     @Mapping(source = "helper.name", target = "helperName")
+    @Mapping(source = "status", target = "status")
     PostDto toDto(Post post);
 }
