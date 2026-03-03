@@ -34,4 +34,11 @@ public class Post {
 
     @Enumerated(EnumType.STRING)
     private PostStatus status;
+
+    // Поля для soft-delete
+    @Column(name = "deleted", nullable = false)
+    private Boolean deleted = false;
+
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
 }

@@ -6,6 +6,7 @@ import com.example.helpTree.dto.posts.UpdatePostRequest;
 import com.example.helpTree.entity.Post;
 import com.example.helpTree.entity.User;
 import com.example.helpTree.enums.PostStatus;
+import com.example.helpTree.exception.ConflictException;
 import com.example.helpTree.exception.NotFoundException;
 import com.example.helpTree.mapper.PostMapper;
 import com.example.helpTree.repository.PostRepository;
@@ -52,6 +53,7 @@ public class PostService {
     @Transactional(readOnly = true)
     public List<PostDto> getPostsByUser(Long userId) {
         return postRepository.findByUserId(userId).stream()
+                .filter(p -> p.getDeleted() == null || !p.getDeleted())
                 .map(postMapper::toDto)
                 .collect(Collectors.toList());
     }
@@ -64,6 +66,7 @@ public class PostService {
     @Transactional(readOnly = true)
     public List<PostDto> getAllPosts() {
         return postRepository.findAll().stream()
+                .filter(p -> p.getDeleted() == null || !p.getDeleted())
                 .map(postMapper::toDto)
                 .collect(Collectors.toList());
     }
@@ -97,14 +100,25 @@ public class PostService {
     }
 
     public void deletePost(Long id) {
-        if (!postRepository.existsById(id)) {
-            throw new NotFoundException("Пост не найден с id: " + id);
+        Post post = postRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Пост не найден с id: " + id));
+
+        if (post.getDeleted() != null && post.getDeleted()) {
+            throw new ConflictException("Пост уже был удалён");
         }
-        postRepository.deleteById(id);
+
+        post.setDeleted(true);
+        post.setDeletedAt(LocalDateTime.now());
+        post.setUpdatedAt(LocalDateTime.now());
+        postRepository.save(post);
     }
 
     private Post getPostEntityById(Long id) {
-        return postRepository.findById(id)
+        Post post = postRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Пост не найден с id: " + id));
+        if (post.getDeleted() != null && post.getDeleted()) {
+            throw new NotFoundException("Пост не найден с id: " + id);
+        }
+        return post;
     }
 }

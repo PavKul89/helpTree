@@ -39,8 +39,16 @@ public class HelpService {
         Post post = postRepository.findById(request.getPostId())
                 .orElseThrow(() -> new NotFoundException("Пост не найден"));
 
+        if (post.getDeleted() != null && post.getDeleted()) {
+            throw new NotFoundException("Пост не найден");
+        }
+
         User helper = userRepository.findById(request.getHelperId())
                 .orElseThrow(() -> new NotFoundException("Помощник не найден"));
+
+        if (helper.getDeleted() != null && helper.getDeleted()) {
+            throw new NotFoundException("Помощник не найден");
+        }
 
         User receiver = post.getUser(); // Автор поста
 
@@ -173,7 +181,12 @@ public class HelpService {
         User helper = userRepository.findById(helperId)
                 .orElseThrow(() -> new NotFoundException("Пользователь не найден"));
 
+        if (helper.getDeleted() != null && helper.getDeleted()) {
+            throw new NotFoundException("Пользователь не найден");
+        }
+
         return helpRepository.findByHelper(helper).stream()
+                .filter(h -> h.getDeleted() == null || !h.getDeleted())
                 .map(helpMapper::toResponse)
                 .collect(Collectors.toList());
     }
@@ -186,14 +199,23 @@ public class HelpService {
         User receiver = userRepository.findById(receiverId)
                 .orElseThrow(() -> new NotFoundException("Пользователь не найден"));
 
+        if (receiver.getDeleted() != null && receiver.getDeleted()) {
+            throw new NotFoundException("Пользователь не найден");
+        }
+
         return helpRepository.findByReceiver(receiver).stream()
+                .filter(h -> h.getDeleted() == null || !h.getDeleted())
                 .map(helpMapper::toResponse)
                 .collect(Collectors.toList());
     }
 
     private Help getHelpById(Long id) {
-        return helpRepository.findById(id)
+        Help help = helpRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Помощь не найдена с id: " + id));
+        if (help.getDeleted() != null && help.getDeleted()) {
+            throw new NotFoundException("Помощь не найдена с id: " + id);
+        }
+        return help;
     }
 
     private void validateHelpStatus(Help help, HelpStatus expectedStatus, String errorMessage) {

@@ -20,6 +20,9 @@ public final class PostSpecification {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 
+            // Фильтруем мягко удалённые
+            predicates.add(cb.equal(root.get("deleted"), false));
+
             if (userId != null) {
                 predicates.add(cb.equal(root.get("user").get("id"), userId));
             }

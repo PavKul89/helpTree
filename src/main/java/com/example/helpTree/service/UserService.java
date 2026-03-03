@@ -63,6 +63,7 @@ public class UserService {
     @Transactional(readOnly = true)
     public List<UserDto> getAllUsers() {
         return userRepository.findAll().stream()
+                .filter(u -> u.getDeleted() == null || !u.getDeleted())
                 .map(userMapper::toDto)
                 .collect(Collectors.toList());
     }
@@ -94,10 +95,18 @@ public class UserService {
     }
 
     public void deleteUser(Long id) {
-        if (!userRepository.existsById(id)) {
-            throw new NotFoundException("Пользователь не найден с id: " + id);
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Пользователь не найден с id: " + id));
+
+        if (user.getDeleted() != null && user.getDeleted()) {
+            throw new ConflictException("Пользователь уже был удалён");
         }
-        userRepository.deleteById(id);
+
+        // Мягкое удаление
+        user.setDeleted(true);
+        user.setDeletedAt(LocalDateTime.now());
+        user.setUpdatedAt(LocalDateTime.now());
+        userRepository.save(user);
     }
 
     /**
@@ -129,8 +138,12 @@ public class UserService {
     }
 
     private User getUserEntityById(Long id) {
-        return userRepository.findById(id)
+        User user = userRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Пользователь не найден с id: " + id));
+        if (user.getDeleted() != null && user.getDeleted()) {
+            throw new NotFoundException("Пользователь не найден с id: " + id);
+        }
+        return user;
     }
 
     /**
