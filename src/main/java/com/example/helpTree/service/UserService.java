@@ -4,6 +4,7 @@ import com.example.helpTree.dto.users.CreateUserRequest;
 import com.example.helpTree.dto.users.UpdateUserRequest;
 import com.example.helpTree.dto.users.UserDto;
 import com.example.helpTree.entity.User;
+import com.example.helpTree.enums.Role;
 import com.example.helpTree.enums.UserStatus;
 import com.example.helpTree.exception.ConflictException;
 import com.example.helpTree.exception.NotFoundException;
@@ -11,8 +12,12 @@ import com.example.helpTree.mapper.UserMapper;
 import com.example.helpTree.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -25,9 +30,9 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final UserMapper userMapper;
+    private final PasswordEncoder passwordEncoder;
 
     public UserDto createUser(CreateUserRequest request) {
-        // Проверяем, нет ли уже такого email
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new ConflictException("Пользователь с таким email уже существует");
         }
@@ -35,17 +40,24 @@ public class UserService {
         User user = new User();
         user.setName(request.getName());
         user.setEmail(request.getEmail());
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
         user.setPhone(request.getPhone());
         user.setCity(request.getCity());
         user.setHelpedCount(0);
         user.setDebtCount(0);
         user.setRating(0.0);
         user.setStatus(UserStatus.NEWBIE);
+        user.setRole(Role.USER);
         user.setCreatedAt(LocalDateTime.now());
         user.setUpdatedAt(LocalDateTime.now());
 
         User savedUser = userRepository.save(user);
         return userMapper.toDto(savedUser);
+    }
+
+    public UserDto getCurrentUser() {
+        UserDetails userDetails = (UserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        return getUserByEmail(userDetails.getUsername());
     }
 
     @Transactional(readOnly = true)
@@ -63,7 +75,7 @@ public class UserService {
     @Transactional(readOnly = true)
     public List<UserDto> getAllUsers() {
         return userRepository.findAll().stream()
-                .filter(u -> u.getDeleted() == null || !u.getDeleted())
+                .filter(u -> !u.getDeleted())
                 .map(userMapper::toDto)
                 .collect(Collectors.toList());
     }
@@ -71,11 +83,13 @@ public class UserService {
     public UserDto updateUser(Long id, UpdateUserRequest request) {
         User user = getUserEntityById(id);
 
+        // Проверяем, что пользователь обновляет свой профиль или это админ
+        checkUserAccess(user);
+
         if (request.getName() != null) {
             user.setName(request.getName());
         }
         if (request.getEmail() != null) {
-            // Проверяем, не занят ли email другим пользователем
             if (!request.getEmail().equals(user.getEmail()) &&
                     userRepository.existsByEmail(request.getEmail())) {
                 throw new ConflictException("Email уже используется");
@@ -98,25 +112,21 @@ public class UserService {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Пользователь не найден с id: " + id));
 
-        if (user.getDeleted() != null && user.getDeleted()) {
+        if (user.getDeleted()) {
             throw new ConflictException("Пользователь уже был удалён");
         }
 
-        // Мягкое удаление
         user.setDeleted(true);
         user.setDeletedAt(LocalDateTime.now());
         user.setUpdatedAt(LocalDateTime.now());
         userRepository.save(user);
     }
 
-    /**
-     * Восстановление (undelete) пользователя — снимает флаг deleted
-     */
     public void restoreUser(Long id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Пользователь не найден с id: " + id));
 
-        if (user.getDeleted() == null || !user.getDeleted()) {
+        if (!user.getDeleted()) {
             throw new ConflictException("Пользователь не удалён");
         }
 
@@ -126,82 +136,61 @@ public class UserService {
         userRepository.save(user);
     }
 
-    /**
-     * ВЫЗЫВАЕТСЯ, КОГДА КОМУ-ТО ПОМОГЛИ
-     * @param receiverId - ID того, КОМУ помогли (получатель помощи)
-     *
-     * Правило: если человеку помогли, он должен помочь двоим
-     */
+    @Transactional(readOnly = true)
+    public User getUserEntityById(Long id) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Пользователь не найден с id: " + id));
+        if (user.getDeleted()) {
+            throw new NotFoundException("Пользователь не найден с id: " + id);
+        }
+        return user;
+    }
+
+    private void checkUserAccess(User user) {
+        UserDetails userDetails = (UserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        boolean isAdmin = userDetails.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+
+        if (!isAdmin && !userDetails.getUsername().equals(user.getEmail())) {
+            throw new org.springframework.security.access.AccessDeniedException("Нет прав для этого действия");
+        }
+    }
+
+    // Методы для логики помощи
     public void incrementHelpedCount(Long receiverId) {
         User receiver = getUserEntityById(receiverId);
+        receiver.setDebtCount(receiver.getDebtCount() + 2);
 
-        // Этому человеку только что помогли, теперь он должен помочь двоим
-        receiver.setDebtCount(receiver.getDebtCount() + 2);  // +2 к долгу
-
-        // Обновляем статус
         if (receiver.getStatus() == UserStatus.NEWBIE) {
             receiver.setStatus(UserStatus.HELPER);
         }
-
-        // Если должен помочь - статус DEBTOR
         if (receiver.getDebtCount() > 0) {
             receiver.setStatus(UserStatus.DEBTOR);
         }
 
         receiver.setUpdatedAt(LocalDateTime.now());
         userRepository.save(receiver);
-
-        log.info("✅ Пользователь {} теперь должен помочь {} людям", receiver.getName(), receiver.getDebtCount());
     }
 
-    private User getUserEntityById(Long id) {
-        User user = userRepository.findById(id)
-                .orElseThrow(() -> new NotFoundException("Пользователь не найден с id: " + id));
-        if (user.getDeleted() != null && user.getDeleted()) {
-            throw new NotFoundException("Пользователь не найден с id: " + id);
-        }
-        return user;
-    }
-
-    /**
-     * ВЫЗЫВАЕТСЯ, КОГДА ПОЛЬЗОВАТЕЛЬ САМ ПОМОГ КОМУ-ТО
-     * @param helperId - ID того, КТО помог
-     */
     public void userHelpedSomeone(Long helperId) {
         User helper = getUserEntityById(helperId);
-
-        // Увеличиваем счетчик оказанной помощи
         helper.setHelpedCount(helper.getHelpedCount() + 1);
 
-        // Уменьшаем долг (человек выполнил одно обещание)
         if (helper.getDebtCount() > 0) {
             helper.setDebtCount(helper.getDebtCount() - 1);
         }
 
-        // Если долг стал 0, статус ACTIVE
         if (helper.getDebtCount() == 0) {
             helper.setStatus(UserStatus.ACTIVE);
         }
 
         helper.setUpdatedAt(LocalDateTime.now());
         userRepository.save(helper);
-
-        log.info("✅ Пользователь {} помог кому-то. Осталось помочь: {}", helper.getName(), helper.getDebtCount());
     }
 
-    /**
-     * ПОЛНАЯ ЛОГИКА: один пользователь помогает другому
-     * @param helperId - Кто помогает
-     * @param receiverId - Кому помогают
-     */
     @Transactional
     public void processHelp(Long helperId, Long receiverId) {
-        // 1. Тот, кто помогает (helper) - у него уменьшается долг
         userHelpedSomeone(helperId);
-
-        // 2. Тот, кому помогли (receiver) - у него увеличивается долг
         incrementHelpedCount(receiverId);
-
-        log.info("✅ Цепочка: пользователь {} помог пользователю {}", helperId, receiverId);
     }
 }
