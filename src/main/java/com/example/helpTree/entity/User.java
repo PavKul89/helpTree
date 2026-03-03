@@ -32,6 +32,12 @@ public class User {
     @Column(unique = true, nullable = false)
     private String email;
 
+    // Новый пароль (зашифрованный)
+    @NotBlank
+    @Size(max = 200)
+    @Column(nullable = false)
+    private String password;
+
     @Size(max = 30)
     private String phone;
 
