@@ -113,6 +113,20 @@ public class PostService {
         postRepository.save(post);
     }
 
+    public void restorePost(Long id) {
+        Post post = postRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Пост не найден с id: " + id));
+
+        if (post.getDeleted() == null || !post.getDeleted()) {
+            throw new ConflictException("Пост не удалён");
+        }
+
+        post.setDeleted(false);
+        post.setDeletedAt(null);
+        post.setUpdatedAt(LocalDateTime.now());
+        postRepository.save(post);
+    }
+
     private Post getPostEntityById(Long id) {
         Post post = postRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Пост не найден с id: " + id));

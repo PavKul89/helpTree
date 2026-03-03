@@ -53,6 +53,13 @@ public class UserController {
         return ResponseEntity.noContent().build();
     }
 
+    // Новый endpoint: восстановление пользователя
+    @PostMapping("/{id}/restore")
+    public ResponseEntity<Void> restoreUser(@PathVariable Long id) {
+        userService.restoreUser(id);
+        return ResponseEntity.noContent().build();
+    }
+
     // Специальный эндпоинт для тестирования правила
     @PostMapping("/{id}/increment-help")
     public ResponseEntity<Void> incrementHelpedCount(@PathVariable Long id) {

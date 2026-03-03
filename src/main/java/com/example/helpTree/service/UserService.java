@@ -110,6 +110,23 @@ public class UserService {
     }
 
     /**
+     * Восстановление (undelete) пользователя — снимает флаг deleted
+     */
+    public void restoreUser(Long id) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Пользователь не найден с id: " + id));
+
+        if (user.getDeleted() == null || !user.getDeleted()) {
+            throw new ConflictException("Пользователь не удалён");
+        }
+
+        user.setDeleted(false);
+        user.setDeletedAt(null);
+        user.setUpdatedAt(LocalDateTime.now());
+        userRepository.save(user);
+    }
+
+    /**
      * ВЫЗЫВАЕТСЯ, КОГДА КОМУ-ТО ПОМОГЛИ
      * @param receiverId - ID того, КОМУ помогли (получатель помощи)
      *

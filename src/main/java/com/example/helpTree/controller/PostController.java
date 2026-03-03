@@ -60,6 +60,13 @@ public class PostController {
         return ResponseEntity.noContent().build();
     }
 
+    // Новый endpoint: восстановление поста
+    @PostMapping("/{id}/restore")
+    public ResponseEntity<Void> restorePost(@PathVariable Long id) {
+        postService.restorePost(id);
+        return ResponseEntity.noContent().build();
+    }
+
     // Новый эндпоинт для получения постов пользователя
     @GetMapping("/user/{userId}")
     public ResponseEntity<List<PostDto>> getPostsByUser(@PathVariable Long userId) {
