@@ -9,6 +9,7 @@ import com.example.helpTree.enums.PostStatus;
 import com.example.helpTree.exception.ConflictException;
 import com.example.helpTree.exception.NotFoundException;
 import com.example.helpTree.mapper.PostMapper;
+import com.example.helpTree.metrics.annotation.BusinessMetric;
 import com.example.helpTree.repository.PostRepository;
 import com.example.helpTree.repository.PostSpecification;
 import com.example.helpTree.repository.UserRepository;
@@ -31,6 +32,10 @@ public class PostService {
     private final UserRepository userRepository;
     private final PostMapper postMapper;
 
+    @BusinessMetric(
+        value = "post.created",
+        tags = {"operation=create, type=write"}
+    )
     public PostDto createPost(CreatePostRequest request) {
         User user = userRepository.findById(request.getUserId())
                 .orElseThrow(() -> new NotFoundException("Пользователь не найден"));
@@ -59,6 +64,10 @@ public class PostService {
     }
 
     @Transactional(readOnly = true)
+    @BusinessMetric(
+            value = "post.retrieved",
+            tags = {"operation=get, type=read"}
+    )
     public PostDto getPostById(Long id) {
         return postMapper.toDto(getPostEntityById(id));
     }
