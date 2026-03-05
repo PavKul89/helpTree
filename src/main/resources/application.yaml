@@ -32,3 +32,29 @@ logging:
 app:
   jwtSecret: mySecretKeyForJWTGenerationWithAtLeast64CharactersLong12345678901234567890123456789012
   jwtExpirationMs: 86400000
+
+management:
+  info:
+    env:
+      enabled: true
+
+  endpoints:
+    web:
+      exposure:
+        include:
+          - health
+          - info
+          - metrics
+          - loggers
+
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+
+info:
+  app:
+    name: "HelpTree"
+    version: "0.0.1"
+    description: "My project"
