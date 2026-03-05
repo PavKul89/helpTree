@@ -38,19 +38,32 @@ public class SecurityConfig {
     }
 
     @Bean
+
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        // ВРЕМЕННО ОТКЛЮЧЕНО ДЛЯ ТЕСТИРОВАНИЯ
         http.csrf(csrf -> csrf.disable())
-                .exceptionHandling(exception -> exception.authenticationEntryPoint(unauthorizedHandler))
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth ->
-                        auth.requestMatchers("/api/auth/**").permitAll()
-                                .requestMatchers("/api/public/**").permitAll()
-                                .requestMatchers("/swagger-ui/**").permitAll()
-                                .requestMatchers("/v3/api-docs/**").permitAll()
-                                .anyRequest().authenticated()
+                        auth.anyRequest().permitAll()  // Все запросы разрешены
                 );
 
-        http.addFilterBefore(authTokenFilter, UsernamePasswordAuthenticationFilter.class);
+        // Не добавляем фильтр
+
         return http.build();
+
+
+//    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+//        http.csrf(csrf -> csrf.disable())
+//                .exceptionHandling(exception -> exception.authenticationEntryPoint(unauthorizedHandler))
+//                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+//                .authorizeHttpRequests(auth ->
+//                        auth.requestMatchers("/api/auth/**").permitAll()
+//                                .requestMatchers("/api/public/**").permitAll()
+//                                .requestMatchers("/swagger-ui/**").permitAll()
+//                                .requestMatchers("/v3/api-docs/**").permitAll()
+//                                .anyRequest().authenticated()
+//                );
+//
+//        http.addFilterBefore(authTokenFilter, UsernamePasswordAuthenticationFilter.class);
+//        return http.build();
     }
 }
