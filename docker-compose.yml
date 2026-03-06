@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: postgres
+    restart: always
+    environment:
+      POSTGRES_USER: helpTree
+      POSTGRES_PASSWORD: helpTree
+      POSTGRES_DB: helpTree_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - helpTree-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U helpTree"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  prometheus:
+    image: prom/prometheus:v2.47.0
+    container_name: prometheus_helpTree
+    volumes:
+
+      - ./src/main/resources/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+    ports:
+      - '9090:9090'
+    restart: unless-stopped
+    networks:
+      - helpTree-network
+    depends_on:
+      - postgres
+
+  grafana:
+    image: grafana/grafana:10.2.2
+    container_name: grafana_helpTree
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_INSTALL_PLUGINS: ""
+      GF_UPDATE_CHECKER_ENABLED: false
+    ports:
+      - '3000:3000'
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    networks:
+      - helpTree-network
+    volumes:
+      - grafana_data:/var/lib/grafana
+
+
+volumes:
+  postgres_data:
+    name: helpTree_postgres_data
+  prometheus_data:
+    name: helpTree_prometheus_data
+  grafana_data:
+    name: helpTree_grafana_data
+
+networks:
+  helpTree-network:
+    name: helpTree-network
+    driver: bridge
