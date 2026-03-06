@@ -33,7 +33,11 @@ public class UserService {
     private final PasswordEncoder passwordEncoder;
 
     public UserDto createUser(CreateUserRequest request) {
+        log.info("Создание нового пользователя с email: {}", request.getEmail());
+
         if (userRepository.existsByEmail(request.getEmail())) {
+            log.warn("Попытка создания пользователя с уже существующим email: {}", request.getEmail());
+
             throw new ConflictException("Пользователь с таким email уже существует");
         }
 
@@ -52,6 +56,8 @@ public class UserService {
         user.setUpdatedAt(LocalDateTime.now());
 
         User savedUser = userRepository.save(user);
+
+        log.info("Пользователь успешно создан с ID: {}", savedUser.getId());
         return userMapper.toDto(savedUser);
     }
 

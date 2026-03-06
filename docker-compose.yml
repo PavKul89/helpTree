@@ -25,7 +25,6 @@ services:
     image: prom/prometheus:v2.47.0
     container_name: prometheus_helpTree
     volumes:
-
       - ./src/main/resources/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
     command:
@@ -57,7 +56,6 @@ services:
       - helpTree-network
     volumes:
       - grafana_data:/var/lib/grafana
-
 
 volumes:
   postgres_data:
