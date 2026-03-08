@@ -14,6 +14,7 @@ import com.example.helpTree.repository.PostRepository;
 import com.example.helpTree.repository.PostSpecification;
 import com.example.helpTree.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -26,6 +27,7 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 @Transactional
+@Slf4j
 public class PostService {
 
     private final PostRepository postRepository;
@@ -33,34 +35,63 @@ public class PostService {
     private final PostMapper postMapper;
 
     @BusinessMetric(
-        value = "post.created",
-        tags = {"operation=create, type=write"}
+            value = "post.created",
+            tags = {"operation=create, type=write"}
     )
     public PostDto createPost(CreatePostRequest request) {
-        User user = userRepository.findById(request.getUserId())
-                .orElseThrow(() -> new NotFoundException("Пользователь не найден"));
+        log.info("Создание нового поста для пользователя с ID: {}", request.getUserId());
+        log.debug("Данные нового поста: title={}, authorName={}", request.getTitle(), request.getAuthorName());
 
-        Post post = new Post();
-        post.setUser(user);
-        post.setTitle(request.getTitle());
-        post.setDescription(request.getDescription());
-        post.setAuthorName(request.getAuthorName());
-        post.setCreatedAt(LocalDateTime.now());
-        post.setUpdatedAt(LocalDateTime.now());
+        try {
+            User user = userRepository.findById(request.getUserId())
+                    .orElseThrow(() -> new NotFoundException("Пользователь не найден с id: " + request.getUserId()));
 
-        // 👇 ДОБАВЬ ЭТУ СТРОКУ
-        post.setStatus(PostStatus.OPEN);  // новый пост открыт для помощи
+            log.debug("Найден пользователь для создания поста: email={}", user.getEmail());
 
-        Post savedPost = postRepository.save(post);
-        return postMapper.toDto(savedPost);
+            Post post = new Post();
+            post.setUser(user);
+            post.setTitle(request.getTitle());
+            post.setDescription(request.getDescription());
+            post.setAuthorName(request.getAuthorName());
+            post.setCreatedAt(LocalDateTime.now());
+            post.setUpdatedAt(LocalDateTime.now());
+            post.setStatus(PostStatus.OPEN);  // новый пост открыт для помощи
+
+            Post savedPost = postRepository.save(post);
+            log.info("Пост успешно создан с ID: {}, пользователь ID: {}", savedPost.getId(), user.getId());
+            log.debug("Созданный пост: title={}, status={}", savedPost.getTitle(), savedPost.getStatus());
+
+            return postMapper.toDto(savedPost);
+
+        } catch (NotFoundException e) {
+            log.warn("Не удалось создать пост: пользователь с ID {} не найден", request.getUserId());
+            throw e;
+        } catch (Exception e) {
+            log.error("Ошибка при создании поста для пользователя ID: {}", request.getUserId(), e);
+            throw e;
+        }
     }
 
     @Transactional(readOnly = true)
     public List<PostDto> getPostsByUser(Long userId) {
-        return postRepository.findByUserId(userId).stream()
-                .filter(p -> p.getDeleted() == null || !p.getDeleted())
-                .map(postMapper::toDto)
-                .collect(Collectors.toList());
+        log.info("Запрос всех постов пользователя с ID: {}", userId);
+
+        try {
+            List<PostDto> posts = postRepository.findByUserId(userId).stream()
+                    .filter(p -> p.getDeleted() == null || !p.getDeleted())
+                    .map(postMapper::toDto)
+                    .collect(Collectors.toList());
+
+            log.info("Найдено {} постов для пользователя с ID: {}", posts.size(), userId);
+            log.debug("ID постов пользователя {}: {}", userId,
+                    posts.stream().map(PostDto::getId).collect(Collectors.toList()));
+
+            return posts;
+
+        } catch (Exception e) {
+            log.error("Ошибка при получении постов пользователя с ID: {}", userId, e);
+            throw e;
+        }
     }
 
     @Transactional(readOnly = true)
@@ -69,79 +100,198 @@ public class PostService {
             tags = {"operation=get, type=read"}
     )
     public PostDto getPostById(Long id) {
-        return postMapper.toDto(getPostEntityById(id));
+        log.info("Запрос поста по ID: {}", id);
+
+        try {
+            PostDto postDto = postMapper.toDto(getPostEntityById(id));
+            log.info("Пост с ID {} найден: title={}, автор={}", id, postDto.getTitle(), postDto.getAuthorName());
+            return postDto;
+
+        } catch (NotFoundException e) {
+            log.warn("Пост с ID {} не найден", id);
+            throw e;
+        } catch (Exception e) {
+            log.error("Ошибка при получении поста с ID: {}", id, e);
+            throw e;
+        }
     }
 
     @Transactional(readOnly = true)
     public List<PostDto> getAllPosts() {
-        return postRepository.findAll().stream()
-                .filter(p -> p.getDeleted() == null || !p.getDeleted())
-                .map(postMapper::toDto)
-                .collect(Collectors.toList());
+        log.info("Запрос списка всех активных постов");
+
+        try {
+            List<PostDto> posts = postRepository.findAll().stream()
+                    .filter(p -> p.getDeleted() == null || !p.getDeleted())
+                    .map(postMapper::toDto)
+                    .collect(Collectors.toList());
+
+            log.info("Получен список всех активных постов, количество: {}", posts.size());
+            log.debug("ID всех постов: {}", posts.stream().map(PostDto::getId).collect(Collectors.toList()));
+
+            return posts;
+
+        } catch (Exception e) {
+            log.error("Ошибка при получении списка всех постов", e);
+            throw e;
+        }
     }
 
     @Transactional(readOnly = true)
     public Page<PostDto> getPosts(Long userId, PostStatus status, String title, String authorName, Pageable pageable) {
-        Specification<Post> spec = PostSpecification.filter(userId, status, title, authorName);
-        return postRepository.findAll(spec, pageable).map(postMapper::toDto);
+        log.info("Запрос постов с фильтрацией: userId={}, status={}, title={}, authorName={}, page={}, size={}",
+                userId, status, title, authorName, pageable.getPageNumber(), pageable.getPageSize());
+
+        try {
+            Specification<Post> spec = PostSpecification.filter(userId, status, title, authorName);
+            Page<PostDto> postsPage = postRepository.findAll(spec, pageable).map(postMapper::toDto);
+
+            log.info("Найдено постов с фильтрацией: {}, всего страниц: {}",
+                    postsPage.getTotalElements(), postsPage.getTotalPages());
+            log.debug("Посты на текущей странице: {}",
+                    postsPage.getContent().stream().map(PostDto::getId).collect(Collectors.toList()));
+
+            return postsPage;
+
+        } catch (Exception e) {
+            log.error("Ошибка при поиске постов с фильтрацией", e);
+            throw e;
+        }
     }
 
     public PostDto updatePost(Long id, UpdatePostRequest request) {
-        Post post = getPostEntityById(id);
+        log.info("Обновление поста с ID: {}", id);
+        log.debug("Данные для обновления: title={}, description={}, authorName={}, status={}",
+                request.getTitle(), request.getDescription(), request.getAuthorName(), request.getStatus());
 
-        if (request.getTitle() != null) {
-            post.setTitle(request.getTitle());
-        }
-        if (request.getDescription() != null) {
-            post.setDescription(request.getDescription());
-        }
-        if (request.getAuthorName() != null) {
-            post.setAuthorName(request.getAuthorName());
-        }
-        // 👇 ДОБАВИТЬ
-        if (request.getStatus() != null) {
-            post.setStatus(request.getStatus());
-        }
+        try {
+            Post post = getPostEntityById(id);
+            log.debug("Текущее состояние поста: title={}, status={}", post.getTitle(), post.getStatus());
 
-        post.setUpdatedAt(LocalDateTime.now());
-        Post updatedPost = postRepository.save(post);
-        return postMapper.toDto(updatedPost);
+            boolean changed = false;
+
+            if (request.getTitle() != null && !request.getTitle().equals(post.getTitle())) {
+                post.setTitle(request.getTitle());
+                changed = true;
+                log.debug("Изменен заголовок поста на: {}", request.getTitle());
+            }
+
+            if (request.getDescription() != null && !request.getDescription().equals(post.getDescription())) {
+                post.setDescription(request.getDescription());
+                changed = true;
+                log.debug("Изменено описание поста");
+            }
+
+            if (request.getAuthorName() != null && !request.getAuthorName().equals(post.getAuthorName())) {
+                post.setAuthorName(request.getAuthorName());
+                changed = true;
+                log.debug("Изменено имя автора на: {}", request.getAuthorName());
+            }
+
+            if (request.getStatus() != null && request.getStatus() != post.getStatus()) {
+                PostStatus oldStatus = post.getStatus();
+                post.setStatus(request.getStatus());
+                changed = true;
+                log.debug("Изменен статус поста с {} на {}", oldStatus, request.getStatus());
+            }
+
+            if (changed) {
+                post.setUpdatedAt(LocalDateTime.now());
+                Post updatedPost = postRepository.save(post);
+                log.info("Пост с ID {} успешно обновлен", id);
+                log.debug("Обновленный пост: title={}, status={}", updatedPost.getTitle(), updatedPost.getStatus());
+                return postMapper.toDto(updatedPost);
+            } else {
+                log.info("Нет изменений для обновления поста с ID: {}", id);
+                return postMapper.toDto(post);
+            }
+
+        } catch (NotFoundException e) {
+            log.warn("Не удалось обновить пост: ID {} не найден", id);
+            throw e;
+        } catch (Exception e) {
+            log.error("Ошибка при обновлении поста с ID: {}", id, e);
+            throw e;
+        }
     }
 
     public void deletePost(Long id) {
-        Post post = postRepository.findById(id)
-                .orElseThrow(() -> new NotFoundException("Пост не найден с id: " + id));
+        log.info("Запрос на мягкое удаление поста с ID: {}", id);
 
-        if (post.getDeleted() != null && post.getDeleted()) {
-            throw new ConflictException("Пост уже был удалён");
+        try {
+            Post post = postRepository.findById(id)
+                    .orElseThrow(() -> new NotFoundException("Пост не найден с id: " + id));
+
+            if (post.getDeleted() != null && post.getDeleted()) {
+                log.warn("Попытка удалить уже удаленный пост с ID: {}", id);
+                throw new ConflictException("Пост уже был удалён");
+            }
+
+            post.setDeleted(true);
+            post.setDeletedAt(LocalDateTime.now());
+            post.setUpdatedAt(LocalDateTime.now());
+            postRepository.save(post);
+
+            log.info("Пост с ID: {} успешно помечен как удаленный", id);
+            log.debug("Детали удаленного поста: title={}, время удаления={}",
+                    post.getTitle(), post.getDeletedAt());
+
+        } catch (NotFoundException e) {
+            log.warn("Не удалось удалить пост: ID {} не найден", id);
+            throw e;
+        } catch (ConflictException e) {
+            log.warn("Не удалось удалить пост: {}", e.getMessage());
+            throw e;
+        } catch (Exception e) {
+            log.error("Ошибка при удалении поста с ID: {}", id, e);
+            throw e;
         }
-
-        post.setDeleted(true);
-        post.setDeletedAt(LocalDateTime.now());
-        post.setUpdatedAt(LocalDateTime.now());
-        postRepository.save(post);
     }
 
     public void restorePost(Long id) {
-        Post post = postRepository.findById(id)
-                .orElseThrow(() -> new NotFoundException("Пост не найден с id: " + id));
+        log.info("Запрос на восстановление поста с ID: {}", id);
 
-        if (post.getDeleted() == null || !post.getDeleted()) {
-            throw new ConflictException("Пост не удалён");
+        try {
+            Post post = postRepository.findById(id)
+                    .orElseThrow(() -> new NotFoundException("Пост не найден с id: " + id));
+
+            if (post.getDeleted() == null || !post.getDeleted()) {
+                log.warn("Попытка восстановить не удаленный пост с ID: {}", id);
+                throw new ConflictException("Пост не удалён");
+            }
+
+            post.setDeleted(false);
+            post.setDeletedAt(null);
+            post.setUpdatedAt(LocalDateTime.now());
+            postRepository.save(post);
+
+            log.info("Пост с ID: {} успешно восстановлен", id);
+            log.debug("Детали восстановленного поста: title={}", post.getTitle());
+
+        } catch (NotFoundException e) {
+            log.warn("Не удалось восстановить пост: ID {} не найден", id);
+            throw e;
+        } catch (ConflictException e) {
+            log.warn("Не удалось восстановить пост: {}", e.getMessage());
+            throw e;
+        } catch (Exception e) {
+            log.error("Ошибка при восстановлении поста с ID: {}", id, e);
+            throw e;
         }
-
-        post.setDeleted(false);
-        post.setDeletedAt(null);
-        post.setUpdatedAt(LocalDateTime.now());
-        postRepository.save(post);
     }
 
     private Post getPostEntityById(Long id) {
+        log.debug("Поиск сущности поста по ID: {}", id);
+
         Post post = postRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Пост не найден с id: " + id));
+
         if (post.getDeleted() != null && post.getDeleted()) {
+            log.debug("Пост с ID {} найден, но помечен как удаленный", id);
             throw new NotFoundException("Пост не найден с id: " + id);
         }
+
+        log.debug("Сущность поста с ID {} успешно найдена", id);
         return post;
     }
 }
