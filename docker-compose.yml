@@ -78,7 +78,6 @@ volumes:
   redis_data:
     name: helpTree_redis_data
 
-
 networks:
   helpTree-network:
     name: helpTree-network
