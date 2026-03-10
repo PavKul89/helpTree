@@ -57,6 +57,17 @@ services:
     volumes:
       - grafana_data:/var/lib/grafana
 
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - helpTree-network
+    command: redis-server --appendonly yes
+
 volumes:
   postgres_data:
     name: helpTree_postgres_data
@@ -64,6 +75,9 @@ volumes:
     name: helpTree_prometheus_data
   grafana_data:
     name: helpTree_grafana_data
+  redis_data:
+    name: helpTree_redis_data
+
 
 networks:
   helpTree-network:
