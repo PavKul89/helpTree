@@ -5,14 +5,81 @@ spring:
   application:
     name: helpTree
 
-  data:
-    redis:
-      host: ${REDIS_HOST:localhost}
-      port: ${REDIS_PORT:6379}
-      timeout: 2000ms
-      client-type: jedis
-      jedis:
-        pool:
-          max-active: 8
-          max-idle: 8
-          min-idle: 0
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/helpTree_db}
+    username: ${DB_USER:helpTree}
+    password: ${DB_PASS:helpTree}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+
+  kafka:
+    bootstrap-servers: ${KAFKA_SERVERS:localhost:9092}
+    consumer:
+      group-id: rating-service
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+logging:
+  level:
+    com.example.rating: DEBUG
+    com.example.rating.client: INFO
+    org.springframework.kafka: INFO
+    org.springframework.data.redis: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+
+info:
+  app:
+    name: "rating-service"
+    version: "0.0.1"
+    description: "My project"
+
+rating:
+  calculation:
+    cron: "0 0/5 * * * ?"  # Каждые 5 минут
+    batch-size: 100
+    weights:
+      completion-weight: 1.5      # Вес успешного завершения
+      confirmation-weight: 2.0     # Вес подтверждения
+      speed-weight: 0.5            # Вес скорости реакции
+      debt-penalty: -0.5           # Штраф за долги
+    thresholds:
+      excellent: 4.5
+      good: 3.5
+      average: 2.5
+      poor: 1.5
+
+helptree:
+  service:
+    url: ${HELPTREE_API_URL:http://localhost:8080}
+
