@@ -14,7 +14,7 @@ public class RatingServiceApplication {
 
     public static void main(String[] args) {
         SpringApplication.run(RatingServiceApplication.class, args);
-        log.info("🚀 Project started successfully at: http://localhost:8082");
+        log.info("🚀 Project started successfully at: http://localhost:8081");
     }
 
 }
