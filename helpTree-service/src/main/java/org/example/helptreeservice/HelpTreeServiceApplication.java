@@ -11,6 +11,10 @@ public class HelpTreeServiceApplication {
     public static void main(String[] args) {
         SpringApplication.run(HelpTreeServiceApplication.class, args);
         log.info("🚀 Project started successfully at: http://localhost:8080");
+        log.info("🚀 Kafka-ui successfully at: http://localhost:8082");
+        log.info("🚀 Prometheus successfully at: http://localhost:9090");
+        log.info("🚀 Grafana successfully at: http://localhost:3000");
+
     }
 
 }

@@ -374,4 +374,18 @@ public class UserService {
             throw e;
         }
     }
+
+    public void updateUserRating(Long id, Double rating) {
+        log.info("Обновление рейтинга пользователя ID: {} на {}", id, rating);
+        try {
+            User user = getUserEntityById(id);
+            user.setRating(rating);
+            user.setUpdatedAt(LocalDateTime.now());
+            userRepository.save(user);
+            log.info("Рейтинг пользователя ID {} успешно обновлен", id);
+        } catch (Exception e) {
+            log.error("Ошибка при обновлении рейтинга пользователя ID: {}", id, e);
+            throw e;
+        }
+    }
 }

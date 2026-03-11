@@ -137,7 +137,6 @@
             <scope>provided</scope>
         </dependency>
 
-        <!-- Jackson -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-validation</artifactId>

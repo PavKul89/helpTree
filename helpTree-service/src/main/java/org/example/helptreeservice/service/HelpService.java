@@ -1,5 +1,7 @@
 package org.example.helptreeservice.service;
 
+
+import org.example.helptreeservice.dto.HelpEvent;
 import org.example.helptreeservice.dto.helps.HelpRequest;
 import org.example.helptreeservice.dto.helps.HelpResponse;
 import org.example.helptreeservice.entity.Help;
@@ -18,7 +20,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -33,6 +37,7 @@ public class HelpService {
     private final UserRepository userRepository;
     private final UserService userService;
     private final HelpMapper helpMapper;
+    private final KafkaProducerService kafkaProducerService;
 
     /**
      * 1. Помощник откликается на пост
@@ -61,7 +66,7 @@ public class HelpService {
             }
             log.debug("Найден помощник: email={}, имя={}", helper.getEmail(), helper.getName());
 
-            User receiver = post.getUser(); // Автор поста
+            User receiver = post.getUser();
             log.debug("Автор поста (получатель): email={}, имя={}", receiver.getEmail(), receiver.getName());
 
             // Проверки
@@ -93,13 +98,25 @@ public class HelpService {
             help.setCreatedAt(LocalDateTime.now());
             help.setUpdatedAt(LocalDateTime.now());
 
-            // 👇 ВАЖНО: Обновляем статус поста и помощника
-            post.setStatus(PostStatus.IN_PROGRESS);  // Меняем статус поста
-            post.setHelper(helper);                   // Указываем, кто помогает
+            // Обновляем статус поста и помощника
+            post.setStatus(PostStatus.IN_PROGRESS);
+            post.setHelper(helper);
             postRepository.save(post);
             log.debug("Статус поста обновлен на IN_PROGRESS, назначен помощник ID: {}", helper.getId());
 
             Help savedHelp = helpRepository.save(help);
+
+            // Отправляем событие в Kafka
+            HelpEvent event = HelpEvent.builder()
+                    .helpId(savedHelp.getId())
+                    .postId(post.getId())
+                    .helperId(helper.getId())
+                    .receiverId(receiver.getId())
+                    .eventType("ACCEPTED")
+                    .timestamp(LocalDateTime.now())
+                    .build();
+            kafkaProducerService.sendHelpEvent(event);
+
             log.info("Помощь успешно принята: helpId={}, helperId={}, receiverId={}, postId={}",
                     savedHelp.getId(), helper.getId(), receiver.getId(), post.getId());
 
@@ -129,7 +146,10 @@ public class HelpService {
             log.debug("Текущее состояние помощи: status={}, helperId={}, receiverId={}",
                     help.getStatus(), help.getHelper().getId(), help.getReceiver().getId());
 
-            // 👇 ПРОВЕРКИ
+            // Сохраняем время принятия для расчета длительности
+            LocalDateTime acceptedAt = help.getAcceptedAt();
+
+            // Проверки
             if (help.getStatus() == HelpStatus.COMPLETED) {
                 log.warn("Попытка завершить уже выполненную помощь: helpId={}", helpId);
                 throw new ConflictException("Помощь уже отмечена как выполненная");
@@ -156,6 +176,25 @@ public class HelpService {
             help.setUpdatedAt(LocalDateTime.now());
 
             Help updatedHelp = helpRepository.save(help);
+
+            // Рассчитываем длительность (в минутах)
+            long duration = 0;
+            if (acceptedAt != null) {
+                duration = ChronoUnit.MINUTES.between(acceptedAt, LocalDateTime.now());
+            }
+
+            // Отправляем событие в Kafka
+            HelpEvent event = HelpEvent.builder()
+                    .helpId(updatedHelp.getId())
+                    .postId(help.getPost().getId())
+                    .helperId(help.getHelper().getId())
+                    .receiverId(help.getReceiver().getId())
+                    .eventType("COMPLETED")
+                    .timestamp(LocalDateTime.now())
+                    .duration(duration)
+                    .build();
+            kafkaProducerService.sendHelpEvent(event);
+
             log.info("Помощь успешно отмечена как выполненная: helpId={}", helpId);
             log.debug("Обновленный статус помощи: {}", updatedHelp.getStatus());
 
@@ -175,7 +214,6 @@ public class HelpService {
 
     /**
      * 3. Автор подтверждает, что помощь получена
-     * ЗДЕСЬ СРАБАТЫВАЕТ ПРАВИЛО ПИРАМИДЫ!
      */
     public HelpResponse confirmHelp(Long helpId) {
         log.info("Подтверждение получения помощи: helpId={}", helpId);
@@ -185,7 +223,7 @@ public class HelpService {
             log.debug("Текущее состояние помощи: status={}, helperId={}, receiverId={}",
                     help.getStatus(), help.getHelper().getId(), help.getReceiver().getId());
 
-            // 👇 ПРОВЕРКИ
+            // Проверки
             if (help.getStatus() == HelpStatus.CONFIRMED) {
                 log.warn("Попытка подтвердить уже подтвержденную помощь: helpId={}", helpId);
                 throw new ConflictException("Помощь уже подтверждена");
@@ -220,6 +258,18 @@ public class HelpService {
             userService.userHelpedSomeone(help.getHelper().getId());
 
             Help updatedHelp = helpRepository.save(help);
+
+            // Отправляем событие в Kafka
+            HelpEvent event = HelpEvent.builder()
+                    .helpId(updatedHelp.getId())
+                    .postId(post.getId())
+                    .helperId(help.getHelper().getId())
+                    .receiverId(help.getReceiver().getId())
+                    .eventType("CONFIRMED")
+                    .timestamp(LocalDateTime.now())
+                    .build();
+            kafkaProducerService.sendHelpEvent(event);
+
             log.info("Помощь успешно подтверждена: helpId={}", helpId);
             log.debug("Итоговое состояние помощи: {}", updatedHelp.getStatus());
 
@@ -248,8 +298,15 @@ public class HelpService {
             log.debug("Текущее состояние помощи: status={}, helperId={}, receiverId={}",
                     help.getStatus(), help.getHelper().getId(), help.getReceiver().getId());
 
-            validateHelpNotInStatus(help, HelpStatus.CANCELLED, "Помощь уже отменена");
-            validateHelpNotInStatus(help, HelpStatus.CONFIRMED, "Нельзя отменить подтвержденную помощь");
+            if (help.getStatus() == HelpStatus.CANCELLED) {
+                log.warn("Попытка отменить уже отмененную помощь: helpId={}", helpId);
+                throw new ConflictException("Помощь уже отменена");
+            }
+
+            if (help.getStatus() == HelpStatus.CONFIRMED) {
+                log.warn("Попытка отменить подтвержденную помощь: helpId={}", helpId);
+                throw new ConflictException("Нельзя отменить подтвержденную помощь");
+            }
 
             HelpStatus oldStatus = help.getStatus();
             help.setStatus(HelpStatus.CANCELLED);
@@ -263,6 +320,18 @@ public class HelpService {
             log.debug("Статус поста ID={} возвращен на OPEN, помощник удален", post.getId());
 
             Help updatedHelp = helpRepository.save(help);
+
+            // Отправляем событие в Kafka
+            HelpEvent event = HelpEvent.builder()
+                    .helpId(updatedHelp.getId())
+                    .postId(post.getId())
+                    .helperId(help.getHelper().getId())
+                    .receiverId(help.getReceiver().getId())
+                    .eventType("CANCELLED")
+                    .timestamp(LocalDateTime.now())
+                    .build();
+            kafkaProducerService.sendHelpEvent(event);
+
             log.info("Помощь успешно отменена: helpId={}", helpId);
 
             return helpMapper.toResponse(updatedHelp);
@@ -351,6 +420,9 @@ public class HelpService {
         }
     }
 
+    /**
+     * Получить помощь по ID
+     */
     private Help getHelpById(Long id) {
         log.debug("Поиск помощи по ID: {}", id);
 
@@ -364,22 +436,5 @@ public class HelpService {
 
         log.debug("Помощь с ID {} успешно найдена", id);
         return help;
-    }
-
-    private void validateHelpStatus(Help help, HelpStatus expectedStatus, String errorMessage) {
-        if (help.getStatus() != expectedStatus) {
-            log.debug("Валидация статуса не пройдена: ожидался {}, текущий {}",
-                    expectedStatus, help.getStatus());
-            throw new BadRequestException(errorMessage);
-        }
-        log.debug("Валидация статуса пройдена: текущий статус {}", help.getStatus());
-    }
-
-    private void validateHelpNotInStatus(Help help, HelpStatus forbiddenStatus, String errorMessage) {
-        if (help.getStatus() == forbiddenStatus) {
-            log.debug("Валидация статуса не пройдена: статус {} запрещен", forbiddenStatus);
-            throw new ConflictException(errorMessage);
-        }
-        log.debug("Валидация статуса пройдена: статус {} разрешен", help.getStatus());
     }
 }
