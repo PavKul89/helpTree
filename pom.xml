@@ -32,7 +32,7 @@
 
 	<dependencyManagement>
 		<dependencies>
-			<!-- Mapstruct -->
+
 			<dependency>
 				<groupId>org.mapstruct</groupId>
 				<artifactId>mapstruct</artifactId>
@@ -45,7 +45,6 @@
 				<scope>provided</scope>
 			</dependency>
 
-			<!-- JWT -->
 			<dependency>
 				<groupId>io.jsonwebtoken</groupId>
 				<artifactId>jjwt-api</artifactId>
@@ -64,7 +63,6 @@
 				<scope>runtime</scope>
 			</dependency>
 
-			<!-- Модули проекта -->
 			<dependency>
 				<groupId>org.example</groupId>
 				<artifactId>helpTree-service</artifactId>
@@ -79,7 +77,6 @@
 	</dependencyManagement>
 
 	<dependencies>
-		<!-- Общие зависимости для всех модулей -->
 		<dependency>
 			<groupId>org.projectlombok</groupId>
 			<artifactId>lombok</artifactId>

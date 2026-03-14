@@ -40,35 +40,12 @@ logging:
     org.hibernate.SQL: DEBUG
     org.hibernate.type.descriptor.sql.BasicBinder: TRACE
     org.springframework.web: DEBUG
-    io.micrometer.tracing: DEBUG
-  pattern:
-    level: "%5p [${spring.application.name:},%X{traceId:-},%X{spanId:-}]"
-#    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] traceId=%mdc{traceId} spanId=%mdc{spanId} %-5level %logger{36} - %msg%n"
-
 
 app:
   jwtSecret: mySecretKeyForJWTGenerationWithAtLeast64CharactersLong12345678901234567890123456789012
   jwtExpirationMs: 86400000
 
 management:
-  tracing:
-    enabled: true
-    sampling:
-      probability: 1.0   # в демо берём 100%, в production меньше (0.1, 0.01)
-    propagation:
-      type: w3c
-
-    baggage:
-      enabled: true
-      correlation:
-        enabled: true
-        fields:
-          - traceId
-          - spanId
-    otlp:
-      tracing:
-        endpoint: http://jaeger:4318/v1/traces
-
   info:
     env:
       enabled: true

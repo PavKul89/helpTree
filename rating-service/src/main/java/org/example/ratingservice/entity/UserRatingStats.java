@@ -24,15 +24,19 @@ public class UserRatingStats {
     @Column(name = "user_id", nullable = false, unique = true)
     private Long userId;
 
+    @Builder.Default
     @Column(name = "total_helps_given")
     private Long totalHelpsGiven = 0L;
 
+    @Builder.Default
     @Column(name = "total_helps_received")
     private Long totalHelpsReceived = 0L;
 
+    @Builder.Default
     @Column(name = "successful_helps")
     private Long successfulHelps = 0L;
 
+    @Builder.Default
     @Column(name = "cancelled_helps")
     private Long cancelledHelps = 0L;
 
@@ -42,11 +46,13 @@ public class UserRatingStats {
     @Column(name = "last_calculated")
     private LocalDateTime lastCalculated;
 
+    @Builder.Default
     @Column(name = "current_rating")
-    private Double currentRating;
+    private Double currentRating = 0.0;
 
+    @Builder.Default
     @Column(name = "rating_trend")
-    private String ratingTrend; // UP, DOWN, STABLE
+    private String ratingTrend = "STABLE"; // UP, DOWN, STABLE
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
@@ -55,5 +61,10 @@ public class UserRatingStats {
     @PreUpdate
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
+
+        // Дополнительная инициализация при первом сохранении
+        if (lastCalculated == null) {
+            lastCalculated = LocalDateTime.now();
+        }
     }
 }
