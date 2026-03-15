@@ -1,8 +1,10 @@
 package com.example.gatewayservice.filter;
 
 import io.micrometer.tracing.Tracer;
+import io.micrometer.tracing.ScopedSpan;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
@@ -19,7 +21,7 @@ import java.util.UUID;
 @Slf4j
 public class LoggingFilter implements GlobalFilter, Ordered {
 
-    private final Tracer tracer;  // 👈 Внедряем Tracer
+    private final Tracer tracer;
     private static final String REQUEST_ID = "X-Request-Id";
 
     @Override
@@ -33,7 +35,6 @@ public class LoggingFilter implements GlobalFilter, Ordered {
         final String finalRequestId = requestId;
         final long startTime = System.currentTimeMillis();
 
-        // Добавляем requestId в заголовки
         ServerHttpRequest mutatedRequest = request.mutate()
                 .header(REQUEST_ID, finalRequestId)
                 .build();
@@ -42,37 +43,42 @@ public class LoggingFilter implements GlobalFilter, Ordered {
                 .request(mutatedRequest)
                 .build();
 
-        log.info("=".repeat(100));
-        log.info("🔥 ВХОДЯЩИЙ ЗАПРОС [{}]", finalRequestId);
-        log.info("   Метод: {}", request.getMethod());
-        log.info("   Путь: {}", request.getPath());
-        log.info("   Remote: {}", request.getRemoteAddress());
-        log.info("=".repeat(100));
+        ScopedSpan span = tracer.startScopedSpan("gateway-request");
+        String traceId = span.context().traceId();
+        String spanId = span.context().spanId();
+        MDC.put("traceId", traceId);
+        MDC.put("spanId", spanId);
 
-        return chain.filter(mutatedExchange).then(Mono.fromRunnable(() -> {
-            ServerHttpResponse response = exchange.getResponse();
-            long duration = System.currentTimeMillis() - startTime;
+        final String finalTraceId = traceId;
+        final String finalSpanId = spanId;
 
-            // 👉 ПОЛУЧАЕМ TRACEID ИЗ TRACER
-            String traceId = "no-trace";
-            String spanId = "no-span";
-
-            if (tracer.currentSpan() != null) {
-                traceId = tracer.currentSpan().context().traceId();
-                spanId = tracer.currentSpan().context().spanId();
-                log.debug("TraceId получен из tracer: {}", traceId);
-            } else {
-                log.debug("tracer.currentSpan() = null");
-            }
-
+        try {
             log.info("=".repeat(100));
-            log.info("✅ ИСХОДЯЩИЙ ОТВЕТ [{}]", finalRequestId);
-            log.info("   Статус: {}", response.getStatusCode());
-            log.info("   Время: {} ms", duration);
-            log.info("   TraceId: {}", traceId);
-            log.info("   SpanId: {}", spanId);
+            log.info("🔥 ВХОДЯЩИЙ ЗАПРОС [{}]", finalRequestId);
+            log.info("   Метод: {}", request.getMethod());
+            log.info("   Путь: {}", request.getPath());
+            log.info("   Remote: {}", request.getRemoteAddress());
+            log.info("   TraceId: {}", finalTraceId);
+            log.info("   SpanId: {}", finalSpanId);
             log.info("=".repeat(100));
-        }));
+
+            return chain.filter(mutatedExchange).then(Mono.fromRunnable(() -> {
+                ServerHttpResponse response = exchange.getResponse();
+                long duration = System.currentTimeMillis() - startTime;
+
+                log.info("=".repeat(100));
+                log.info("✅ ИСХОДЯЩИЙ ОТВЕТ [{}]", finalRequestId);
+                log.info("   Статус: {}", response.getStatusCode());
+                log.info("   Время: {} ms", duration);
+                log.info("   TraceId: {}", finalTraceId);
+                log.info("   SpanId: {}", finalSpanId);
+                log.info("=".repeat(100));
+            }));
+        } finally {
+            span.end();
+            MDC.remove("traceId");
+            MDC.remove("spanId");
+        }
     }
 
     @Override
