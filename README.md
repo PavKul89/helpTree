@@ -91,7 +91,19 @@ docker-compose up -d
 | 📋 | Централизованное логирование (ELK) |
 
 ---
+## Устранение неполадок
 
+```powershell
+# Kafka #
+docker-compose down
+docker volume rm helpTree_kafka_data
+docker volume ls | findstr kafka
+docker volume prune -f
+docker-compose up -d
+
+```
+
+---
 ## Контакты
 ```powershell
 - **Владелец проекта**: Кулаженко Павел Михайлович

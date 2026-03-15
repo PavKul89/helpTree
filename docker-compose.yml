@@ -120,6 +120,29 @@ services:
     volumes:
       - grafana_data:/var/lib/grafana
 
+  jaeger:
+    image: jaegertracing/all-in-one:1.50
+    container_name: jaeger
+    ports:
+      - "16686:16686"  # UI
+      - "6831:6831/udp"  # Jaeger agent (thrift compact)
+      - "14268:14268"  # Jaeger collector (HTTP)
+      - "4317:4317"  # OTLP receiver (gRPC)
+      - "4318:4318"  # OTLP receiver (HTTP)
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+      SPAN_STORAGE_TYPE: badger
+    restart: unless-stopped
+    networks:
+      - helpTree-network
+    volumes:
+      - jaeger_data:/var/lib/jaeger
+    healthcheck:
+      test: [ "CMD", "wget", "-q", "--spider", "http://localhost:16686" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   postgres_data:
     name: helpTree_postgres_data
@@ -133,6 +156,8 @@ volumes:
     name: helpTree_prometheus_data
   grafana_data:
     name: helpTree_grafana_data
+  jaeger_data:
+    name: helpTree_jaeger_data
 
 networks:
   helpTree-network:
