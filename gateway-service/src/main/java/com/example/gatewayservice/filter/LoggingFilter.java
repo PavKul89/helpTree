@@ -1,7 +1,8 @@
 package com.example.gatewayservice.filter;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import io.micrometer.tracing.Tracer;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
@@ -14,9 +15,11 @@ import reactor.core.publisher.Mono;
 import java.util.UUID;
 
 @Component
+@RequiredArgsConstructor
+@Slf4j
 public class LoggingFilter implements GlobalFilter, Ordered {
 
-    private static final Logger log = LoggerFactory.getLogger(LoggingFilter.class);
+    private final Tracer tracer;  // 👈 Внедряем Tracer
     private static final String REQUEST_ID = "X-Request-Id";
 
     @Override
@@ -27,12 +30,12 @@ public class LoggingFilter implements GlobalFilter, Ordered {
             requestId = UUID.randomUUID().toString();
         }
 
-        final String reqId = requestId;
-        long startTime = System.currentTimeMillis();
+        final String finalRequestId = requestId;
+        final long startTime = System.currentTimeMillis();
 
-        // ДОБАВЛЯЕМ Request ID в заголовки для микросервисов
+        // Добавляем requestId в заголовки
         ServerHttpRequest mutatedRequest = request.mutate()
-                .header(REQUEST_ID, reqId)
+                .header(REQUEST_ID, finalRequestId)
                 .build();
 
         ServerWebExchange mutatedExchange = exchange.mutate()
@@ -40,29 +43,40 @@ public class LoggingFilter implements GlobalFilter, Ordered {
                 .build();
 
         log.info("=".repeat(100));
-        log.info("🔥 ВХОДЯЩИЙ ЗАПРОС [{}]", reqId);
+        log.info("🔥 ВХОДЯЩИЙ ЗАПРОС [{}]", finalRequestId);
         log.info("   Метод: {}", request.getMethod());
         log.info("   Путь: {}", request.getPath());
         log.info("   Remote: {}", request.getRemoteAddress());
-        log.info("   Headers: {}", request.getHeaders());
         log.info("=".repeat(100));
 
         return chain.filter(mutatedExchange).then(Mono.fromRunnable(() -> {
             ServerHttpResponse response = exchange.getResponse();
             long duration = System.currentTimeMillis() - startTime;
 
+            // 👉 ПОЛУЧАЕМ TRACEID ИЗ TRACER
+            String traceId = "no-trace";
+            String spanId = "no-span";
+
+            if (tracer.currentSpan() != null) {
+                traceId = tracer.currentSpan().context().traceId();
+                spanId = tracer.currentSpan().context().spanId();
+                log.debug("TraceId получен из tracer: {}", traceId);
+            } else {
+                log.debug("tracer.currentSpan() = null");
+            }
+
             log.info("=".repeat(100));
-            log.info("✅ ИСХОДЯЩИЙ ОТВЕТ [{}]", reqId);
+            log.info("✅ ИСХОДЯЩИЙ ОТВЕТ [{}]", finalRequestId);
             log.info("   Статус: {}", response.getStatusCode());
-            log.info("   Путь: {}", request.getPath());
             log.info("   Время: {} ms", duration);
-            log.info("   Headers: {}", response.getHeaders());
+            log.info("   TraceId: {}", traceId);
+            log.info("   SpanId: {}", spanId);
             log.info("=".repeat(100));
         }));
     }
 
     @Override
     public int getOrder() {
-        return -1;  // Выполняется до других фильтров
+        return Ordered.HIGHEST_PRECEDENCE;
     }
 }
