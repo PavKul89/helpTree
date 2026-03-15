@@ -34,22 +34,36 @@ spring:
     template:
       default-topic: help-events
 
-
 logging:
   level:
     org.hibernate.SQL: DEBUG
     org.hibernate.type.descriptor.sql.BasicBinder: TRACE
     org.springframework.web: DEBUG
+    com.example.helptreeservice: DEBUG
+    io.micrometer.otel: DEBUG
+    io.opentelemetry: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level traceId=%mdc{traceId} spanId=%mdc{spanId} %logger{36} - %msg%n"
 
 app:
   jwtSecret: mySecretKeyForJWTGenerationWithAtLeast64CharactersLong12345678901234567890123456789012
   jwtExpirationMs: 86400000
 
 management:
-  info:
-    env:
-      enabled: true
-
+  tracing:
+    enabled: true
+    sampling:
+      probability: 1.0
+    exporter:
+      jaeger:
+        endpoint: http://localhost:14250
+        service-name: helpTree-service
+  otlp:
+    tracing:
+      endpoint: http://localhost:4318/v1/traces
+    metrics:
+      export:
+        enabled: false
   endpoints:
     web:
       exposure:
@@ -59,7 +73,6 @@ management:
           - metrics
           - loggers
           - prometheus
-
   endpoint:
     health:
       show-details: always
@@ -70,4 +83,4 @@ info:
   app:
     name: "HelpTree"
     version: "0.0.1"
-    description: "My project"
+    description: "Main service for helpTree application"

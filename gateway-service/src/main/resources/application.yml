@@ -33,10 +33,14 @@ management:
   tracing:
     enabled: true
     sampling:
-      probability: 1.0  # 100% запросов (для продакшена лучше 0.1)
+      probability: 1.0
+    exporter:
+      jaeger:
+        endpoint: http://localhost:14250
+        service-name: gateway-service
   otlp:
     tracing:
-      endpoint: http://localhost:4318/v1/traces  # ВАЖНО: правильный путь
+      endpoint: http://localhost:4318/v1/traces
   endpoints:
     web:
       exposure:

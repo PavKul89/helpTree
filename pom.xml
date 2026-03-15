@@ -29,6 +29,7 @@
 		<mapstruct.version>1.5.5.Final</mapstruct.version>
 		<jjwt.version>0.11.5</jjwt.version>
 		<maven-compiler-plugin.version>3.11.0</maven-compiler-plugin.version>
+		<lombok.version>1.18.38</lombok.version>
 	</properties>
 
 	<dependencyManagement>
@@ -81,6 +82,7 @@
 		<dependency>
 			<groupId>org.projectlombok</groupId>
 			<artifactId>lombok</artifactId>
+			<version>${lombok.version}</version>
 			<optional>true</optional>
 		</dependency>
 		<dependency>
