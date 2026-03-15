@@ -1,9 +1,9 @@
 server:
-  port: 8081
+  port: 8085
 
 spring:
   application:
-    name: helpTree
+    name: rating
 
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/helpTree_db}
@@ -84,5 +84,5 @@ rating:
 
 helptree:
   service:
-    url: ${HELPTREE_API_URL:http://localhost:8080}
+    url: ${HELPTREE_API_URL:http://localhost:8081}
 

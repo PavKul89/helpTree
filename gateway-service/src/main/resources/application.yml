@@ -1,0 +1,46 @@
+server:
+  port: 8080
+  netty:
+    max-header-size: 64KB
+
+spring:
+  cloud:
+    gateway:
+      httpclient:
+        connect-timeout: 5000
+        response-timeout: 10s
+      routes:
+        - id: helpTree-service
+          uri: http://localhost:8081
+          predicates:
+            - Path=/api/auth/**,/api/users/**,/api/posts/**,/api/helps/**
+          filters:
+            - StripPrefix=0
+
+        - id: rating-service
+          uri: http://localhost:8085
+          predicates:
+            - Path=/api/ratings/**
+          filters:
+            - StripPrefix=0
+
+logging:
+  level:
+    org.springframework.cloud.gateway: DEBUG
+    org.springframework.http.server.reactive: DEBUG
+    org.springframework.web.reactive: DEBUG
+    reactor.netty: INFO
+    com.example.gatewayservice: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,gateway
+  endpoint:
+    gateway:
+      enabled: true
+  health:
+    show-details: always
