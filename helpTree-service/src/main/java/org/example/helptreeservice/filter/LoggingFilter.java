@@ -1,8 +1,9 @@
 package org.example.helptreeservice.filter;
 
-import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.Tracer;
+import io.opentelemetry.context.Context;
+import io.opentelemetry.context.Scope;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -30,11 +31,13 @@ public class LoggingFilter extends OncePerRequestFilter {
     private final Tracer tracer;
 
     public LoggingFilter() {
-        this.tracer = GlobalOpenTelemetry.getTracer("helpTree-service");
+        this.tracer = io.opentelemetry.api.GlobalOpenTelemetry.getTracer("helpTree-service");
     }
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+    protected void doFilterInternal(HttpServletRequest request,
+                                    HttpServletResponse response,
+                                    FilterChain filterChain)
             throws ServletException, IOException {
 
         String requestId = request.getHeader(REQUEST_ID);
@@ -42,49 +45,61 @@ public class LoggingFilter extends OncePerRequestFilter {
             requestId = generateHexId(16);
         }
 
-        String traceId = request.getHeader(TRACE_ID_HEADER);
-        String spanId = request.getHeader(SPAN_ID_HEADER);
+        String incomingTraceId = request.getHeader(TRACE_ID_HEADER);
+        String incomingParentSpanId = request.getHeader(SPAN_ID_HEADER);
 
-        Span span;
-        if (traceId != null && !traceId.isEmpty()) {
-            span = tracer.spanBuilder(request.getMethod() + " " + request.getRequestURI())
-                    .setParent(io.opentelemetry.context.Context.current().with(
-                            io.opentelemetry.api.trace.Span.wrap(
-                                    io.opentelemetry.api.trace.SpanContext.create(
-                                            traceId,
-                                            spanId != null ? spanId : generateHexId(8),
-                                            io.opentelemetry.api.trace.TraceFlags.getDefault(),
-                                            io.opentelemetry.api.trace.TraceState.getDefault()
-                                    )
-                            )
-                    ))
+        // СОЗДАЕМ НОВЫЙ SPAN ДЛЯ HELPTREE-СЕРВИСА с УНИКАЛЬНЫМ spanId
+        Span helpTreeSpan;
+        Context parentContext = Context.current();
+
+        if (incomingTraceId != null && !incomingTraceId.isEmpty() &&
+                incomingParentSpanId != null && !incomingParentSpanId.isEmpty()) {
+
+            // Создаем родительский контекст из входящих заголовков
+            io.opentelemetry.api.trace.SpanContext parentSpanContext =
+                    io.opentelemetry.api.trace.SpanContext.createFromRemoteParent(
+                            incomingTraceId,
+                            incomingParentSpanId,
+                            io.opentelemetry.api.trace.TraceFlags.getSampled(),
+                            io.opentelemetry.api.trace.TraceState.getDefault()
+                    );
+
+            // ВАЖНО: Здесь мы создаем дочерний span, который получит НОВЫЙ spanId
+            helpTreeSpan = tracer.spanBuilder("helptree: " + request.getMethod() + " " + request.getRequestURI())
+                    .setParent(Context.current().with(io.opentelemetry.api.trace.Span.wrap(parentSpanContext)))
+                    .setSpanKind(io.opentelemetry.api.trace.SpanKind.SERVER)
                     .startSpan();
         } else {
-            span = tracer.spanBuilder(request.getMethod() + " " + request.getRequestURI()).startSpan();
+            helpTreeSpan = tracer.spanBuilder("helptree: " + request.getMethod() + " " + request.getRequestURI())
+                    .setSpanKind(io.opentelemetry.api.trace.SpanKind.SERVER)
+                    .startSpan();
         }
 
-        String currentTraceId = span.getSpanContext().getTraceId();
-        String currentSpanId = span.getSpanContext().getSpanId();
+        // Устанавливаем span как текущий
+        Scope scope = helpTreeSpan.makeCurrent();
+
+        String currentTraceId = helpTreeSpan.getSpanContext().getTraceId();
+        String currentSpanId = helpTreeSpan.getSpanContext().getSpanId();
 
         MDC.put("traceId", currentTraceId);
         MDC.put("spanId", currentSpanId);
 
+        // В ответе отправляем НОВЫЙ spanId, который создал helpTree
         response.setHeader(REQUEST_ID, requestId);
         response.setHeader(TRACE_ID_HEADER, currentTraceId);
         response.setHeader(SPAN_ID_HEADER, currentSpanId);
 
         final String finalRequestId = requestId;
-        final String finalTraceId = currentTraceId;
-        final String finalSpanId = currentSpanId;
         final long startTime = System.currentTimeMillis();
 
         log.info("=".repeat(100));
-        log.info("🔥 ВХОДЯЩИЙ ЗАПРОС [{}]", finalRequestId);
+        log.info("🔥 HELPTREE: ВХОДЯЩИЙ ЗАПРОС [{}]", finalRequestId);
         log.info("   Метод: {}", request.getMethod());
         log.info("   Путь: {}", request.getRequestURI());
         log.info("   Remote: {}", request.getRemoteAddr());
-        log.info("   TraceId: {}", finalTraceId);
-        log.info("   SpanId: {}", finalSpanId);
+        log.info("   TraceId: {}", currentTraceId);
+        log.info("   SpanId: {}", currentSpanId);  // Это НОВЫЙ spanId
+        log.info("   Parent SpanId (из гетевея): {}", incomingParentSpanId);
         log.info("=".repeat(100));
 
         try {
@@ -93,14 +108,17 @@ public class LoggingFilter extends OncePerRequestFilter {
             long duration = System.currentTimeMillis() - startTime;
 
             log.info("=".repeat(100));
-            log.info("✅ ИСХОДЯЩИЙ ОТВЕТ [{}]", finalRequestId);
+            log.info("✅ HELPTREE: ИСХОДЯЩИЙ ОТВЕТ [{}]", finalRequestId);
             log.info("   Статус: {}", response.getStatus());
             log.info("   Время: {} ms", duration);
-            log.info("   TraceId: {}", finalTraceId);
-            log.info("   SpanId: {}", finalSpanId);
+            log.info("   TraceId: {}", currentTraceId);
+            log.info("   SpanId: {}", currentSpanId);
             log.info("=".repeat(100));
 
-            span.end();
+            // Завершаем span
+            scope.close();
+            helpTreeSpan.end();
+
             MDC.remove("traceId");
             MDC.remove("spanId");
         }

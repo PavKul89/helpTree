@@ -2,6 +2,8 @@ package com.example.gatewayservice.filter;
 
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.Tracer;
+import io.opentelemetry.context.Context;
+import io.opentelemetry.context.Scope;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
@@ -33,43 +35,83 @@ public class LoggingFilter implements GlobalFilter, Ordered {
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         ServerHttpRequest request = exchange.getRequest();
-        
+
         String requestId = request.getHeaders().getFirst(REQUEST_ID);
         if (requestId == null || requestId.isEmpty()) {
             requestId = generateHexId(16);
         }
 
-        String traceId = request.getHeaders().getFirst(TRACE_ID_HEADER);
-        String spanId = request.getHeaders().getFirst(SPAN_ID_HEADER);
+        // Получаем заголовки трассировки от клиента
+        String incomingTraceId = request.getHeaders().getFirst(TRACE_ID_HEADER);
+        String incomingSpanId = request.getHeaders().getFirst(SPAN_ID_HEADER);
 
-        Span span;
-        if (traceId != null && !traceId.isEmpty()) {
-            span = tracer.spanBuilder(request.getMethod() + " " + request.getPath())
-                    .setParent(io.opentelemetry.context.Context.current().with(
-                            io.opentelemetry.api.trace.Span.wrap(
-                                    io.opentelemetry.api.trace.SpanContext.create(
-                                            traceId,
-                                            spanId != null ? spanId : generateHexId(8),
-                                            io.opentelemetry.api.trace.TraceFlags.getDefault(),
-                                            io.opentelemetry.api.trace.TraceState.getDefault()
-                                    )
-                            )
-                    ))
+        // СОЗДАЕМ НОВЫЙ SPAN ДЛЯ ГЕТЕВЕЯ
+        Span gatewaySpan;
+        Context parentContext = Context.current();
+
+        if (incomingTraceId != null && !incomingTraceId.isEmpty() && incomingSpanId != null && !incomingSpanId.isEmpty()) {
+            io.opentelemetry.api.trace.SpanContext parentSpanContext =
+                    io.opentelemetry.api.trace.SpanContext.createFromRemoteParent(
+                            incomingTraceId,
+                            incomingSpanId,
+                            io.opentelemetry.api.trace.TraceFlags.getSampled(),
+                            io.opentelemetry.api.trace.TraceState.getDefault()
+                    );
+            parentContext = parentContext.with(io.opentelemetry.api.trace.Span.wrap(parentSpanContext));
+
+            gatewaySpan = tracer.spanBuilder("gateway: " + request.getMethod() + " " + request.getPath())
+                    .setParent(parentContext)
+                    .setSpanKind(io.opentelemetry.api.trace.SpanKind.SERVER)
                     .startSpan();
+
+            log.info("📋 Получен входящий traceId от клиента: {}", incomingTraceId);
         } else {
-            span = tracer.spanBuilder(request.getMethod() + " " + request.getPath()).startSpan();
+            gatewaySpan = tracer.spanBuilder("gateway: " + request.getMethod() + " " + request.getPath())
+                    .setSpanKind(io.opentelemetry.api.trace.SpanKind.SERVER)
+                    .startSpan();
+
+            log.info("🆕 Создан новый traceId: {}", gatewaySpan.getSpanContext().getTraceId());
         }
 
-        String currentTraceId = span.getSpanContext().getTraceId();
-        String currentSpanId = span.getSpanContext().getSpanId();
+        // Устанавливаем gateway span как текущий
+        Scope gatewayScope = gatewaySpan.makeCurrent();
+
+        String currentTraceId = gatewaySpan.getSpanContext().getTraceId();
+        String currentSpanId = gatewaySpan.getSpanContext().getSpanId();
 
         MDC.put("traceId", currentTraceId);
         MDC.put("spanId", currentSpanId);
 
+        // СОЗДАЕМ НОВЫЙ SPAN ДЛЯ ВЫЗОВА СЛЕДУЮЩЕГО СЕРВИСА
+        Span downstreamSpan = tracer.spanBuilder("downstream: " + request.getMethod() + " " + request.getPath())
+                .setParent(Context.current().with(gatewaySpan))
+                .setSpanKind(io.opentelemetry.api.trace.SpanKind.CLIENT)
+                .startSpan();
+
+        String downstreamTraceId = downstreamSpan.getSpanContext().getTraceId();
+        String downstreamSpanId = downstreamSpan.getSpanContext().getSpanId();
+
+        // КРАСИВОЕ ФОРМАТИРОВАНИЕ С TRACE ID
+        log.info("=".repeat(100));
+        log.info("🔍 TRACE ID: {}", currentTraceId);
+        log.info("=".repeat(100));
+        log.info("🔥 ГЕТЕВЕЙ: ВХОДЯЩИЙ ЗАПРОС [{}]", requestId);
+        log.info("   Метод: {}", request.getMethod());
+        log.info("   Путь: {}", request.getPath());
+        log.info("   Remote: {}", request.getRemoteAddress());
+        log.info("   📌 Gateway Span:");
+        log.info("      - TraceId: {}", currentTraceId);
+        log.info("      - SpanId: {}", currentSpanId);
+        log.info("   📌 Downstream Span (для helpTree):");
+        log.info("      - TraceId: {}", downstreamTraceId);
+        log.info("      - SpanId: {}", downstreamSpanId);
+        log.info("=".repeat(100));
+
+        // Модифицируем запрос, добавляя заголовки с downstream span
         ServerHttpRequest mutatedRequest = request.mutate()
                 .header(REQUEST_ID, requestId)
-                .header(TRACE_ID_HEADER, currentTraceId)
-                .header(SPAN_ID_HEADER, currentSpanId)
+                .header(TRACE_ID_HEADER, downstreamTraceId)
+                .header(SPAN_ID_HEADER, downstreamSpanId)
                 .build();
 
         ServerWebExchange mutatedExchange = exchange.mutate()
@@ -77,35 +119,32 @@ public class LoggingFilter implements GlobalFilter, Ordered {
                 .build();
 
         final String finalRequestId = requestId;
-        final String finalTraceId = currentTraceId;
-        final String finalSpanId = currentSpanId;
         final long startTime = System.currentTimeMillis();
 
-        log.info("=".repeat(100));
-        log.info("🔥 ВХОДЯЩИЙ ЗАПРОС [{}]", finalRequestId);
-        log.info("   Метод: {}", request.getMethod());
-        log.info("   Путь: {}", request.getPath());
-        log.info("   Remote: {}", request.getRemoteAddress());
-        log.info("   TraceId: {}", finalTraceId);
-        log.info("   SpanId: {}", finalSpanId);
-        log.info("=".repeat(100));
+        return chain.filter(mutatedExchange)
+                .doFinally(signalType -> {
+                    long duration = System.currentTimeMillis() - startTime;
 
-        return chain.filter(mutatedExchange).then(Mono.fromRunnable(() -> {
-            ServerHttpResponse response = exchange.getResponse();
-            long duration = System.currentTimeMillis() - startTime;
+                    log.info("=".repeat(100));
+                    log.info("🔍 TRACE ID: {}", currentTraceId);
+                    log.info("=".repeat(100));
+                    log.info("✅ ГЕТЕВЕЙ: ОТВЕТ [{}]", finalRequestId);
+                    log.info("   Статус: {}", exchange.getResponse().getStatusCode());
+                    log.info("   Время: {} ms", duration);
+                    log.info("   📌 Downstream Span завершен:");
+                    log.info("      - SpanId: {}", downstreamSpanId);
+                    log.info("   📌 Gateway Span завершен:");
+                    log.info("      - SpanId: {}", currentSpanId);
+                    log.info("=".repeat(100));
 
-            log.info("=".repeat(100));
-            log.info("✅ ИСХОДЯЩИЙ ОТВЕТ [{}]", finalRequestId);
-            log.info("   Статус: {}", response.getStatusCode());
-            log.info("   Время: {} ms", duration);
-            log.info("   TraceId: {}", finalTraceId);
-            log.info("   SpanId: {}", finalSpanId);
-            log.info("=".repeat(100));
-            
-            span.end();
-            MDC.remove("traceId");
-            MDC.remove("spanId");
-        }));
+                    // Завершаем spans в правильном порядке
+                    downstreamSpan.end();
+                    gatewayScope.close();
+                    gatewaySpan.end();
+
+                    MDC.remove("traceId");
+                    MDC.remove("spanId");
+                });
     }
 
     private String generateHexId(int bytes) {
