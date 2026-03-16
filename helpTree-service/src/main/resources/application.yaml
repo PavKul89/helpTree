@@ -54,6 +54,8 @@ management:
     enabled: true
     sampling:
       probability: 1.0
+    service:
+      name: helpTree-service
   otlp:
     tracing:
       endpoint: http://localhost:4318/v1/traces
