@@ -42,30 +42,14 @@ logging:
     com.example.helptreeservice: DEBUG
     io.micrometer.otel: DEBUG
     io.opentelemetry: DEBUG
-  pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level traceId=%mdc{traceId} spanId=%mdc{spanId} %logger{36} - %msg%n"
+
 
 app:
   jwtSecret: mySecretKeyForJWTGenerationWithAtLeast64CharactersLong12345678901234567890123456789012
   jwtExpirationMs: 86400000
 
 management:
-  tracing:
-    enabled: true
-    sampling:
-      probability: 1.0
-    service:
-      name: helpTree-service
-    propagation:
-      produce:
-        - b3
-        - b3_single
-      consume:
-        - b3
-        - b3_single
-  otlp:
-    tracing:
-      endpoint: http://localhost:4318/v1/traces
+
   endpoints:
     web:
       exposure:
