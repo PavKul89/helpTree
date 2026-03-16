@@ -142,8 +142,8 @@
         <!-- 9. Jaeger / OpenTelemetry -->
         <!-- ================================================= -->
         <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-opentelemetry</artifactId>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-tracing-bridge-otel</artifactId>
         </dependency>
 
         <dependency>
