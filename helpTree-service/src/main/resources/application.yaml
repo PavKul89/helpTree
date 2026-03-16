@@ -54,16 +54,9 @@ management:
     enabled: true
     sampling:
       probability: 1.0
-    exporter:
-      jaeger:
-        endpoint: http://localhost:14250
-        service-name: helpTree-service
   otlp:
     tracing:
       endpoint: http://localhost:4318/v1/traces
-    metrics:
-      export:
-        enabled: false
   endpoints:
     web:
       exposure:

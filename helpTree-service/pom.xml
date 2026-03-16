@@ -20,6 +20,13 @@
     <!-- Зависимости -->
     <!-- ================================================= -->
     <dependencies>
+        <!-- Lombok -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+
         <!-- 1. SPRING BOOT STARTERS - основные стартеры -->
         <!-- ================================================= -->
         <dependency>
