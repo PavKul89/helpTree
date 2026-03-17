@@ -29,6 +29,7 @@
 		<jjwt.version>0.11.5</jjwt.version>
 		<maven-compiler-plugin.version>3.11.0</maven-compiler-plugin.version>
 		<lombok.version>1.18.38</lombok.version>
+		<micrometer-tracing.version>1.4.1</micrometer-tracing.version>
 	</properties>
 
 	<dependencyManagement>
