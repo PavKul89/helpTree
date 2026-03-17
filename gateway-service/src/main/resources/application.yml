@@ -3,48 +3,60 @@ server:
 
 spring:
   application:
-    name: gateway-service  # имя приложения
+    name: gateway-service
   main:
     web-application-type: reactive
   cloud:
     gateway:
       enabled: true
-
-
-logging:
-  level:
-    # Детальное логирование Gateway
-    org.springframework.cloud.gateway: DEBUG
-    org.springframework.cloud.gateway.route.RouteDefinitionRouteLocator: INFO
-    org.springframework.cloud.gateway.handler.RoutePredicateHandlerMapping: DEBUG
-
-    # Логирование HTTP запросов/ответов
-    reactor.netty: DEBUG
-    reactor.netty.http.client: DEBUG
-    reactor.netty.http.server: DEBUG
-
-    # Логирование балансировщика
-    org.springframework.cloud.loadbalancer: DEBUG
-
-    # Логирование actuator endpoints
-    org.springframework.boot.actuate: INFO
-
-    # Логирование ваших сервисов (опционально)
-    org.example.helptreeservice: DEBUG
-    org.example.ratingservice: DEBUG
-
-  file:
-    name: logs/gateway-service.log  # файл для логов
-    max-size: 10MB
-    max-history: 7
+      httpclient:
+        wiretap: true  # для отладки трассировки
 
 management:
+  tracing:
+    enabled: true
+    sampling:
+      probability: 1.0  # для продакшена: 0.1 или 0.01
+    propagation:
+      type: w3c  # используем W3C Trace Context для совместимости
+    baggage:
+      enabled: true  # включаем поддержку baggage для передачи доп. данных
+      remote-fields:  # поля, которые будут передаваться между сервисами
+        - user-id
+        - request-id
+  otlp:
+    tracing:
+      endpoint: http://jaeger:4318/v1/traces  # OTLP HTTP endpoint для Jaeger
+      compression: gzip  # сжимаем данные
+      timeout: 10s  # таймаут отправки
+      headers:  # если нужна аутентификация
+        Authorization: "Bearer ${JAEGER_TOKEN:}"
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+        http.client.requests: true
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,gateway
-  endpoint:
-    gateway:
-      enabled: true
-    health:
-      show-details: always
+        include:
+          - health
+          - metrics
+          - info
+          - prometheus
+          - loggers
+          - tracing  # добавляем endpoint для трассировки
+
+logging:
+  level:
+    org.springframework.cloud.gateway: DEBUG
+    org.springframework.cloud.gateway.route.RouteDefinitionRouteLocator: INFO
+    org.springframework.cloud.gateway.handler.RoutePredicateHandlerMapping: DEBUG
+    reactor.netty: DEBUG
+    reactor.netty.http.client: DEBUG
+    reactor.netty.http.server: DEBUG
+    org.springframework.cloud.loadbalancer: DEBUG
+    org.springframework.boot.actuate: INFO
+    io.micrometer.tracing: DEBUG  # включаем отладку трассировки
+    org.example.helptreeservice: DEBUG
+    org.example.ratingservice: DEBUG
