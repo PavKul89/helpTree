@@ -2,29 +2,49 @@ server:
   port: 8080
 
 spring:
+  application:
+    name: gateway-service  # имя приложения
   main:
     web-application-type: reactive
   cloud:
     gateway:
       enabled: true
-      httpclient:
-        connect-timeout: 10000
-        response-timeout: 30s
-      routes:
-        - id: helpTree-service
-          uri: http://localhost:8081
-          predicates:
-            - Path=/api/**
-        - id: rating-service
-          uri: http://localhost:8085
-          predicates:
-            - Path=/api/**
+
 
 logging:
   level:
+    # Детальное логирование Gateway
     org.springframework.cloud.gateway: DEBUG
-    org.springframework.cloud.gateway.handler: DEBUG
-    org.springframework.cloud.gateway.route: DEBUG
-    org.springframework.cloud.gateway.nacos: DEBUG
-    org.springframework.web.reactive: DEBUG
+    org.springframework.cloud.gateway.route.RouteDefinitionRouteLocator: INFO
+    org.springframework.cloud.gateway.handler.RoutePredicateHandlerMapping: DEBUG
+
+    # Логирование HTTP запросов/ответов
     reactor.netty: DEBUG
+    reactor.netty.http.client: DEBUG
+    reactor.netty.http.server: DEBUG
+
+    # Логирование балансировщика
+    org.springframework.cloud.loadbalancer: DEBUG
+
+    # Логирование actuator endpoints
+    org.springframework.boot.actuate: INFO
+
+    # Логирование ваших сервисов (опционально)
+    org.example.helptreeservice: DEBUG
+    org.example.ratingservice: DEBUG
+
+  file:
+    name: logs/gateway-service.log  # файл для логов
+    max-size: 10MB
+    max-history: 7
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,gateway
+  endpoint:
+    gateway:
+      enabled: true
+    health:
+      show-details: always

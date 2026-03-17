@@ -17,10 +17,10 @@ public class GatewayServiceApplication {
     public RouteLocator customRouteLocator(RouteLocatorBuilder builder) {
         return builder.routes()
                 .route("helpTree-service", r -> r
-                        .path("/api/**")
+                        .path("/api/users/**")
                         .uri("http://localhost:8081"))
                 .route("rating-service", r -> r
-                        .path("/ratings/**")
+                        .path("/api/ratings/**")
                         .uri("http://localhost:8085"))
                 .build();
     }
