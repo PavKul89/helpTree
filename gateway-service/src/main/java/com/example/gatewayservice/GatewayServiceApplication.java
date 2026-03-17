@@ -27,9 +27,16 @@ public class GatewayServiceApplication {
         return builder.routes()
                 .route("helpTree-service", r -> r
                         .path("/api/users/**")
+                        .filters(f -> f
+                                .addRequestHeader("X-Forwarded-For", "gateway")
+                                .circuitBreaker(config -> config
+                                        .setName("usersService")
+                                        .setFallbackUri("forward:/fallback/users")))
                         .uri("http://localhost:8081"))
                 .route("rating-service", r -> r
                         .path("/api/ratings/**")
+                        .filters(f -> f
+                                .addRequestHeader("X-Forwarded-For", "gateway"))
                         .uri("http://localhost:8085"))
                 .build();
     }

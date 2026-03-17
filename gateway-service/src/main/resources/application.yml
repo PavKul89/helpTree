@@ -16,22 +16,20 @@ management:
   tracing:
     enabled: true
     sampling:
-      probability: 1.0  # для продакшена: 0.1 или 0.01
+      probability: 1.0
     propagation:
-      type: w3c  # используем W3C Trace Context для совместимости
-    baggage:
-      enabled: true  # включаем поддержку baggage для передачи доп. данных
-      remote-fields:  # поля, которые будут передаваться между сервисами
-        - user-id
-        - request-id
-  otlp:
+      type: w3c
+  opentelemetry:
     tracing:
-      endpoint: http://jaeger:4318/v1/traces  # OTLP HTTP endpoint для Jaeger
-      compression: gzip  # сжимаем данные
-      timeout: 10s  # таймаут отправки
-      headers:  # если нужна аутентификация
-        Authorization: "Bearer ${JAEGER_TOKEN:}"
+      export:
+        otlp:
+          endpoint: http://localhost:4318/v1/traces
+          protocol: http/protobuf
   metrics:
+    export:
+      otlp:
+        enabled: false
+
     distribution:
       percentiles-histogram:
         http.server.requests: true
@@ -57,6 +55,12 @@ logging:
     reactor.netty.http.server: DEBUG
     org.springframework.cloud.loadbalancer: DEBUG
     org.springframework.boot.actuate: INFO
-    io.micrometer.tracing: DEBUG  # включаем отладку трассировки
+    io.micrometer.tracing: DEBUG
+    io.opentelemetry: DEBUG
+    io.opentelemetry.exporter.otlp: DEBUG
     org.example.helptreeservice: DEBUG
     org.example.ratingservice: DEBUG
+
+
+pattern:
+  console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - trace.id=%mdc{traceId} span.id=%mdc{spanId} - %msg%n"

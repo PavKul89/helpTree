@@ -51,6 +51,12 @@
             <artifactId>spring-cloud-starter-loadbalancer</artifactId>
         </dependency>
 
+        <!-- Circuit Breaker -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-circuitbreaker-reactor-resilience4j</artifactId>
+        </dependency>
+
         <!-- Actuator для мониторинга -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -79,10 +85,10 @@
             <scope>runtime</scope>
         </dependency>
 
-        <!-- Трейсинг (чтобы связать все сервисы) -->
+        <!-- Трейсинг -->
         <dependency>
-            <groupId>io.micrometer</groupId>
-            <artifactId>micrometer-tracing-bridge-otel</artifactId>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-opentelemetry</artifactId>
         </dependency>
         <dependency>
             <groupId>io.opentelemetry</groupId>
