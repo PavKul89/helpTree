@@ -1,5 +1,8 @@
 package com.example.gatewayservice.filter;
 
+import io.micrometer.tracing.Tracer;
+import io.micrometer.tracing.TraceContext;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
@@ -18,7 +21,10 @@ import java.util.Optional;
 
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class RequestLoggingFilter implements GlobalFilter, Ordered {
+
+    private final Tracer tracer;
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
@@ -34,21 +40,6 @@ public class RequestLoggingFilter implements GlobalFilter, Ordered {
         Instant start = Instant.now();
         String timeStart = DateTimeFormatter.ofPattern("HH:mm:ss.SSS").format(LocalDateTime.now());
 
-        log.info("""
-                
-                ╔════════════════════════════════════════════════════════════════════════════╗
-                ║ 🚀 ВХОДЯЩИЙ ЗАПРОС                                                          ║
-                ╠════════════════════════════════════════════════════════════════════════════╣
-                ║ 🕐 Время:      {}                                                   
-                ║ 📍 Method:     {}                                 
-                ║ 🎯 Path:       {}                         
-                ║ 🌐 Client IP:  {}                 
-                ║ 📱 User-Agent: {}   
-                ║ 🔗 RequestID:  {}  
-                ╚════════════════════════════════════════════════════════════════════════════╝
-                """,
-                timeStart, method, path, clientIp, truncate(userAgent, 30), requestId);
-
         return chain.filter(exchange)
                 .doOnSuccess(v -> {
                     HttpStatusCode statusCode = exchange.getResponse().getStatusCode();
@@ -56,30 +47,36 @@ public class RequestLoggingFilter implements GlobalFilter, Ordered {
                     Duration duration = Duration.between(start, Instant.now());
                     String timeEnd = DateTimeFormatter.ofPattern("HH:mm:ss.SSS").format(LocalDateTime.now());
 
-                    // ПОЛУЧАЕМ TRACE ИЗ ЗАГОЛОВКОВ (ОНИ УЖЕ ЕСТЬ!)
-                    String traceId = extractTraceId(exchange.getRequest());
-                    String spanId = extractSpanId(exchange.getRequest());
+                    // Пробуем получить span разными способами
+                    String traceId = getTraceId();
+                    String spanId = getSpanId();
 
                     log.info("""
                             
                             ╔════════════════════════════════════════════════════════════════════════════╗
-                            ║ ✅ ОТВЕТ НА ЗАПРОС                                                         ║
+                            ║ 📊 ИНФОРМАЦИЯ О ЗАПРОСЕ                                                    ║
                             ╠════════════════════════════════════════════════════════════════════════════╣
-                            ║ 🕐 Начало:     {}  →  {}                         
-                            ║ ⏱️ Длит.:      {} ms                                
-                            ║ 📊 Status:     {}                                     
+                            ║ 🕐 Время:      {} → {}                             
+                            ║ 📍 Method:     {}                                 
+                            ║ 🎯 Path:       {}                         
+                            ║ 🌐 Client IP:  {}                 
+                            ║ 📱 User-Agent: {}   
+                            ║ 🔗 RequestID:  {}  
                             ║ 🔍 TraceID:    {}  
                             ║ 🔗 SpanID:     {}  
-                            ║ 🔗 RequestID:  {}  
+                            ║ ⏱️ Длит.:      {} ms                                
+                            ║ 📊 Status:     {}                                     
                             ╚════════════════════════════════════════════════════════════════════════════╝
                             """,
-                            timeStart, timeEnd, duration.toMillis(), status,
-                            traceId, spanId, requestId);
+                            timeStart, timeEnd, method, path, clientIp,
+                            truncate(userAgent, 30), requestId, traceId, spanId,
+                            duration.toMillis(), status);
                 })
                 .doOnError(error -> {
                     Duration duration = Duration.between(start, Instant.now());
-                    String traceId = extractTraceId(exchange.getRequest());
-                    String spanId = extractSpanId(exchange.getRequest());
+
+                    String traceId = getTraceId();
+                    String spanId = getSpanId();
 
                     log.error("""
                             
@@ -87,38 +84,58 @@ public class RequestLoggingFilter implements GlobalFilter, Ordered {
                             ║ ❌ ОШИБКА ЗАПРОСА                                                          ║
                             ╠════════════════════════════════════════════════════════════════════════════╣
                             ║ 🕐 Время:      {}                                                    
-                            ║ ⏱️ Длит.:      {} ms                                                
+                            ║ 📍 Method:     {}                                 
+                            ║ 🎯 Path:       {}                         
                             ║ 🔍 TraceID:    {}  
                             ║ 🔗 SpanID:     {}  
+                            ║ ⏱️ Длит.:      {} ms                                                
                             ║ 💥 Error:      {}    
                             ║ 🔗 RequestID:  {}  
                             ╚════════════════════════════════════════════════════════════════════════════╝
                             """,
-                            timeStart, duration.toMillis(), traceId, spanId,
-                            error.getMessage(), requestId, error);
+                            timeStart, method, path, traceId, spanId,
+                            duration.toMillis(), error.getMessage(), requestId, error);
                 });
     }
 
-    private String extractTraceId(ServerHttpRequest request) {
-        // Из traceparent (W3C формат)
-        String traceparent = request.getHeaders().getFirst("traceparent");
-        if (traceparent != null && traceparent.startsWith("00-")) {
-            String[] parts = traceparent.split("-");
-            if (parts.length >= 2) {
-                return parts[1]; // traceId
+    private String getTraceId() {
+        try {
+            if (tracer == null) return "TRACER-NULL";
+            TraceContext context = tracer.currentSpan() != null
+                    ? tracer.currentSpan().context()
+                    : null;
+            if (context != null) {
+                return context.traceId();
             }
+
+            // Пробуем получить из текущего контекста
+            var span = tracer.currentSpan();
+            if (span != null) {
+                return span.context().traceId();
+            }
+        } catch (Exception e) {
+            log.debug("Error getting traceId: {}", e.getMessage());
         }
         return "NO-TRACE";
     }
 
-    private String extractSpanId(ServerHttpRequest request) {
-        // Из traceparent (W3C формат)
-        String traceparent = request.getHeaders().getFirst("traceparent");
-        if (traceparent != null && traceparent.startsWith("00-")) {
-            String[] parts = traceparent.split("-");
-            if (parts.length >= 3) {
-                return parts[2]; // spanId
+    private String getSpanId() {
+        try {
+            if (tracer == null) return "TRACER-NULL";
+            TraceContext context = tracer.currentSpan() != null
+                    ? tracer.currentSpan().context()
+                    : null;
+            if (context != null) {
+                return context.spanId();
             }
+
+            // Пробуем получить из текущего контекста
+            var span = tracer.currentSpan();
+            if (span != null) {
+                return span.context().spanId();
+            }
+        } catch (Exception e) {
+            log.debug("Error getting spanId: {}", e.getMessage());
         }
         return "NO-SPAN";
     }
@@ -130,6 +147,6 @@ public class RequestLoggingFilter implements GlobalFilter, Ordered {
 
     @Override
     public int getOrder() {
-        return Ordered.LOWEST_PRECEDENCE;
+        return Ordered.HIGHEST_PRECEDENCE + 1;  // Выполняемся после создания span
     }
 }

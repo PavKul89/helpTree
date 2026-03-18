@@ -66,5 +66,5 @@ logging:
     org.example.ratingservice: DEBUG
 
 
-#pattern:
-#console: "%clr(%d{HH:mm:ss.SSS}){faint} %clr(│){faint} %clr(%-5level){yellow} %clr(│){faint} %clr([%thread]){cyan} %clr(│){faint} %clr(📦 %logger{0}){blue}%n  %clr(🔍 trace:%mdc{traceId:-NO-TRACE}){green} %clr(💬 %msg){white}%n"
+  pattern:
+    console: "%clr(%d{HH:mm:ss.SSS}){faint} %clr(│){faint} %clr(%-5level){yellow} %clr(│){faint} %clr([%thread]){cyan} %clr(│){faint} %clr(%-40.40logger{0}){blue} %clr(│){faint} %clr(trace:%mdc{traceId:-NO-TRACE}){green} %clr(span:%mdc{spanId:-NO-SPAN}){magenta} %clr(│){faint} %msg%n"
