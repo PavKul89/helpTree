@@ -6,6 +6,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.cloud.gateway.route.RouteLocator;
 import org.springframework.cloud.gateway.route.builder.RouteLocatorBuilder;
 import org.springframework.context.annotation.Bean;
+import org.springframework.http.HttpStatus;
 
 @Slf4j
 @SpringBootApplication
@@ -25,18 +26,28 @@ public class GatewayServiceApplication {
     @Bean
     public RouteLocator customRouteLocator(RouteLocatorBuilder builder) {
         return builder.routes()
+                // Сервис пользователей и аутентификации (helpTree-service)
                 .route("helpTree-service", r -> r
-                        .path("/api/users/**")
+                        .path(
+                                "/api/auth/**",
+                                "/api/users/**",
+                                "/api/posts/**",
+                                "/api/helps/**",
+                                "/api/test/**"
+                        )
                         .filters(f -> f
                                 .addRequestHeader("X-Forwarded-For", "gateway")
                                 .circuitBreaker(config -> config
-                                        .setName("usersService")
-                                        .setFallbackUri("forward:/fallback/users")))
+                                        .setName("usersService")))
                         .uri("http://localhost:8081"))
+
+                // Сервис рейтингов (rating-service)
                 .route("rating-service", r -> r
                         .path("/api/ratings/**")
                         .filters(f -> f
-                                .addRequestHeader("X-Forwarded-For", "gateway"))
+                                .addRequestHeader("X-Forwarded-For", "gateway")
+                                .circuitBreaker(config -> config
+                                        .setName("ratingService")))
                         .uri("http://localhost:8085"))
                 .build();
     }
