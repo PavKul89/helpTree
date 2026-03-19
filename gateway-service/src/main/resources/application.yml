@@ -9,8 +9,6 @@ spring:
   cloud:
     gateway:
       enabled: true
-      httpclient:
-        wiretap: true  # для отладки трассировки
 
 management:
   tracing:
@@ -45,9 +43,15 @@ management:
           - health
           - metrics
           - info
+          - gateway
           - prometheus
-          - loggers
-          - tracing  # добавляем endpoint для трассировки
+      base-path: /actuator
+      path-mapping:
+        metrics: metrics
+
+  endpoint:
+    gateway:
+      enabled: true
 
 logging:
   level:

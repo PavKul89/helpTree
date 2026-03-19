@@ -12,9 +12,6 @@ import org.example.helptreeservice.mapper.UserMapper;
 import org.example.helptreeservice.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,7 +27,6 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final UserMapper userMapper;
-    private final PasswordEncoder passwordEncoder;
 
     public UserDto createUser(CreateUserRequest request) {
         log.info("Создание нового пользователя с email: {}", request.getEmail());
@@ -43,7 +39,7 @@ public class UserService {
         User user = new User();
         user.setName(request.getName());
         user.setEmail(request.getEmail());
-        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        user.setPassword(request.getPassword());
         user.setPhone(request.getPhone());
         user.setCity(request.getCity());
         user.setHelpedCount(0);
@@ -57,21 +53,6 @@ public class UserService {
         User savedUser = userRepository.save(user);
         log.info("Пользователь успешно создан с ID: {}, email: {}", savedUser.getId(), savedUser.getEmail());
         return userMapper.toDto(savedUser);
-    }
-
-    public UserDto getCurrentUser() {
-        log.info("Получение информации о текущем авторизованном пользователе");
-        try {
-            UserDetails userDetails = (UserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-            log.debug("Текущий пользователь из контекста безопасности: {}", userDetails.getUsername());
-            UserDto userDto = getUserByEmail(userDetails.getUsername());
-            log.info("Информация о текущем пользователе успешно получена: ID={}, email={}",
-                    userDto.getId(), userDto.getEmail());
-            return userDto;
-        } catch (Exception e) {
-            log.error("Ошибка при получении информации о текущем пользователе", e);
-            throw e;
-        }
     }
 
     @Transactional(readOnly = true)
@@ -132,10 +113,6 @@ public class UserService {
         try {
             User user = getUserEntityById(id);
             log.debug("Найден пользователь для обновления: текущий email={}", user.getEmail());
-
-            // Проверяем, что пользователь обновляет свой профиль или это админ
-            checkUserAccess(user);
-            log.debug("Проверка доступа для пользователя ID: {} пройдена", id);
 
             boolean changed = false;
 
@@ -269,24 +246,6 @@ public class UserService {
         return user;
     }
 
-    private void checkUserAccess(User user) {
-        UserDetails userDetails = (UserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-        boolean isAdmin = userDetails.getAuthorities().stream()
-                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
-
-        log.debug("Проверка доступа для пользователя {}. Текущий пользователь: {}, isAdmin: {}",
-                user.getEmail(), userDetails.getUsername(), isAdmin);
-
-        if (!isAdmin && !userDetails.getUsername().equals(user.getEmail())) {
-            log.warn("Отказ в доступе: пользователь {} попытался изменить данные пользователя {}",
-                    userDetails.getUsername(), user.getEmail());
-            throw new org.springframework.security.access.AccessDeniedException("Нет прав для этого действия");
-        }
-
-        log.debug("Доступ разрешен для пользователя {}", userDetails.getUsername());
-    }
-
-    // Методы для логики помощи
     public void incrementHelpedCount(Long receiverId) {
         log.info("Увеличение счетчика долгов для получателя помощи с ID: {}", receiverId);
         try {
