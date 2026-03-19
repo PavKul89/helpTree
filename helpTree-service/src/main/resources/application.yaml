@@ -34,39 +34,58 @@ spring:
     template:
       default-topic: help-events
 
+# ======================================================
+# ТРАССИРОВКА (по аналогии с gateway)
+# ======================================================
+management:
+  tracing:
+    enabled: true
+    sampling:
+      probability: 1.0
+    propagation:
+      type: w3c
+    mdc:
+      field-names:
+        - traceId
+        - spanId
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          endpoint: http://localhost:4318/v1/traces
+          protocol: http/protobuf
+  metrics:
+    export:
+      otlp:
+        enabled: false
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+        http.client.requests: true
+  endpoints:
+    web:
+      exposure:
+        include:
+          - health
+          - metrics
+          - info
+          - prometheus
+          - loggers
+          - tracing
+
 logging:
   level:
     org.hibernate.SQL: DEBUG
     org.hibernate.type.descriptor.sql.BasicBinder: TRACE
     org.springframework.web: DEBUG
     com.example.helptreeservice: DEBUG
-    io.micrometer.otel: DEBUG
+    # ======================================================
+    # Логи для трассировки (по аналогии с gateway)
+    # ======================================================
+    io.micrometer.tracing: DEBUG
     io.opentelemetry: DEBUG
-
+    io.opentelemetry.exporter.otlp: DEBUG
 
 app:
   jwtSecret: mySecretKeyForJWTGenerationWithAtLeast64CharactersLong12345678901234567890123456789012
   jwtExpirationMs: 86400000
-
-management:
-
-  endpoints:
-    web:
-      exposure:
-        include:
-          - health
-          - info
-          - metrics
-          - loggers
-          - prometheus
-  endpoint:
-    health:
-      show-details: always
-      probes:
-        enabled: true
-
-info:
-  app:
-    name: "HelpTree"
-    version: "0.0.1"
-    description: "Main service for helpTree application"
