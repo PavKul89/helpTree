@@ -147,6 +147,6 @@ public class RequestLoggingFilter implements GlobalFilter, Ordered {
 
     @Override
     public int getOrder() {
-        return Ordered.HIGHEST_PRECEDENCE + 1;  // Выполняемся после создания span
+        return 100;  // Выполняемся после создания span
     }
 }
