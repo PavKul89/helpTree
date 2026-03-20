@@ -7,7 +7,6 @@ import org.example.helptreeservice.dto.auth.LoginRequest;
 import org.example.helptreeservice.dto.users.CreateUserRequest;
 import org.example.helptreeservice.dto.users.UserDto;
 import org.example.helptreeservice.entity.User;
-import org.example.helptreeservice.enums.Role;
 import org.example.helptreeservice.service.JwtService;
 import org.example.helptreeservice.service.PasswordService;
 import org.example.helptreeservice.service.UserService;
@@ -27,20 +26,6 @@ public class AuthController {
     @PostMapping("/register")
     public ResponseEntity<AuthResponse> register(@Valid @RequestBody CreateUserRequest request) {
         UserDto user = userService.createUser(request);
-        
-        String token = jwtService.generateToken(
-                user.getId(),
-                user.getEmail(),
-                user.getRole().name()
-        );
-
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(new AuthResponse(token, user.getId(), user.getEmail(), user.getRole().name()));
-    }
-
-    @PostMapping("/register-admin")
-    public ResponseEntity<AuthResponse> registerAdmin(@Valid @RequestBody CreateUserRequest request) {
-        UserDto user = userService.createUserWithRole(request, Role.ADMIN);
         
         String token = jwtService.generateToken(
                 user.getId(),

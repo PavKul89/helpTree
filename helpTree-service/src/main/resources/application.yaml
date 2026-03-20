@@ -89,3 +89,6 @@ logging:
 app:
   jwtSecret: mySecretKeyForJWTGenerationWithAtLeast64CharactersLong12345678901234567890123456789012
   jwtExpirationMs: 86400000
+  admin:
+    email: admin@helptree.com
+    password: Admin123!
