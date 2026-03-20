@@ -55,6 +55,37 @@ public class UserService {
         return userMapper.toDto(savedUser);
     }
 
+    public UserDto createUserWithRole(CreateUserRequest request, Role role) {
+        log.info("Создание пользователя {} с ролью {}", request.getEmail(), role);
+
+        if (userRepository.existsByEmail(request.getEmail())) {
+            throw new ConflictException("Пользователь с таким email уже существует");
+        }
+
+        User user = new User();
+        user.setName(request.getName());
+        user.setEmail(request.getEmail());
+        user.setPassword(request.getPassword());
+        user.setPhone(request.getPhone());
+        user.setCity(request.getCity());
+        user.setHelpedCount(0);
+        user.setDebtCount(0);
+        user.setRating(0.0);
+        user.setStatus(UserStatus.NEWBIE);
+        user.setRole(role);
+        user.setCreatedAt(LocalDateTime.now());
+        user.setUpdatedAt(LocalDateTime.now());
+
+        User savedUser = userRepository.save(user);
+        return userMapper.toDto(savedUser);
+    }
+
+    @Transactional(readOnly = true)
+    public User getUserEntityByEmail(String email) {
+        return userRepository.findByEmail(email)
+                .orElseThrow(() -> new NotFoundException("Пользователь не найден с email: " + email));
+    }
+
     @Transactional(readOnly = true)
     public UserDto getUserById(Long id) {
         log.info("Запрос пользователя по ID: {}", id);

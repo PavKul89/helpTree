@@ -4,6 +4,8 @@ import org.example.helptreeservice.dto.posts.CreatePostRequest;
 import org.example.helptreeservice.dto.posts.PostDto;
 import org.example.helptreeservice.dto.posts.UpdatePostRequest;
 import org.example.helptreeservice.enums.PostStatus;
+import org.example.helptreeservice.exception.ForbiddenException;
+import org.example.helptreeservice.service.AuthorizationService;
 import org.example.helptreeservice.service.PostService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -23,9 +25,13 @@ import java.util.List;
 public class PostController {
 
     private final PostService postService;
+    private final AuthorizationService authService;
 
     @PostMapping
     public ResponseEntity<PostDto> createPost(@Valid @RequestBody CreatePostRequest request) {
+        if (authService.getCurrentUser() == null) {
+            throw new ForbiddenException("Для создания поста необходимо войти в систему");
+        }
         PostDto created = postService.createPost(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
@@ -51,25 +57,37 @@ public class PostController {
     public ResponseEntity<PostDto> updatePost(
             @PathVariable Long id,
             @Valid @RequestBody UpdatePostRequest request) {
+        PostDto post = postService.getPostById(id);
+        if (!authService.canManagePost(post.getUserId())) {
+            throw new ForbiddenException("Вы можете редактировать только свои посты");
+        }
         return ResponseEntity.ok(postService.updatePost(id, request));
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deletePost(@PathVariable Long id) {
+        PostDto post = postService.getPostById(id);
+        if (!authService.canManagePost(post.getUserId())) {
+            throw new ForbiddenException("Вы можете удалить только свои посты");
+        }
         postService.deletePost(id);
         return ResponseEntity.noContent().build();
     }
 
-    // Новый endpoint: восстановление поста
     @PostMapping("/{id}/restore")
     public ResponseEntity<Void> restorePost(@PathVariable Long id) {
+        if (!authService.isAdmin()) {
+            throw new ForbiddenException("Только администратор может восстанавливать посты");
+        }
         postService.restorePost(id);
         return ResponseEntity.noContent().build();
     }
 
-    // Новый эндпоинт для получения постов пользователя
     @GetMapping("/user/{userId}")
     public ResponseEntity<List<PostDto>> getPostsByUser(@PathVariable Long userId) {
+        if (!authService.canManagePost(userId)) {
+            throw new ForbiddenException("Вы можете просматривать только свои посты");
+        }
         return ResponseEntity.ok(postService.getPostsByUser(userId));
     }
 }

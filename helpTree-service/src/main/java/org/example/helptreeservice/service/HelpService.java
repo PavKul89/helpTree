@@ -423,7 +423,7 @@ public class HelpService {
     /**
      * Получить помощь по ID
      */
-    private Help getHelpById(Long id) {
+    public Help getHelpById(Long id) {
         log.debug("Поиск помощи по ID: {}", id);
 
         Help help = helpRepository.findById(id)

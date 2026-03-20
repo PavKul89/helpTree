@@ -1,5 +1,6 @@
 package org.example.helptreeservice.dto.users;
 
+import org.example.helptreeservice.enums.Role;
 import org.example.helptreeservice.enums.UserStatus;
 import lombok.Data;
 import lombok.Builder;
@@ -20,6 +21,7 @@ public class UserDto {
     private Integer helpedCount;
     private Integer debtCount;
     private Double rating;
+    private Role role;
     private UserStatus status;
     private LocalDateTime createdAt;
 }

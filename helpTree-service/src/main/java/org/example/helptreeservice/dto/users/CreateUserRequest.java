@@ -20,8 +20,10 @@ public class CreateUserRequest {
     @Size(min = 6, max = 100, message = "Пароль должен быть от 6 до 100 символов")
     private String password;
 
+    @NotBlank(message = "Телефон обязателен")
     @Size(min = 10, max = 20, message = "Телефон должен быть от 10 до 20 символов")
     private String phone;
 
+    @NotBlank(message = "Город обязателен")
     private String city;
 }
