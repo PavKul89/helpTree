@@ -367,6 +367,18 @@ public class UserService {
         }
     }
 
+    public UserPublicDto getUserPublicById(Long id) {
+        log.info("Публичные данные пользователя ID: {}", id);
+        User user = getUserEntityById(id);
+        return UserPublicDto.builder()
+                .id(user.getId())
+                .name(user.getName())
+                .rating(user.getRating())
+                .helpedCount(user.getHelpedCount())
+                .debtCount(user.getDebtCount())
+                .build();
+    }
+
     public void updateUserRating(Long id, Double rating) {
         log.info("Обновление рейтинга пользователя ID: {} на {}", id, rating);
         try {

@@ -43,6 +43,11 @@ public class UserController {
         return ResponseEntity.ok(userService.getAllUsers());
     }
 
+    @GetMapping("/{id}/public")
+    public ResponseEntity<UserPublicDto> getUserPublic(@PathVariable Long id) {
+        return ResponseEntity.ok(userService.getUserPublicById(id));
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<UserDto> getUserById(@PathVariable Long id) {
         if (!authService.canManageUser(id)) {

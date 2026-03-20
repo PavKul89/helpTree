@@ -37,6 +37,11 @@ public class GatewayServiceApplication {
                         )
                         .filters(f -> f
                                 .addRequestHeader("X-Forwarded-For", "gateway")
+                                .addRequestHeader("Authorization", "") // placeholder - actual header from client
+                                .addRequestHeader("X-User-Id", "")     // placeholder
+                                .addRequestHeader("X-User-Role", "")   // placeholder
+                                .addRequestHeader("X-User-Email", "") // placeholder
+                                .preserveHostHeader()
                                 .circuitBreaker(config -> config
                                         .setName("usersService")))
                         .uri("http://localhost:8081"))

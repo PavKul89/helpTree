@@ -29,10 +29,11 @@ public class PostController {
 
     @PostMapping
     public ResponseEntity<PostDto> createPost(@Valid @RequestBody CreatePostRequest request) {
-        if (authService.getCurrentUser() == null) {
+        var user = authService.getCurrentUser();
+        if (user == null) {
             throw new ForbiddenException("Для создания поста необходимо войти в систему");
         }
-        PostDto created = postService.createPost(request);
+        PostDto created = postService.createPost(request, user.getUserId());
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 

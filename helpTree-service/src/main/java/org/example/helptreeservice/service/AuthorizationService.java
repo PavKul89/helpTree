@@ -2,20 +2,22 @@ package org.example.helptreeservice.service;
 
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 @Service
 public class AuthorizationService {
 
-    private final HttpServletRequest httpRequest;
-
-    public AuthorizationService(HttpServletRequest httpRequest) {
-        this.httpRequest = httpRequest;
-    }
-
     public UserContext getCurrentUser() {
-        String userIdStr = httpRequest.getHeader("X-User-Id");
-        String role = httpRequest.getHeader("X-User-Role");
-        String email = httpRequest.getHeader("X-User-Email");
+        ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+        if (attributes == null) {
+            return null;
+        }
+        
+        HttpServletRequest request = attributes.getRequest();
+        String userIdStr = request.getHeader("X-User-Id");
+        String role = request.getHeader("X-User-Role");
+        String email = request.getHeader("X-User-Email");
 
         if (userIdStr == null) {
             return null;

@@ -38,13 +38,12 @@ public class PostService {
             value = "post.created",
             tags = {"operation=create, type=write"}
     )
-    public PostDto createPost(CreatePostRequest request) {
-        log.info("Создание нового поста для пользователя с ID: {}", request.getUserId());
-        log.debug("Данные нового поста: title={}, authorName={}", request.getTitle(), request.getAuthorName());
+    public PostDto createPost(CreatePostRequest request, Long authorId) {
+        log.info("Создание нового поста для пользователя с ID: {}", authorId);
 
         try {
-            User user = userRepository.findById(request.getUserId())
-                    .orElseThrow(() -> new NotFoundException("Пользователь не найден с id: " + request.getUserId()));
+            User user = userRepository.findById(authorId)
+                    .orElseThrow(() -> new NotFoundException("Пользователь не найден с id: " + authorId));
 
             log.debug("Найден пользователь для создания поста: email={}", user.getEmail());
 
@@ -52,10 +51,10 @@ public class PostService {
             post.setUser(user);
             post.setTitle(request.getTitle());
             post.setDescription(request.getDescription());
-            post.setAuthorName(request.getAuthorName());
+            post.setAuthorName(user.getName());
             post.setCreatedAt(LocalDateTime.now());
             post.setUpdatedAt(LocalDateTime.now());
-            post.setStatus(PostStatus.OPEN);  // новый пост открыт для помощи
+            post.setStatus(PostStatus.OPEN);
 
             Post savedPost = postRepository.save(post);
             log.info("Пост успешно создан с ID: {}, пользователь ID: {}", savedPost.getId(), user.getId());
@@ -64,10 +63,10 @@ public class PostService {
             return postMapper.toDto(savedPost);
 
         } catch (NotFoundException e) {
-            log.warn("Не удалось создать пост: пользователь с ID {} не найден", request.getUserId());
+            log.warn("Не удалось создать пост: пользователь с ID {} не найден", authorId);
             throw e;
         } catch (Exception e) {
-            log.error("Ошибка при создании поста для пользователя ID: {}", request.getUserId(), e);
+            log.error("Ошибка при создании поста для пользователя ID: {}", authorId, e);
             throw e;
         }
     }
