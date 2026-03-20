@@ -3,6 +3,7 @@ package org.example.helptreeservice.service;
 import org.example.helptreeservice.dto.users.CreateUserRequest;
 import org.example.helptreeservice.dto.users.UpdateUserRequest;
 import org.example.helptreeservice.dto.users.UserDto;
+import org.example.helptreeservice.dto.users.UserPublicDto;
 import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.enums.Role;
 import org.example.helptreeservice.enums.UserStatus;
@@ -27,6 +28,7 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final UserMapper userMapper;
+    private final PasswordService passwordService;
 
     public UserDto createUser(CreateUserRequest request) {
         log.info("Создание нового пользователя с email: {}", request.getEmail());
@@ -39,7 +41,7 @@ public class UserService {
         User user = new User();
         user.setName(request.getName());
         user.setEmail(request.getEmail());
-        user.setPassword(request.getPassword());
+        user.setPassword(passwordService.encode(request.getPassword()));
         user.setPhone(request.getPhone());
         user.setCity(request.getCity());
         user.setHelpedCount(0);
@@ -65,7 +67,7 @@ public class UserService {
         User user = new User();
         user.setName(request.getName());
         user.setEmail(request.getEmail());
-        user.setPassword(request.getPassword());
+        user.setPassword(passwordService.encode(request.getPassword()));
         user.setPhone(request.getPhone());
         user.setCity(request.getCity());
         user.setHelpedCount(0);

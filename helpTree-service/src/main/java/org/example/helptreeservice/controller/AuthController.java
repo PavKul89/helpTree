@@ -9,6 +9,7 @@ import org.example.helptreeservice.dto.users.UserDto;
 import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.enums.Role;
 import org.example.helptreeservice.service.JwtService;
+import org.example.helptreeservice.service.PasswordService;
 import org.example.helptreeservice.service.UserService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -21,6 +22,7 @@ public class AuthController {
 
     private final UserService userService;
     private final JwtService jwtService;
+    private final PasswordService passwordService;
 
     @PostMapping("/register")
     public ResponseEntity<AuthResponse> register(@Valid @RequestBody CreateUserRequest request) {
@@ -54,8 +56,12 @@ public class AuthController {
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
         User user = userService.getUserEntityByEmail(request.getEmail());
         
-        if (!request.getPassword().equals(user.getPassword())) {
+        if (!passwordService.matches(request.getPassword(), user.getPassword())) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        if (user.getDeleted()) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
 
         String token = jwtService.generateToken(

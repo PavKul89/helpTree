@@ -9,10 +9,10 @@ import org.springframework.web.bind.annotation.RequestParam;
 
 import java.util.List;
 
-@FeignClient(name = "helpTree-service", url = "${helpTree.service.url:http://localhost:8080}")
+@FeignClient(name = "helpTree-service", url = "${helptree.service.url:http://localhost:8081}")
 public interface UserServiceClient {
 
-    @GetMapping("/api/users/{id}")
+    @GetMapping("/api/users/{id}/public")
     UserDto getUserById(@PathVariable("id") Long id);
 
     @GetMapping("/api/users")

@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.example.helptreeservice.dto.users.CreateUserRequest;
 import org.example.helptreeservice.dto.users.UpdateUserRequest;
 import org.example.helptreeservice.dto.users.UserDto;
+import org.example.helptreeservice.dto.users.UserPublicDto;
 import org.example.helptreeservice.exception.ForbiddenException;
 import org.example.helptreeservice.service.AuthorizationService;
 import org.example.helptreeservice.service.AuthorizationService.UserContext;
