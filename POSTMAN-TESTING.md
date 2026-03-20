@@ -2,14 +2,13 @@
 
 ## <span style="color: #00D9FF;">Содержание</span>
 1. [Настройка окружения](#настройка-окружения)
-2. [Тестирование helpTree-service](#тестирование-helptree-service)
-3. [Тестирование rating-service](#тестирование-rating-service)
-4. [Тестирование API Gateway](#тестирование-api-gateway)
-5. [Интеграционные тесты](#интеграционные-тесты)
-6. [Негативные тесты](#негативные-тесты)
-7. [Тестирование мониторинга и трассировки](#тестирование-мониторинга-и-трассировки)
-8. [Дополнительные тесты](#дополнительные-тесты)
-
+2. [Тестирование Security](#тестирование-security)
+3. [Тестирование helpTree-service](#тестирование-helptree-service)
+4. [Тестирование rating-service](#тестирование-rating-service)
+5. [Тестирование API Gateway](#тестирование-api-gateway)
+6. [Интеграционные тесты](#интеграционные-тесты)
+7. [Негативные тесты](#негативные-тесты)
+8. [Тестирование мониторинга и трассировки](#тестирование-мониторинга-и-трассировки)
 
 ---
 
@@ -19,422 +18,348 @@
 ### <span style="color: #FFD700;">Переменные окружения</span>
 
 | Переменная | Значение | Описание |
-|------------|-----------|-----------|
+|------------|-----------|---------|
 | `base_url` | `http://localhost:8080` | API Gateway |
 | `helpTree_url` | `http://localhost:8081` | helpTree-service |
 | `rating_url` | `http://localhost:8085` | rating-service |
 
+### <span style="color: #FFD700;">Коллекция переменных для авторизации</span>
+
+Создайте переменную `auth_token` в окружении Postman для хранения JWT токена.
+
 ### Предварительные требования
-- Все сервисы запущены через docker-compose
+- Все сервисы запущены
 - PostgreSQL доступен на порту 5432
 - Kafka доступен на порту 9093
-- Gateway доступен на порту 8080
+
+---
+
+<a id="тестирование-security"></a>
+## <span style="color: #00D9FF;">Тестирование Security</span>
+
+### <span style="color: #FF6B35;">1. Аутентификация</span>
+
+#### 1.1 Вход администратора
+**POST** `{{helpTree_url}}/api/auth/login`
+
+```json
+{
+    "email": "admin@helptree.com",
+    "password": "Admin123!"
+}
+```
+
+**Ожидаемый ответ**: 200 OK
+```json
+{
+    "token": "eyJhbGciOiJIUzI1NiJ9...",
+    "userId": 1,
+    "email": "admin@helptree.com",
+    "role": "ADMIN"
+}
+```
+
+> Сохраните значение `token` в переменную `auth_token`
+
+#### 1.2 Регистрация нового пользователя
+**POST** `{{helpTree_url}}/api/auth/register`
+
+```json
+{
+    "name": "Иван Петров",
+    "email": "ivan@test.com",
+    "password": "Password123!",
+    "phone": "+79001234567",
+    "city": "Москва"
+}
+```
+
+**Ожидаемый ответ**: 201 Created
+```json
+{
+    "token": "eyJhbGciOiJIUzI1NiJ9...",
+    "userId": 2,
+    "email": "ivan@test.com",
+    "role": "USER"
+}
+```
+
+#### 1.3 Вход под новым пользователем
+**POST** `{{helpTree_url}}/api/auth/login`
+
+```json
+{
+    "email": "ivan@test.com",
+    "password": "Password123!"
+}
+```
+
+> Сохраните новый токен в переменную `user_token`
+
+---
+
+### <span style="color: #FF6B35;">2. Публичные эндпоинты (без авторизации)</span>
+
+#### 2.1 Публичные данные пользователя
+**GET** `{{helpTree_url}}/api/users/1/public`
+
+**Ожидаемый ответ**: 200 OK
+```json
+{
+    "id": 1,
+    "name": "Admin",
+    "rating": 0.0,
+    "helpedCount": 0,
+    "debtCount": 0
+}
+```
+
+#### 2.2 Вход с неверным паролем
+**POST** `{{helpTree_url}}/api/auth/login`
+
+```json
+{
+    "email": "admin@helptree.com",
+    "password": "WrongPassword!"
+}
+```
+
+**Ожидаемый ответ**: 401 Unauthorized
+
+#### 2.3 Вход с несуществующим email
+**POST** `{{helpTree_url}}/api/auth/login`
+
+```json
+{
+    "email": "nonexistent@test.com",
+    "password": "Password123!"
+}
+```
+
+**Ожидаемый ответ**: 404 Not Found
+
+---
+
+### <span style="color: #FF6B35;">3. Защищённые эндпоинты (с авторизацией)</span>
+
+#### 3.1 Заголовки авторизации
+Для всех защищённых запросов добавьте:
+```
+Authorization: Bearer {{auth_token}}
+```
+
+#### 3.2 Просмотр своего профиля (USER)
+**GET** `{{helpTree_url}}/api/users/2`
+> Используйте `{{user_token}}`
+
+**Ожидаемый ответ**: 200 OK
+
+#### 3.3 Просмотр чужого профиля (USER)
+**GET** `{{helpTree_url}}/api/users/1`
+> Используйте `{{user_token}}`
+
+**Ожидаемый ответ**: 403 Forbidden
+```json
+{
+    "status": 403,
+    "error": "Доступ запрещен",
+    "message": "Вы можете просматривать только свой профиль"
+}
+```
+
+#### 3.4 Просмотр любого профиля (ADMIN)
+**GET** `{{helpTree_url}}/api/users/2`
+> Используйте `{{auth_token}}` (админ)
+
+**Ожидаемый ответ**: 200 OK
+
+#### 3.5 Просмотр всех пользователей (ADMIN)
+**GET** `{{helpTree_url}}/api/users`
+> Используйте `{{auth_token}}`
+
+**Ожидаемый ответ**: 200 OK (список всех пользователей)
+
+#### 3.6 Просмотр всех пользователей (USER)
+**GET** `{{helpTree_url}}/api/users`
+> Используйте `{{user_token}}`
+
+**Ожидаемый ответ**: 403 Forbidden
+
+---
+
+### <span style="color: #FF6B35;">4. Тестирование ролей</span>
+
+#### 4.1 USER: Создание поста
+**POST** `{{helpTree_url}}/api/posts`
+> Используйте `{{user_token}}`
+
+```json
+{
+    "title": "Нужна помощь",
+    "content": "Описание задачи"
+}
+```
+
+**Ожидаемый ответ**: 201 Created
+
+#### 4.2 USER: Редактирование чужого поста
+Создайте пост другим пользователем, затем:
+**PUT** `{{helpTree_url}}/api/posts/{other_post_id}`
+> Используйте `{{user_token}}`
+
+**Ожидаемый ответ**: 403 Forbidden
+
+#### 4.3 USER: Удаление своего аккаунта
+**DELETE** `{{helpTree_url}}/api/users/2`
+> Используйте `{{user_token}}`
+
+**Ожидаемый ответ**: 204 No Content
+
+#### 4.4 USER: Вход удалённого пользователя
+**POST** `{{helpTree_url}}/api/auth/login`
+
+```json
+{
+    "email": "ivan@test.com",
+    "password": "Password123!"
+}
+```
+
+**Ожидаемый ответ**: 403 Forbidden
+```json
+{
+    "status": 403
+}
+```
+
+---
+
+### <span style="color: #FF6B35;">5. Запросы без токена</span>
+
+#### 5.1 Доступ к защищённому эндпоинту без токена
+**GET** `{{helpTree_url}}/api/users`
+
+**Ожидаемый ответ**: 401 Unauthorized или 403 Forbidden
+
+#### 5.2 Доступ с невалидным токеном
+Добавьте заголовок:
+```
+Authorization: Bearer invalid_token_here
+```
+
+**GET** `{{helpTree_url}}/api/users/1`
+
+**Ожидаемый ответ**: 401 Unauthorized
+
+---
+
+### <span style="color: #FF6B35;">6. Полный сценарий</span>
+
+```
+1. POST /api/auth/login (админ) → сохранить token в {{auth_token}}
+2. POST /api/auth/register (новый юзер) → сохранить в {{user_token}}
+3. GET /api/users/2 (юзер смотрит себя) → 200
+4. GET /api/users/1 (юзер смотрит админа) → 403
+5. GET /api/users/1 (админ смотрит юзера) → 200
+6. DELETE /api/users/2 (юзер удаляет себя) → 204
+7. POST /api/auth/login (удалённый юзер) → 403
+```
 
 ---
 
 <a id="тестирование-helptree-service"></a>
 ## <span style="color: #00D9FF;">Тестирование helpTree-service</span>
 
-### <span style="color: #FF6B35;">1. Пользователи (Users)</span>
+### <span style="color: #FF6B35;">7. Пользователи (Users)</span>
 
-#### 1.1 Создание пользователя
+> Все запросы требуют заголовок `Authorization: Bearer {{auth_token}}`
+
+#### 7.1 Создание пользователя (ADMIN)
 **POST** `{{helpTree_url}}/api/users`
 
 ```json
 {
-    "name": "Иван Петров",
-    "email": "ivan.petrov@example.com",
-    "password": "password123",
+    "name": "Тест Тестов",
+    "email": "test@example.com",
+    "password": "Password123!",
     "phone": "+79001234567",
     "city": "Москва"
 }
 ```
 
 **Ожидаемый ответ**: 201 Created
-```json
-{
-    "id": 1,
-    "name": "Иван Петров",
-    "email": "ivan.petrov@example.com",
-    "phone": "+79001234567",
-    "city": "Москва",
-    "helpedCount": 0,
-    "debtCount": 0,
-    "rating": 0.0,
-    "role": "USER",
-    "status": "ACTIVE"
-}
-```
 
-#### 1.2 Получение всех пользователей
+#### 7.2 Получение всех пользователей (ADMIN)
 **GET** `{{helpTree_url}}/api/users`
 
 **Ожидаемый ответ**: 200 OK
-```json
-[
-    {
-        "id": 1,
-        "name": "Иван Петров",
-        "email": "ivan.petrov@example.com",
-        ...
-    }
-]
-```
 
-#### 1.3 Получение пользователя по ID
-**GET** `{{helpTree_url}}/api/users/1`
+#### 7.3 Получение пользователя по ID
+**GET** `{{helpTree_url}}/api/users/{id}`
 
-**Ожидаемый ответ**: 200 OK
-
-#### 1.4 Получение пользователя по Email
-**GET** `{{helpTree_url}}/api/users/email/ivan.petrov@example.com`
-
-**Ожидаемый ответ**: 200 OK
-
-#### 1.5 Обновление пользователя
-**PUT** `{{helpTree_url}}/api/users/1`
+#### 7.4 Обновление пользователя
+**PUT** `{{helpTree_url}}/api/users/{id}`
 
 ```json
 {
-    "name": "Иван Иванов",
-    "phone": "+79009876543",
-    "city": "Санкт-Петербург"
+    "name": "Новое Имя",
+    "phone": "+79009876543"
 }
 ```
 
-**Ожидаемый ответ**: 200 OK
+#### 7.5 Обновление рейтинга (ADMIN)
+**PUT** `{{helpTree_url}}/api/users/{id}/rating?rating=4.5`
 
-#### 1.6 Обновление рейтинга пользователя
-**PUT** `{{helpTree_url}}/api/users/1/rating?rating=4.5`
+#### 7.6 Восстановление пользователя (ADMIN)
+**POST** `{{helpTree_url}}/api/users/{id}/restore`
 
-**Ожидаемый ответ**: 200 OK
+#### 7.7 Увеличение счётчика помощи (ADMIN)
+**POST** `{{helpTree_url}}/api/users/{id}/increment-help`
 
-#### 1.7 Удаление пользователя (soft delete)
-**DELETE** `{{helpTree_url}}/api/users/1`
-
-**Ожидаемый ответ**: 204 No Content
-
-#### 1.8 Восстановление пользователя
-**POST** `{{helpTree_url}}/api/users/1/restore`
-
-**Ожидаемый ответ**: 204 No Content
-
-#### 1.9 Увеличение счетчика помощи
-**POST** `{{helpTree_url}}/api/users/1/increment-help`
-
-**Ожидаемый ответ**: 200 OK
-
-#### 1.10 Зафиксировать помощь от одного пользователя другому
-**POST** `{{helpTree_url}}/api/users/help/1/to/2`
-
-**Ожидаемый ответ**: 200 OK
-```json
-"Помощь зафиксирована"
-```
-
-#### 1.11 Увеличить долг пользователя
-**POST** `{{helpTree_url}}/api/users/increment-debt/2`
-
-**Ожидаемый ответ**: 200 OK
-```json
-"Долг увеличен"
-```
-
-#### 1.12 Отметить, что пользователь помог
-**POST** `{{helpTree_url}}/api/users/helped/1`
-
-**Ожидаемый ответ**: 200 OK
-```json
-"Помощь оказана"
-```
+#### 7.8 Зафиксировать помощь (ADMIN)
+**POST** `{{helpTree_url}}/api/users/help/{helperId}/to/{receiverId}`
 
 ---
 
-### <span style="color: #FF6B35;">2. Посты (Posts)</span>
+### <span style="color: #FF6B35;">8. Посты (Posts)</span>
 
-#### 2.1 Создание поста
+> Все запросы требуют заголовок `Authorization: Bearer {{auth_token}}`
+
+#### 8.1 Создание поста
 **POST** `{{helpTree_url}}/api/posts`
 
 ```json
 {
     "title": "Нужна помощь с переездом",
-    "content": "Необходима помощь с перевозкой мебели",
-    "authorId": 1
+    "content": "Необходима помощь с перевозкой мебели"
 }
 ```
 
-**Ожидаемый ответ**: 201 Created
-```json
-{
-    "id": 1,
-    "title": "Нужна помощь с переездом",
-    "content": "Необходима помощь с перевозкой мебели",
-    "authorId": 1,
-    "authorName": "Иван Петров",
-    "status": "OPEN",
-    "createdAt": "2026-03-19T10:00:00"
-}
-```
-
-#### 2.2 Получение всех постов (с пагинацией)
+#### 8.2 Получение всех постов
 **GET** `{{helpTree_url}}/api/posts?page=0&size=10&sort=createdAt,desc`
 
-**Ожидаемый ответ**: 200 OK
-
-#### 2.3 Фильтрация постов по статусу
-**GET** `{{helpTree_url}}/api/posts?status=OPEN`
-
-#### 2.4 Фильтрация постов по автору
-**GET** `{{helpTree_url}}/api/posts?userId=1`
-
-#### 2.5 Поиск постов по названию
-**GET** `{{helpTree_url}}/api/posts?title=переезд`
-
-#### 2.6 Получение поста по ID
-**GET** `{{helpTree_url}}/api/posts/1`
-
-**Ожидаемый ответ**: 200 OK
-
-#### 2.7 Обновление поста
-**PUT** `{{helpTree_url}}/api/posts/1`
-
-```json
-{
-    "title": "Нужна помощь",
-    "content": "Обновленное описание"
-}
+#### 8.3 Фильтрация постов
+```
+GET {{helpTree_url}}/api/posts?status=OPEN
+GET {{helpTree_url}}/api/posts?userId=1
+GET {{helpTree_url}}/api/posts?title=переезд
 ```
 
-**Ожидаемый ответ**: 200 OK
+#### 8.4 Обновление поста
+**PUT** `{{helpTree_url}}/api/posts/{id}`
 
-#### 2.8 Удаление поста
-**DELETE** `{{helpTree_url}}/api/posts/1`
-
-**Ожидаемый ответ**: 204 No Content
-
-#### 2.9 Восстановление поста
-**POST** `{{helpTree_url}}/api/posts/1/restore`
-
-**Ожидаемый ответ**: 204 No Content
-
-#### 2.10 Получение постов пользователя
-**GET** `{{helpTree_url}}/api/posts/user/1`
-
-**Ожидаемый ответ**: 200 OK
+#### 8.5 Удаление поста
+**DELETE** `{{helpTree_url}}/api/posts/{id}`
 
 ---
 
-### <span style="color: #FF6B35;">3. Помощь (Helps)</span>
+### <span style="color: #FF6B35;">9. Помощь (Helps)</span>
 
-#### 3.1 Откликнуться на пост (принять помощь)
+> Все запросы требуют заголовок `Authorization: Bearer {{auth_token}}`
+
+#### 9.1 Откликнуться на пост
 **POST** `{{helpTree_url}}/api/helps/accept`
 
-```json
-{
-    "helperId": 2,
-    "postId": 1
-}
-```
-
-**Ожидаемый ответ**: 201 Created
-```json
-{
-    "id": 1,
-    "helperId": 2,
-    "receiverId": 1,
-    "postId": 1,
-    "status": "ACCEPTED",
-    "createdAt": "2026-03-19T10:00:00"
-}
-```
-
-#### 3.2 Завершить помощь (помощник)
-**POST** `{{helpTree_url}}/api/helps/1/complete`
-
-**Ожидаемый ответ**: 200 OK
-```json
-{
-    "id": 1,
-    "status": "COMPLETED"
-}
-```
-
-#### 3.3 Подтвердить получение помощи (получатель)
-**POST** `{{helpTree_url}}/api/helps/1/confirm`
-
-**Ожидаемый ответ**: 200 OK
-```json
-{
-    "id": 1,
-    "status": "CONFIRMED"
-}
-```
-
-#### 3.4 Отменить помощь
-**POST** `{{helpTree_url}}/api/helps/1/cancel`
-
-**Ожидаемый ответ**: 200 OK
-
-#### 3.5 Получить все помощи, где пользователь помогал
-**GET** `{{helpTree_url}}/api/helps/helper/2`
-
-**Ожидаемый ответ**: 200 OK
-
-#### 3.6 Получить все помощи, где пользователю помогали
-**GET** `{{helpTree_url}}/api/helps/receiver/1`
-
-**Ожидаемый ответ**: 200 OK
-
----
-
-<a id="тестирование-rating-service"></a>
-## <span style="color: #00D9FF;">Тестирование rating-service</span>
-
-### <span style="color: #FF6B35;">4. Рейтинги</span>
-
-#### 4.1 Получение рейтинга пользователя
-**GET** `{{rating_url}}/api/ratings/user/1`
-
-**Ожидаемый ответ**: 200 OK
-```json
-{
-    "userId": 1,
-    "currentRating": 4.5,
-    "totalHelps": 10,
-    "lastCalculated": "2026-03-19T10:00:00"
-}
-```
-
-#### 4.2 Получение топ пользователей по рейтингу
-**GET** `{{rating_url}}/api/ratings/top?page=0&size=10&sort=currentRating,desc`
-
-**Ожидаемый ответ**: 200 OK
-```json
-{
-    "content": [
-        {
-            "userId": 1,
-            "currentRating": 5.0,
-            "totalHelps": 20
-        }
-    ],
-    "totalElements": 1
-}
-```
-
-#### 4.3 Принудительный пересчет рейтинга
-**POST** `{{rating_url}}/api/ratings/user/1/recalculate`
-
-**Ожидаемый ответ**: 200 OK
-
-#### 4.4 Получение истории изменения рейтинга
-**GET** `{{rating_url}}/api/ratings/user/1/history?page=0&size=20&sort=calculatedAt,desc`
-
-**Ожидаемый ответ**: 200 OK
-```json
-{
-    "content": [
-        {
-            "id": 1,
-            "userId": 1,
-            "previousRating": 4.0,
-            "newRating": 4.5,
-            "change": 0.5,
-            "calculatedAt": "2026-03-19T10:00:00"
-        }
-    ]
-}
-```
-
----
-
-<a id="тестирование-api-gateway"></a>
-## <span style="color: #00D9FF;">Тестирование API Gateway</span>
-
-### <span style="color: #FF6B35;">5. Маршрутизация через Gateway</span>
-
-#### 5.1 Проверка доступности Gateway
-**GET** `{{base_url}}/actuator/health`
-
-**Ожидаемый ответ**: 200 OK
-```json
-{
-    "status": "UP"
-}
-```
-
-#### 5.2 Просмотр маршрутов Gateway
-**GET** `{{base_url}}/actuator/gateway/routes`
-
-**Ожидаемый ответ**: 200 OK - список всех маршрутов
-
-#### 5.3 Тестирование маршрута пользователей через Gateway
-**POST** `{{base_url}}/api/users`
-
-```json
-{
-    "name": "Тестовый пользователь",
-    "email": "testgateway@example.com",
-    "password": "test123",
-    "phone": "+79001112233",
-    "city": "Казань"
-}
-```
-
-**Ожидаемый ответ**: 201 Created
-
-#### 5.4 Тестирование маршрута рейтингов через Gateway
-**GET** `{{base_url}}/api/ratings/user/1`
-
-**Ожидаемый ответ**: 200 OK
-
-#### 5.5 Тестирование маршрута постов через Gateway
-**GET** `{{base_url}}/api/posts`
-
-**Ожидаемый ответ**: 200 OK
-
----
-
-<a id="интеграционные-тесты"></a>
-## <span style="color: #00D9FF;">Интеграционные тесты</span>
-
-### <span style="color: #FF6B35;">6. Полный сценарий помощи</span>
-
-#### 6.1 Создание двух пользователей
-**POST** `{{helpTree_url}}/api/users`
-```json
-{
-    "name": "Помощник",
-    "email": "helper@example.com",
-    "password": "password123",
-    "phone": "+79001112233",
-    "city": "Москва"
-}
-```
-
-**POST** `{{helpTree_url}}/api/users`
-```json
-{
-    "name": "Получатель",
-    "email": "receiver@example.com",
-    "password": "password123",
-    "phone": "+79004445566",
-    "city": "Москва"
-}
-```
-
-#### 6.2 Создание поста получателем
-**POST** `{{helpTree_url}}/api/posts`
-```json
-{
-    "title": "Нужна помощь с ремонтом",
-    "content": "Требуется помощь в покраске стен",
-    "authorId": 2
-}
-```
-
-#### 6.3 Помощник откликается на пост
-**POST** `{{helpTree_url}}/api/helps/accept`
 ```json
 {
     "helperId": 1,
@@ -442,253 +367,164 @@
 }
 ```
 
-#### 6.4 Помощник завершает работу
-**POST** `{{helpTree_url}}/api/helps/1/complete`
+#### 9.2 Завершить помощь
+**POST** `{{helpTree_url}}/api/helps/{id}/complete`
 
-#### 6.5 Получатель подтверждает выполнение
-**POST** `{{helpTree_url}}/api/helps/1/confirm`
+#### 9.3 Подтвердить помощь
+**POST** `{{helpTree_url}}/api/helps/{id}/confirm`
 
-#### 6.6 Проверка увеличения счетчиков
-**GET** `{{helpTree_url}}/api/users/1`
+#### 9.4 Отменить помощь
+**POST** `{{helpTree_url}}/api/helps/{id}/cancel`
 
-Ожидается: helpedCount увеличился на 1
-
-**GET** `{{helpTree_url}}/api/users/2`
-
-Ожидается: debtCount увеличился на 1
-
-#### 6.7 Проверка рейтинга
-**GET** `{{rating_url}}/api/ratings/user/1`
-
-Ожидается: rating обновлен
+#### 9.5 Просмотр помощи (только участники)
+**GET** `{{helpTree_url}}/api/helps/helper/{helperId}`
+**GET** `{{helpTree_url}}/api/helps/receiver/{receiverId}`
 
 ---
 
-### <span style="color: #FF6B35;">7. Тестирование Kafka событий</span>
+<a id="тестирование-rating-service"></a>
+## <span style="color: #00D9FF;">Тестирование rating-service</span>
 
-#### 7.1 Проверка топика help-events
-После выполнения сценария помощи (раздел 6), проверить в Kafka UI (http://localhost:8082):
-- Появление сообщения в топике help-events
-- Корректность данных в сообщении
+> Все эндпоинты публичные (rating открыт для всех)
 
-#### 7.2 Проверка обновления рейтинга
-После подтверждения помощи проверить:
-**GET** `{{rating_url}}/api/ratings/user/1/history`
+#### 10.1 Получение рейтинга пользователя
+**GET** `{{rating_url}}/api/ratings/user/{userId}`
 
-Ожидается: новая запись в истории рейтинга
+**Ожидаемый ответ**: 200 OK
+```json
+{
+    "userId": 1,
+    "userName": "Admin",
+    "overallRating": 3.5,
+    "level": "AVERAGE",
+    "totalHelps": 5,
+    "totalReceivedHelps": 3,
+    "successRate": 85.0
+}
+```
+
+#### 10.2 Топ пользователей
+**GET** `{{rating_url}}/api/ratings/top?page=0&size=10&sort=currentRating,desc`
+
+#### 10.3 Пересчёт рейтинга
+**POST** `{{rating_url}}/api/ratings/user/{userId}/recalculate`
+
+#### 10.4 История рейтинга
+**GET** `{{rating_url}}/api/ratings/user/{userId}/history?page=0&size=20`
+
+---
+
+<a id="тестирование-api-gateway"></a>
+## <span style="color: #00D9FF;">Тестирование API Gateway</span>
+
+### <span style="color: #FF6B35;">11. Маршрутизация</span>
+
+#### 11.1 Health check
+**GET** `{{base_url}}/actuator/health`
+
+#### 11.2 Список маршрутов
+**GET** `{{base_url}}/actuator/gateway/routes`
+
+#### 11.3 Запрос через Gateway с авторизацией
+**POST** `{{base_url}}/api/users`
+```
+Authorization: Bearer {{auth_token}}
+```
+
+---
+
+<a id="интеграционные-тесты"></a>
+## <span style="color: #00D9FF;">Интеграционные тесты</span>
+
+### <span style="color: #FF6B35;">12. Полный сценарий помощи</span>
+
+```
+1. POST /api/auth/login (админ) → {{auth_token}}
+2. POST /api/auth/register (помощник) → {{helper_token}}
+3. POST /api/auth/register (получатель) → {{receiver_token}}
+
+4. POST /api/posts ({{helper_token}})
+   {"title": "Нужна помощь", "content": "Описание"}
+
+5. POST /api/helps/accept ({{helper_token}})
+   {"helperId": X, "postId": Y}
+
+6. POST /api/helps/{id}/complete ({{helper_token}})
+
+7. POST /api/helps/{id}/confirm ({{receiver_token}})
+
+8. GET /api/ratings/user/{helperId}} → проверка роста рейтинга
+```
 
 ---
 
 <a id="негативные-тесты"></a>
 ## <span style="color: #00D9FF;">Негативные тесты</span>
 
-### <span style="color: #FF6B35;">8. Ошибки в Users</span>
+### <span style="color: #FF6B35;">13. Security</span>
 
-#### 8.1 Создание пользователя с дублирующимся email
-**POST** `{{helpTree_url}}/api/users`
-```json
-{
-    "name": "Дубликат",
-    "email": "ivan.petrov@example.com",
-    "password": "password123"
-}
-```
+| Тест | Запрос | Ожидаемый ответ |
+|------|--------|-----------------|
+| Неверный пароль | POST /api/auth/login (wrong pass) | 401 |
+| Несуществующий email | POST /api/auth/login | 404 |
+| Без токена | GET /api/users | 401/403 |
+| Невалидный токен | GET /api/users (invalid Bearer) | 401 |
+| USER смотрит всех | GET /api/users | 403 |
+| USER удаляет другого | DELETE /api/users/{other}} | 403 |
+| Удалённый логинится | POST /api/auth/login (deleted user) | 403 |
 
-**Ожидаемый ответ**: 409 Conflict
+### <span style="color: #FF6B35;">14. Users</span>
 
-#### 8.2 Создание пользователя с некорректным email
-**POST** `{{helpTree_url}}/api/users`
-```json
-{
-    "name": "Тест",
-    "email": "invalid-email",
-    "password": "password123"
-}
-```
+| Тест | Запрос | Ожидаемый ответ |
+|------|--------|-----------------|
+| Дублирующийся email | POST /api/auth/register (существующий) | 409 |
+| Неверный email | POST /api/auth/register | 400 |
+| Несуществующий пользователь | GET /api/users/999999 | 404 |
 
-**Ожидаемый ответ**: 400 Bad Request
+### <span style="color: #FF6B35;">15. Posts & Helps</span>
 
-#### 8.3 Получение несуществующего пользователя
-**GET** `{{helpTree_url}}/api/users/999999`
-
-**Ожидаемый ответ**: 404 Not Found
-
-#### 8.4 Обновление несуществующего пользователя
-**PUT** `{{helpTree_url}}/api/users/999999`
-
-**Ожидаемый ответ**: 404 Not Found
-
-#### 8.5 Удаление несуществующего пользователя
-**DELETE** `{{helpTree_url}}/api/users/999999`
-
-**Ожидаемый ответ**: 404 Not Found
-
----
-
-### <span style="color: #FF6B35;">9. Ошибки в Posts</span>
-
-#### 9.1 Создание поста без обязательных полей
-**POST** `{{helpTree_url}}/api/posts`
-```json
-{
-    "title": "Тест"
-}
-```
-
-**Ожидаемый ответ**: 400 Bad Request
-
-#### 9.2 Получение несуществующего поста
-**GET** `{{helpTree_url}}/api/posts/999999`
-
-**Ожидаемый ответ**: 404 Not Found
-
-#### 9.3 Обновление поста с неверным ID
-**PUT** `{{helpTree_url}}/api/posts/999999`
-
-**Ожидаемый ответ**: 404 Not Found
-
----
-
-### <span style="color: #FF6B35;">10. Ошибки в Helps</span>
-
-#### 10.1 Принятие помощи с неверным helperId
-**POST** `{{helpTree_url}}/api/helps/accept`
-```json
-{
-    "helperId": 999999,
-    "postId": 1
-}
-```
-
-**Ожидаемый ответ**: 404 Not Found
-
-#### 10.2 Подтверждение несуществующей помощи
-**POST** `{{helpTree_url}}/api/helps/999999/confirm`
-
-**Ожидаемый ответ**: 404 Not Found
-
-#### 10.3 Завершение уже завершенной помощи
-Дважды вызвать `POST` `/api/helps/1/complete`
-
-**Ожидаемый ответ**: 400 Bad Request или корректная обработка
-
----
-
-### <span style="color: #FF6B35;">11. Ошибки в Rating</span>
-
-#### 11.1 Получение рейтинга несуществующего пользователя
-**GET** `{{rating_url}}/api/ratings/user/999999`
-
-**Ожидаемый ответ**: 404 Not Found или создание с дефолтными значениями
-
-#### 11.2 Пересчет рейтинга несуществующего пользователя
-**POST** `{{rating_url}}/api/ratings/user/999999/recalculate`
-
-**Ожидаемый ответ**: 404 Not Found
+| Тест | Запрос | Ожидаемый ответ |
+|------|--------|-----------------|
+| Несуществующий пост | GET /api/posts/999999 | 404 |
+| Без обязательных полей | POST /api/posts | 400 |
+| Помощь с неверным ID | POST /api/helps/accept | 404 |
 
 ---
 
 <a id="тестирование-мониторинга-и-трассировки"></a>
-## <span style="color: #00D9FF;">Тестирование мониторинга и трассировки</span>
+## <span style="color: #00D9FF;">Тестирование мониторинга</span>
 
-### <span style="color: #FF6B35;">12. Health Checks</span>
+### <span style="color: #FF6B35;">16. Health & Metrics</span>
 
-#### 12.1 HelpTree-service health
-**GET** `{{helpTree_url}}/actuator/health`
-
-**Ожидаемый ответ**: 200 OK
-```json
-{
-    "status": "UP",
-    "components": {
-        "db": { "status": "UP" },
-        "kafka": { "status": "UP" }
-    }
-}
+```
+GET {{helpTree_url}}/actuator/health
+GET {{helpTree_url}}/actuator/metrics
+GET {{rating_url}}/actuator/health
+GET {{base_url}}/actuator/gateway/routes
 ```
 
-#### 12.2 Rating-service health
-**GET** `{{rating_url}}/actuator/health`
+### <span style="color: #FF6B35;">17. Мониторинг</span>
 
-**Ожидаемый ответ**: 200 OK
-
----
-
-### <span style="color: #FF6B35;">13. Metrics</span>
-
-#### 13.1 Метрики HelpTree-service
-**GET** `{{helpTree_url}}/actuator/metrics`
-
-**Ожидаемый ответ**: 200 OK - список доступных метрик
-
-#### 13.2 Метрики HTTP запросов
-**GET** `{{helpTree_url}}/actuator/metrics/http.server.requests`
-
-**Ожидаемый ответ**: 200 OK
-
-#### 13.3 Метрики Rating-service
-**GET** `{{rating_url}}/actuator/metrics`
-
-#### 13.4 Custom метрики рейтинга
-**GET** `{{rating_url}}/actuator/metrics/rating.controller`
+| Сервис | URL |
+|--------|-----|
+| Kafka UI | http://localhost:8082 |
+| Prometheus | http://localhost:9090 |
+| Grafana | http://localhost:3000 |
 
 ---
 
-### <span style="color: #FF6B35;">14. Трассировка (Jaeger)</span>
+## <span style="color: #FFD700;">Быстрый чеклист</span>
 
-#### 14.1 Доступ к Jaeger UI
-Открыть в браузере: http://localhost:16686
-
-#### 14.2 Проверка trace после API вызова
-1. Выполнить любой API вызов (например, GET `/api/users`)
-2. Открыть Jaeger UI
-3. Найти trace по сервису "helpTree"
-4. Проверить наличие span с информацией о запросе
-
-#### 14.3 Trace test endpoint
-**GET** `{{helpTree_url}}/trace-test`
-
-**Ожидаемый ответ**: 200 OK
-Проверить появление trace в Jaeger
-
----
-
-### <span style="color: #FF6B35;">15. Prometheus</span>
-
-#### 15.1 Доступ к Prometheus
-Открыть в браузере: http://localhost:9090
-
-#### 15.2 Проверка метрик
-В Prometheus UI выполнить запрос:
 ```
-helpTree_http_server_requests_seconds_count
+□  Админ логинится
+□  USER регистрируется
+□  USER видит свой профиль (200)
+□  USER НЕ видит чужой профиль (403)
+□  ADMIN видит любой профиль (200)
+□  ADMIN видит всех пользователей (200)
+□  USER НЕ видит всех (403)
+□  Неверный пароль → 401
+□  Удалённый пользователь → 403
+□  Без токена → 401
+□  Рейтинг публичный (без токена) → 200
 ```
-
----
-
-<a id="дополнительные-тесты"></a>
-## <span style="color: #00D9FF;">Дополнительные тесты</span>
-
-### <span style="color: #FF6B35;">16. Пагинация и сортировка</span>
-
-#### 16.1 Пагинация постов
-**GET** `{{helpTree_url}}/api/posts?page=0&size=5&sort=createdAt,desc`
-
-#### 16.2 Сортировка постов по названию
-**GET** `{{helpTree_url}}/api/posts?sort=title,asc`
-
-#### 16.3 Пагинация рейтинга
-**GET** `{{rating_url}}/api/ratings/top?page=0&size=5`
-
----
-
-### <span style="color: #FF6B35;">17. Circuit Breaker</span>
-
-#### 17.1 Тестирование отказоустойчивости
-1. Остановить helpTree-service
-2. Вызвать любой endpoint через Gateway
-3. Проверить ответ circuit breaker (обычно 503 Service Unavailable)
-4. Запустить helpTree-service
-5. Проверить восстановление
-
----
