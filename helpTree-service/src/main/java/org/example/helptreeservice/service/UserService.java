@@ -31,36 +31,14 @@ public class UserService {
     private final PasswordService passwordService;
 
     public UserDto createUser(CreateUserRequest request) {
-        log.info("Создание нового пользователя с email: {}", request.getEmail());
-
-        if (userRepository.existsByEmail(request.getEmail())) {
-            log.warn("Попытка создания пользователя с уже существующим email: {}", request.getEmail());
-            throw new ConflictException("Пользователь с таким email уже существует");
-        }
-
-        User user = new User();
-        user.setName(request.getName());
-        user.setEmail(request.getEmail());
-        user.setPassword(passwordService.encode(request.getPassword()));
-        user.setPhone(request.getPhone());
-        user.setCity(request.getCity());
-        user.setHelpedCount(0);
-        user.setDebtCount(0);
-        user.setRating(0.0);
-        user.setStatus(UserStatus.NEWBIE);
-        user.setRole(Role.USER);
-        user.setCreatedAt(LocalDateTime.now());
-        user.setUpdatedAt(LocalDateTime.now());
-
-        User savedUser = userRepository.save(user);
-        log.info("Пользователь успешно создан с ID: {}, email: {}", savedUser.getId(), savedUser.getEmail());
-        return userMapper.toDto(savedUser);
+        return createUserWithRole(request, Role.USER);
     }
 
     public UserDto createUserWithRole(CreateUserRequest request, Role role) {
         log.info("Создание пользователя {} с ролью {}", request.getEmail(), role);
 
         if (userRepository.existsByEmail(request.getEmail())) {
+            log.warn("Попытка создания пользователя с уже существующим email: {}", request.getEmail());
             throw new ConflictException("Пользователь с таким email уже существует");
         }
 
@@ -79,6 +57,7 @@ public class UserService {
         user.setUpdatedAt(LocalDateTime.now());
 
         User savedUser = userRepository.save(user);
+        log.info("Пользователь успешно создан с ID: {}, email: {}", savedUser.getId(), savedUser.getEmail());
         return userMapper.toDto(savedUser);
     }
 
@@ -125,8 +104,7 @@ public class UserService {
     public List<UserDto> getAllUsers() {
         log.info("Запрос списка всех активных пользователей");
         try {
-            List<UserDto> users = userRepository.findAll().stream()
-                    .filter(u -> !u.getDeleted())
+            List<UserDto> users = userRepository.findByDeletedFalse().stream()
                     .map(userMapper::toDto)
                     .collect(Collectors.toList());
             log.info("Получен список пользователей, количество: {}", users.size());
@@ -282,30 +260,8 @@ public class UserService {
     public void incrementHelpedCount(Long receiverId) {
         log.info("Увеличение счетчика долгов для получателя помощи с ID: {}", receiverId);
         try {
-            User receiver = getUserEntityById(receiverId);
-            int oldDebtCount = receiver.getDebtCount();
-            UserStatus oldStatus = receiver.getStatus();
-
-            receiver.setDebtCount(receiver.getDebtCount() + 2);
-
-            log.debug("Получатель ID {}: debtCount изменен с {} на {}",
-                    receiverId, oldDebtCount, receiver.getDebtCount());
-
-            if (receiver.getStatus() == UserStatus.NEWBIE) {
-                receiver.setStatus(UserStatus.HELPER);
-                log.debug("Статус получателя ID {} изменен с {} на {}",
-                        receiverId, oldStatus, receiver.getStatus());
-            }
-            if (receiver.getDebtCount() > 0 && receiver.getStatus() != UserStatus.DEBTOR) {
-                receiver.setStatus(UserStatus.DEBTOR);
-                log.debug("Статус получателя ID {} изменен на DEBTOR", receiverId);
-            }
-
-            receiver.setUpdatedAt(LocalDateTime.now());
-            userRepository.save(receiver);
-
+            userRepository.updateDebtCount(receiverId, 2);
             log.info("Счетчик долгов для получателя ID {} успешно обновлен", receiverId);
-
         } catch (Exception e) {
             log.error("Ошибка при увеличении счетчика долгов для получателя ID: {}", receiverId, e);
             throw e;
@@ -315,38 +271,14 @@ public class UserService {
     public void userHelpedSomeone(Long helperId) {
         log.info("Обработка помощи от пользователя с ID: {}", helperId);
         try {
-            User helper = getUserEntityById(helperId);
-            int oldHelpedCount = helper.getHelpedCount();
-            int oldDebtCount = helper.getDebtCount();
-            UserStatus oldStatus = helper.getStatus();
-
-            helper.setHelpedCount(helper.getHelpedCount() + 1);
-            log.debug("Помощник ID {}: helpedCount изменен с {} на {}",
-                    helperId, oldHelpedCount, helper.getHelpedCount());
-
-            if (helper.getDebtCount() > 0) {
-                helper.setDebtCount(helper.getDebtCount() - 1);
-                log.debug("Помощник ID {}: debtCount изменен с {} на {}",
-                        helperId, oldDebtCount, helper.getDebtCount());
-            }
-
-            if (helper.getDebtCount() == 0 && helper.getStatus() != UserStatus.ACTIVE) {
-                helper.setStatus(UserStatus.ACTIVE);
-                log.debug("Статус помощника ID {} изменен с {} на ACTIVE",
-                        helperId, oldStatus);
-            }
-
-            helper.setUpdatedAt(LocalDateTime.now());
-            userRepository.save(helper);
-
+            userRepository.incrementHelpedCount(helperId);
+            userRepository.updateDebtCount(helperId, -1);
             log.info("Данные помощника ID {} успешно обновлены", helperId);
-
         } catch (Exception e) {
             log.error("Ошибка при обработке помощи от пользователя ID: {}", helperId, e);
             throw e;
         }
     }
-
     @Transactional
     public void processHelp(Long helperId, Long receiverId) {
         log.info("Начало процесса помощи: helperId={}, receiverId={}", helperId, receiverId);
@@ -391,5 +323,20 @@ public class UserService {
             log.error("Ошибка при обновлении рейтинга пользователя ID: {}", id, e);
             throw e;
         }
+    }
+
+    @Transactional(readOnly = true)
+    public List<UserPublicDto> getUsersPublicByIds(List<Long> ids) {
+        log.debug("Получение публичных данных для списка пользователей: {}", ids);
+        return userRepository.findAllById(ids).stream()
+                .filter(u -> !u.getDeleted())
+                .map(u -> UserPublicDto.builder()
+                        .id(u.getId())
+                        .name(u.getName())
+                        .rating(u.getRating())
+                        .helpedCount(u.getHelpedCount())
+                        .debtCount(u.getDebtCount())
+                        .build())
+                .collect(Collectors.toList());
     }
 }

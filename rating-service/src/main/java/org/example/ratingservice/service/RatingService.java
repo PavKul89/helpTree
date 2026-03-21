@@ -17,7 +17,9 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -44,25 +46,6 @@ public class RatingService {
     }
 
     /**
-     * Получение топа пользователей по рейтингу
-     */
-    public Page<RatingResponse> getTopRatedUsers(Pageable pageable) {
-        log.info("Получение топа пользователей по рейтингу");
-
-        Page<UserRatingStats> topStats = statsRepository.findTopRated(pageable);
-
-        return topStats.map(stats -> {
-            try {
-                UserDto user = userServiceClient.getUserById(stats.getUserId());
-                return buildRatingResponse(user, stats);
-            } catch (Exception e) {
-                log.error("Ошибка при получении данных пользователя ID: {}", stats.getUserId(), e);
-                return null;
-            }
-        });
-    }
-
-    /**
      * Принудительный пересчет рейтинга пользователя
      */
     @CacheEvict(value = "userRating", key = "#userId")
@@ -76,6 +59,31 @@ public class RatingService {
                 .orElseThrow(() -> new RuntimeException("Статистика не найдена"));
 
         return buildRatingResponse(user, stats);
+    }
+
+    /**
+     * Получение топа пользователей по рейтингу
+     */
+    public Page<RatingResponse> getTopRatedUsers(Pageable pageable) {
+        log.info("Получение топа пользователей по рейтингу");
+
+        Page<UserRatingStats> topStats = statsRepository.findTopRated(pageable);
+
+        List<Long> userIds = topStats.getContent().stream()
+                .map(stats -> stats.getUserId())
+                .collect(Collectors.toList());
+
+        Map<Long, UserDto> userMap = userServiceClient.getUsersByIds(userIds).stream()
+                .collect(Collectors.toMap(user -> user.getId(), user -> user));
+
+        return topStats.map(stats -> {
+            UserDto user = userMap.get(stats.getUserId());
+            if (user == null) {
+                log.warn("Пользователь ID {} не найден", stats.getUserId());
+                return null;
+            }
+            return buildRatingResponse(user, stats);
+        });
     }
 
     /**

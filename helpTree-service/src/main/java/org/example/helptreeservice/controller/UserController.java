@@ -16,6 +16,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @RestController
@@ -46,6 +47,15 @@ public class UserController {
     @GetMapping("/{id}/public")
     public ResponseEntity<UserPublicDto> getUserPublic(@PathVariable Long id) {
         return ResponseEntity.ok(userService.getUserPublicById(id));
+    }
+
+    @PostMapping("/public/batch")
+    public ResponseEntity<List<UserPublicDto>> getUsersPublicBatch(@RequestBody Map<String, List<Long>> request) {
+        List<Long> ids = request.get("ids");
+        if (ids == null || ids.isEmpty()) {
+            return ResponseEntity.ok(List.of());
+        }
+        return ResponseEntity.ok(userService.getUsersPublicByIds(ids));
     }
 
     @GetMapping("/{id}")

@@ -85,9 +85,6 @@ logging:
     org.hibernate.type.descriptor.sql.BasicBinder: TRACE
     org.springframework.web: DEBUG
     com.example.helptreeservice: DEBUG
-    # ======================================================
-    # Логи для трассировки (по аналогии с gateway)
-    # ======================================================
     io.micrometer.tracing: DEBUG
     io.opentelemetry: DEBUG
     io.opentelemetry.exporter.otlp: DEBUG
