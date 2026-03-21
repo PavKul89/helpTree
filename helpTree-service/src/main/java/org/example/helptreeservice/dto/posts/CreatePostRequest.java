@@ -4,6 +4,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
+import java.util.List;
+
 @Data
 public class CreatePostRequest {
 
@@ -13,4 +15,6 @@ public class CreatePostRequest {
 
     @Size(max = 2000, message = "Описание не может быть длиннее 2000 символов")
     private String description;
+
+    private List<String> imageUrls;
 }

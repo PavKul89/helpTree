@@ -6,6 +6,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "posts")
@@ -35,7 +37,11 @@ public class Post {
     @Enumerated(EnumType.STRING)
     private PostStatus status;
 
-    // Поля для soft-delete
+    @ElementCollection
+    @CollectionTable(name = "post_images", joinColumns = @JoinColumn(name = "post_id"))
+    @Column(name = "image_url", columnDefinition = "TEXT")
+    private List<String> imageUrls = new ArrayList<>();
+
     @Column(name = "deleted", nullable = false)
     private Boolean deleted = false;
 

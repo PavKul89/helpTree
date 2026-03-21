@@ -4,6 +4,7 @@ import org.example.helptreeservice.enums.PostStatus;
 import lombok.Builder;
 import lombok.Data;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @Builder
@@ -19,7 +20,6 @@ public class PostDto {
     private Double userRating;
     private Long helperId;
     private String helperName;
-
-    // 👇 ДОБАВИТЬ
     private PostStatus status;
+    private List<String> imageUrls;
 }

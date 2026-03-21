@@ -55,6 +55,10 @@ public class PostService {
             post.setCreatedAt(LocalDateTime.now());
             post.setUpdatedAt(LocalDateTime.now());
             post.setStatus(PostStatus.OPEN);
+            
+            if (request.getImageUrls() != null && !request.getImageUrls().isEmpty()) {
+                post.setImageUrls(request.getImageUrls());
+            }
 
             Post savedPost = postRepository.save(post);
             log.info("Пост успешно создан с ID: {}, пользователь ID: {}", savedPost.getId(), user.getId());

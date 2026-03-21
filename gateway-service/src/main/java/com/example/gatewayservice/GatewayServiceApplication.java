@@ -33,6 +33,7 @@ public class GatewayServiceApplication {
                                 "/api/users/**",
                                 "/api/posts/**",
                                 "/api/helps/**",
+                                "/api/images/**",
                                 "/api/test/**"
                         )
                         .filters(f -> f
