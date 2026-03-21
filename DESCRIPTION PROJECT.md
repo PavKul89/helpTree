@@ -80,44 +80,10 @@ docker-compose up -d
 
 ---
 
-## Тестирование Security
 
-### Эндпоинты аутентификации
-
-| Метод | URL | Описание |
-|-------|-----|---------|
-| POST | `/api/auth/register` | Регистрация пользователя |
-| POST | `/api/auth/login` | Вход в систему |
-| GET | `/api/users/{id}/public` | Публичные данные (без авторизации) |
-
-### Заголовки авторизации
-
-После логина используйте токен:
-```
-Authorization: Bearer <token>
-X-User-Id: <userId>
-X-User-Role: USER | ADMIN
-```
-
-### Тестирование в Postman
-
-**1. Регистрация пользователя**
+## Вход администратора (создаётся автоматически)
 ```json
-POST http://localhost:8081/api/auth/register
-Content-Type: application/json
-
-{
-    "name": "Иван Петров",
-    "email": "ivan@test.com",
-    "password": "Password123!",
-    "phone": "+79001234567",
-    "city": "Москва"
-}
-```
-
-**2. Вход администратора (создаётся автоматически)**
-```json
-POST http://localhost:8081/api/auth/login
+POST http: //localhost:8081/api/auth/login
 Content-Type: application/json
 
 {
@@ -126,17 +92,6 @@ Content-Type: application/json
 }
 ```
 
-**3. Просмотр профиля (только владелец или админ)**
-```
-GET http://localhost:8081/api/users/3
-Authorization: Bearer <token>
-```
-
-**4. Все пользователи (только админ)**
-```
-GET http://localhost:8081/api/users
-Authorization: Bearer <token>
-```
 
 ### Роли и полномочия
 
@@ -145,14 +100,14 @@ Authorization: Bearer <token>
 | **USER** | Свой профиль, свои посты, свой рейтинг |
 | **ADMIN** | Все пользователи, управление рейтингом, любые операции |
 
-### Конфигурация админа
+## Конфигурация админа
 
 ```yaml
 # helpTree-service/src/main/resources/application.yaml
 app:
   admin:
-    email: admin@helptree.com
-    password: Admin123!
+    email: admin@test.com
+    password: 123456
 ```
 
 ---
@@ -189,44 +144,9 @@ docker volume rm helpTree_kafka_data
 docker volume ls | findstr kafka
 docker volume prune -f
 docker-compose up -d
-
-# MinIO #
-docker-compose up -d minio
 ```
-
 ---
 
-## Загрузка изображений
-
-### Структура API
-
-| Метод | URL | Описание |
-|-------|-----|---------|
-| POST | `/api/images` | Загрузить одно изображение |
-| POST | `/api/images/multiple` | Загрузить несколько изображений |
-| DELETE | `/api/images?url=...` | Удалить изображение |
-
-### Пример использования
-
-**1. Загрузить изображение:**
-```
-POST http://localhost:8080/api/images
-Content-Type: multipart/form-data
-Key: file
-Value: [выбрать файл]
-```
-
-**2. Создать пост с изображением:**
-```
-POST http://localhost:8080/api/posts
-{
-    "title": "Нужна помощь",
-    "description": "Описание",
-    "imageUrls": ["http://localhost:9000/helptree-images/uuid.jpg?..."]
-}
-```
-
----
 ## Контакты
 ```powershell
 - **Владелец проекта**: Кулаженко Павел Михайлович
