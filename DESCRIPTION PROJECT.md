@@ -29,7 +29,9 @@
 - Топ пользователей по рейтингу
 - API Gateway как единая точка входа
 - Асинхронное взаимодействие через Kafka
+- Загрузка изображений в посты (MinIO/S3)
 ```
+
 ---
 
 ## Технологический стек
@@ -40,6 +42,7 @@
 | Фреймворки | Spring Boot 3.4.3, Spring Cloud 2024.0.0 |
 | База данных | PostgreSQL 16, Flyway (миграции) |
 | Брокер сообщений | Apache Kafka |
+| Хранилище файлов | MinIO (S3-совместимое) |
 | Контейнеризация | Docker, Docker Compose |
 | Утилиты | Lombok |
 
@@ -50,8 +53,10 @@
 | Сервис | URL | Данные для входа |
 |--------|-----|------------------|
 | Kafka UI | http://localhost:8082 | — |
+| MinIO Console | http://localhost:9001 | minioadmin / minioadmin |
 | Prometheus | http://localhost:9090 | — |
 | Grafana | http://localhost:3000 | admin/admin |
+| Jaeger | http://localhost:16686 | — |
 
 ---
 
@@ -116,8 +121,8 @@ POST http://localhost:8081/api/auth/login
 Content-Type: application/json
 
 {
-    "email": "admin@helptree.com",
-    "password": "Admin123!"
+    "email": "admin@test.com",
+    "password": "123456"
 }
 ```
 
@@ -165,9 +170,12 @@ app:
 | ✅ | Docker-инфраструктура               |      17.03.2026 |
 | ✅ | Kafka интеграция                    |      17.03.2026 |
 | ✅ | Распределенная трассировка (Jaeger) |      19.03.2026 |
-| ✅ | Добавлено security                  |      20.03.2026 |
+| ✅ | Security (BCrypt, JWT, роли)        |      20.03.2026 |
+| ✅ | Загрузка изображений (MinIO)        |      21.03.2026 |
 | 🔄 | Централизованное логирование (ELK)  |               — |
-| 📋 | Централизованное логирование (ELK)  |               — |
+| 📋 | Чат между пользователями            |               — |
+| 📋 | Telegram уведомления                |               — |
+| 📋 | Отзывы после помощи                 |               — |
 
 
 
@@ -182,6 +190,40 @@ docker volume ls | findstr kafka
 docker volume prune -f
 docker-compose up -d
 
+# MinIO #
+docker-compose up -d minio
+```
+
+---
+
+## Загрузка изображений
+
+### Структура API
+
+| Метод | URL | Описание |
+|-------|-----|---------|
+| POST | `/api/images` | Загрузить одно изображение |
+| POST | `/api/images/multiple` | Загрузить несколько изображений |
+| DELETE | `/api/images?url=...` | Удалить изображение |
+
+### Пример использования
+
+**1. Загрузить изображение:**
+```
+POST http://localhost:8080/api/images
+Content-Type: multipart/form-data
+Key: file
+Value: [выбрать файл]
+```
+
+**2. Создать пост с изображением:**
+```
+POST http://localhost:8080/api/posts
+{
+    "title": "Нужна помощь",
+    "description": "Описание",
+    "imageUrls": ["http://localhost:9000/helptree-images/uuid.jpg?..."]
+}
 ```
 
 ---

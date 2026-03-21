@@ -21,6 +21,7 @@ public class RatingServiceApplication {
         log.info("🚀 Prometheus successfully at: http://localhost:9090");
         log.info("🚀 Grafana successfully at: http://localhost:3000");
         log.info("🚀 Jaeger successfully at: http://localhost:16686");
+        log.info("🚀 MinIO successfully at: http://localhost:9001/browser/helptree");
     }
 
 }

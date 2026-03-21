@@ -331,24 +331,42 @@ Authorization: Bearer invalid_token_here
 ```json
 {
     "title": "Нужна помощь с переездом",
-    "content": "Необходима помощь с перевозкой мебели"
+    "description": "Необходима помощь с перевозкой мебели"
 }
 ```
 
-#### 8.2 Получение всех постов
+#### 8.2 Создание поста с изображениями
+**POST** `{{helpTree_url}}/api/posts`
+
+```json
+{
+    "title": "Нужна помощь с ремонтом",
+    "description": "Требуется дрель и перфоратор",
+    "imageUrls": [
+        "http://localhost:9000/helptree-images/abc123.jpg?X-Amz-Algorithm=..."
+    ]
+}
+```
+
+#### 8.3 Получение всех постов
 **GET** `{{helpTree_url}}/api/posts?page=0&size=10&sort=createdAt,desc`
 
-#### 8.3 Фильтрация постов
+#### 8.4 Фильтрация постов
 ```
 GET {{helpTree_url}}/api/posts?status=OPEN
 GET {{helpTree_url}}/api/posts?userId=1
 GET {{helpTree_url}}/api/posts?title=переезд
 ```
 
-#### 8.4 Обновление поста
+#### 8.5 Получение поста с изображениями
+**GET** `{{helpTree_url}}/api/posts/{id}`
+
+Ответ включает `imageUrls` массив.
+
+#### 8.6 Обновление поста
 **PUT** `{{helpTree_url}}/api/posts/{id}`
 
-#### 8.5 Удаление поста
+#### 8.7 Удаление поста
 **DELETE** `{{helpTree_url}}/api/posts/{id}`
 
 ---
@@ -379,6 +397,55 @@ GET {{helpTree_url}}/api/posts?title=переезд
 #### 9.5 Просмотр помощи (только участники)
 **GET** `{{helpTree_url}}/api/helps/helper/{helperId}`
 **GET** `{{helpTree_url}}/api/helps/receiver/{receiverId}`
+
+---
+
+### <span style="color: #FF6B35;">10. Изображения (MinIO)</span>
+
+> Все эндпоинты публичные (изображения доступны всем)
+
+> **MinIO Console:** http://localhost:9001 (логин: `minioadmin`, пароль: `minioadmin`)
+
+#### 10.1 Загрузка одного изображения
+**POST** `{{helpTree_url}}/api/images`
+**Content-Type:** `multipart/form-data`
+
+**Body → form-data:**
+| Key | Type | Value |
+|-----|------|-------|
+| file | File | [Выбрать файл] |
+
+**Ожидаемый ответ**: 200 OK
+```json
+{
+    "url": "http://localhost:9000/helptree-images/abc123.jpg?X-Amz-Algorithm=..."
+}
+```
+
+> ⚠️ Файл должен быть: jpg, png, webp, gif. Максимум 10MB.
+
+#### 10.2 Загрузка нескольких изображений
+**POST** `{{helpTree_url}}/api/images/multiple`
+**Content-Type:** `multipart/form-data`
+
+**Body → form-data:**
+| Key | Type | Value |
+|-----|------|-------|
+| files | File | file1.jpg |
+| files | File | file2.png |
+
+**Ожидаемый ответ**: 200 OK
+```json
+{
+    "urls": [
+        "http://localhost:9000/helptree-images/abc123.jpg?...",
+        "http://localhost:9000/helptree-images/def456.png?..."
+    ]
+}
+```
+
+#### 10.3 Удаление изображения
+**DELETE** `{{helpTree_url}}/api/images?url={imageUrl}`
 
 ---
 
