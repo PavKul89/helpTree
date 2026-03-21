@@ -89,3 +89,19 @@ app:
     auth-limit: 10
     create-limit: 5
     window-seconds: 60
+
+resilience4j:
+  ratelimiter:
+    configs:
+      default:
+        limitForPeriod: 60
+        limitRefreshPeriod: 60s
+        timeoutDuration: 100ms
+      auth:
+        limitForPeriod: 10
+        limitRefreshPeriod: 60s
+        timeoutDuration: 100ms
+      create:
+        limitForPeriod: 5
+        limitRefreshPeriod: 60s
+        timeoutDuration: 100ms

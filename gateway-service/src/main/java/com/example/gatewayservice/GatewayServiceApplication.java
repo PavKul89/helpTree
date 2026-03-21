@@ -4,14 +4,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.cloud.gateway.route.RouteLocator;
-import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.cloud.gateway.route.builder.RouteLocatorBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.http.HttpStatus;
 
 @Slf4j
 @SpringBootApplication
-@EnableScheduling
 public class GatewayServiceApplication {
 
     public static void main(String[] args) {
@@ -29,7 +27,6 @@ public class GatewayServiceApplication {
     @Bean
     public RouteLocator customRouteLocator(RouteLocatorBuilder builder) {
         return builder.routes()
-                // Сервис пользователей и аутентификации (helpTree-service)
                 .route("helpTree-service", r -> r
                         .path(
                                 "/api/auth/**",
@@ -41,16 +38,15 @@ public class GatewayServiceApplication {
                         )
                         .filters(f -> f
                                 .addRequestHeader("X-Forwarded-For", "gateway")
-                                .addRequestHeader("Authorization", "") // placeholder - actual header from client
-                                .addRequestHeader("X-User-Id", "")     // placeholder
-                                .addRequestHeader("X-User-Role", "")   // placeholder
-                                .addRequestHeader("X-User-Email", "") // placeholder
+                                .addRequestHeader("Authorization", "")
+                                .addRequestHeader("X-User-Id", "")
+                                .addRequestHeader("X-User-Role", "")
+                                .addRequestHeader("X-User-Email", "")
                                 .preserveHostHeader()
                                 .circuitBreaker(config -> config
                                         .setName("usersService")))
                         .uri("http://localhost:8081"))
 
-                // Сервис рейтингов (rating-service)
                 .route("rating-service", r -> r
                         .path("/api/ratings/**")
                         .filters(f -> f
