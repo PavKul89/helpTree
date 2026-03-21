@@ -83,3 +83,9 @@ logging:
 app:
   jwtSecret: mySecretKeyForJWTGenerationWithAtLeast64CharactersLong12345678901234567890123456789012
   jwtExpirationMs: 86400000
+  rate-limit:
+    enabled: true
+    default-limit: 60
+    auth-limit: 10
+    create-limit: 5
+    window-seconds: 60
