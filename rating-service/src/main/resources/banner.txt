@@ -1,0 +1,7 @@
+RRRRRR   AAA   TTTTTTT  IIIII  NNN   NN   GGGGG
+RR   RR  AAAA     TT       II    NNNN  NN  GG   GG
+RRRRRR  AA AA     TT       II    NN N NN  GG
+RR  RR  AAAAA     TT       II    NN  NNN  GG   GG
+RR   RR AA   AA   TT     IIIII   NN   NN   GGGGG
+
+:: Rating Service :: (v1.0.0)

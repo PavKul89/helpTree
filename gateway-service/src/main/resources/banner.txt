@@ -1,0 +1,7 @@
+GGGGG   AAA   TTTTTT   EEEEEEE   WW      WW   AAA   YYY   YYY
+GG       AAAA     TT     EE        WW      WW   AAAA    YYY YYY
+GG  GG   AA AA    TT     EEEEE     WW  WW  WW   AA AA    YYYYY
+GG   G   AAAAA    TT     EE         WWWWWWWW    AAAAA     YYY
+GGGGG   AA   AA   TT     EEEEEEE     WW   WW    AA   AA    YYY
+
+:: Gateway Service :: (v1.0.0)

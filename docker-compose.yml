@@ -64,7 +64,7 @@ services:
       - helpTree-network
     command: >
       bash -c "
-        rm -f /var/lib/kafka/data/meta.properties
+        rm -rf /var/lib/kafka/data/*
         /etc/confluent/docker/run
       "
   kafka-ui:

@@ -1,0 +1,7 @@
+NN   NN   OOOOO   TTTTTTT   IIIII   FF   FF   IIIII   CCC   AAA   TTTTTTT   IIIII   OOOOO   NN   NN
+NNNN  NN  OO   OO    TT       II    FF   FF     II    CCC  AAAA     TT       II    OO   OO  NNNN  NN
+NN N NN  OO   OO    TT       II    FFFFFF      II    CC   AA AA     TT       II    OO   OO  NN N NN
+NN  NNN  OO   OO    TT       II    FF   FF     II    CCC  AAAAA    TT       II    OO   OO  NN  NNN
+NN   NN   OOOOO     TT     IIIII   FF   FF   IIIII     AAA   AA   TT     IIIII     OOOOO   NN   NN
+
+:: Notification Service :: (v1.0.0)

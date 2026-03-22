@@ -1,0 +1,7 @@
+HHHH   HHHH   EEEEEEE   LL         PPPPPPP    TTTTTTT    RRRRRRR   EEEEEEE   EEEEEEE
+H HH  H  HH   EE        LL         PP    PP      T       RR    RR   EE        EE
+H  HH   H    EEEEE     LL         PPPPPPP       T       RRRRRRR    EEEEE     EEEEE
+H        H    EE        LL         PP            T       RR  RR     EE        EE
+HHHH   HHHH   EEEEEEE   LLLLLLL   PP            T       RR    RR   EEEEEEE   EEEEEEE
+
+:: helpTree Service :: (v1.0.0)
