@@ -47,7 +47,7 @@ logging:
     org.springframework.kafka: INFO
     org.springframework.data.redis: INFO
   pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %highlight(%-5level) [%thread] %yellow([RATING]) %X{traceId} %X{spanId} %X{requestId} %X{userId} %cyan(%logger{36}) - %msg%n"
 
 management:
   endpoints:

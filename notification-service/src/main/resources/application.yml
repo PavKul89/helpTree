@@ -24,3 +24,7 @@ logging:
   level:
     com.example.notificationservice: DEBUG
 
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %highlight(%-5level) [%thread] %magenta([NOTIFY]) %X{traceId} %X{spanId} %X{requestId} %X{userId} %cyan(%logger{36}) - %msg%n"
+
+

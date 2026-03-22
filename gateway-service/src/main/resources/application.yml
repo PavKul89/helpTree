@@ -78,7 +78,7 @@ logging:
 
 
   pattern:
-    console: "%clr(%d{HH:mm:ss.SSS}){faint} %clr(│){faint} %clr(%-5level){yellow} %clr(│){faint} %clr([%thread]){cyan} %clr(│){faint} %clr(%-40.40logger{0}){blue} %clr(│){faint} %clr(trace:%mdc{traceId} span:%mdc{spanId}){green} %clr(│){faint} %msg%n"
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %highlight(%-5level) [%thread] %blue([GATEWAY]) %X{traceId} %X{spanId} %X{requestId} %X{userId} %cyan(%logger{36}) - %msg%n"
 
 app:
   jwtSecret: mySecretKeyForJWTGenerationWithAtLeast64CharactersLong12345678901234567890123456789012
