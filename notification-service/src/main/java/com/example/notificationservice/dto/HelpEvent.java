@@ -1,16 +1,14 @@
-package org.example.helptreeservice.dto;
+package com.example.notificationservice.dto;
 
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
 @Data
-@Builder
-@NoArgsConstructor
 @AllArgsConstructor
+@NoArgsConstructor
 public class HelpEvent {
     private Long helpId;
     private Long postId;
@@ -21,7 +19,7 @@ public class HelpEvent {
     private Long helperId;
     private String helperEmail;
     private String helperName;
-    private String eventType; // HELP_RESPONSE, HELP_ACCEPTED, HELP_COMPLETED, HELP_CONFIRMED, CANCELLED
+    private String eventType;
     private LocalDateTime timestamp;
-    private Long duration; // время между принятием и завершением в минутах
+    private Long duration;
 }

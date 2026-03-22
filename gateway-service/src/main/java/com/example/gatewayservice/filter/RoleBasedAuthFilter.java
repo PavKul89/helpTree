@@ -39,6 +39,16 @@ public class RoleBasedAuthFilter implements GlobalFilter {
             "/api/users"
     );
 
+    private static final Set<String> USER_PATH_EXCEPTIONS = Set.of(
+            "/api/users/me",
+            "/api/users/telegram",
+            "/api/users/current"
+    );
+
+    private static final Set<String> USER_ID_PATH_EXCEPTIONS = Set.of(
+            "/telegram"
+    );
+
     private static final Set<HttpMethod> ADMIN_ONLY_METHODS = Set.of(
             HttpMethod.POST,
             HttpMethod.DELETE,
@@ -111,6 +121,16 @@ public class RoleBasedAuthFilter implements GlobalFilter {
     private boolean isAdminOnlyPath(String path) {
         if ("/api/users".equals(path)) {
             return true;
+        }
+        if (USER_PATH_EXCEPTIONS.stream().anyMatch(path::startsWith)) {
+            return false;
+        }
+        if (path.matches("/api/users/\\d+.*")) {
+            for (String exception : USER_ID_PATH_EXCEPTIONS) {
+                if (path.endsWith(exception)) {
+                    return false;
+                }
+            }
         }
         return ADMIN_ONLY_PATHS.stream().anyMatch(path::startsWith);
     }

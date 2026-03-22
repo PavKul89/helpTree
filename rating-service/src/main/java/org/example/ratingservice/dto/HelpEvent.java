@@ -1,6 +1,7 @@
 package org.example.ratingservice.dto;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -12,15 +13,17 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class HelpEvent {
     private Long helpId;
     private Long postId;
     private Long helperId;
     private Long receiverId;
-    private String eventType; // ACCEPTED, COMPLETED, CONFIRMED, CANCELLED
+    private Long authorId;
+    private String eventType;
 
     @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime timestamp;
 
-    private Long duration; // Время между принятием и завершением в минутах
+    private Long duration;
 }

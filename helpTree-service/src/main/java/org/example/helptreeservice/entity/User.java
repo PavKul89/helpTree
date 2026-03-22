@@ -72,6 +72,9 @@ public class User {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
+    @Column(name = "telegram_chat_id", length = 50)
+    private String telegramChatId;
+
     @PrePersist
     protected void onCreate() {
         LocalDateTime now = LocalDateTime.now();

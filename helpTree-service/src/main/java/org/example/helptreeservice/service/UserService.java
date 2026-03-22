@@ -339,4 +339,20 @@ public class UserService {
                         .build())
                 .collect(Collectors.toList());
     }
+
+    @Transactional
+    public void bindTelegramChatId(Long userId, String chatId) {
+        log.info("Привязка Telegram Chat ID {} для пользователя {}", chatId, userId);
+        User user = getUserEntityById(userId);
+        user.setTelegramChatId(chatId);
+        userRepository.save(user);
+        log.info("Telegram Chat ID {} успешно привязан", chatId);
+    }
+
+    @Transactional(readOnly = true)
+    public String getTelegramChatId(Long userId) {
+        return userRepository.findById(userId)
+                .map(User::getTelegramChatId)
+                .orElse(null);
+    }
 }

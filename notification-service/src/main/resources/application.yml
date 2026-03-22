@@ -1,3 +1,26 @@
 server:
   port: 8087
 
+spring:
+  application:
+    name: notification-service
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9093}
+    consumer:
+      group-id: notification-service-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+
+telegram:
+  bot:
+    token: ${TELEGRAM_BOT_TOKEN:8743704615:AAHX9VRok3iHn-4m6FQGe8aO_2ClbJndLUU}
+
+app:
+  helpTree:
+    api-url: ${HELPTREE_API_URL:http://localhost:8081}
+
+logging:
+  level:
+    com.example.notificationservice: DEBUG
+

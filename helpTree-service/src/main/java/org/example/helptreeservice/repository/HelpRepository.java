@@ -5,6 +5,8 @@ import org.example.helptreeservice.entity.Post;
 import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.enums.HelpStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import java.util.List;
 import java.util.Optional;
@@ -12,21 +14,21 @@ import java.util.Optional;
 @Repository
 public interface HelpRepository extends JpaRepository<Help, Long> {
 
-    // Найти все помощи по посту
     List<Help> findByPost(Post post);
 
-    // Найти все помощи, где пользователь помогал
     List<Help> findByHelper(User helper);
 
-    // Найти все помощи, где пользователю помогали
     List<Help> findByReceiver(User receiver);
 
-    // Найти активную помощь по посту (не отмененную)
+    @Query("SELECT h FROM Help h JOIN FETCH h.post JOIN FETCH h.helper JOIN FETCH h.receiver WHERE h.receiver = :receiver")
+    List<Help> findByReceiverWithDetails(@Param("receiver") User receiver);
+
+    @Query("SELECT h FROM Help h JOIN FETCH h.post JOIN FETCH h.helper JOIN FETCH h.receiver WHERE h.helper = :helper")
+    List<Help> findByHelperWithDetails(@Param("helper") User helper);
+
     Optional<Help> findByPostAndStatusNot(Post post, HelpStatus status);
 
-    // Проверить, откликался ли уже пользователь на пост
     boolean existsByPostAndHelper(Post post, User helper);
 
-    // Найти все завершенные помощи (подтвержденные)
     List<Help> findByStatus(HelpStatus status);
 }

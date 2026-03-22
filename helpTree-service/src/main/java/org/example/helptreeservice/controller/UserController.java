@@ -6,6 +6,7 @@ import org.example.helptreeservice.dto.users.UpdateUserRequest;
 import org.example.helptreeservice.dto.users.UserDto;
 import org.example.helptreeservice.dto.users.UserPublicDto;
 import org.example.helptreeservice.exception.ForbiddenException;
+import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.service.AuthorizationService;
 import org.example.helptreeservice.service.AuthorizationService.UserContext;
 import org.example.helptreeservice.service.UserService;
@@ -151,5 +152,24 @@ public class UserController {
         }
         userService.userHelpedSomeone(helperId);
         return ResponseEntity.ok("Помощь оказана");
+    }
+
+    @GetMapping("/{id}/telegram-chat-id")
+    public ResponseEntity<String> getTelegramChatId(@PathVariable Long id) {
+        String chatId = userService.getTelegramChatId(id);
+        return ResponseEntity.ok(chatId != null ? chatId : "");
+    }
+
+    @PutMapping("/{id}/telegram")
+    public ResponseEntity<Void> bindTelegram(@PathVariable Long id, @RequestBody java.util.Map<String, String> body) {
+        if (!authService.canManageUser(id)) {
+            throw new ForbiddenException("Вы можете привязать Telegram только к своему аккаунту");
+        }
+        String chatId = body.get("chatId");
+        if (chatId == null || chatId.isBlank()) {
+            throw new BadRequestException("chatId обязателен");
+        }
+        userService.bindTelegramChatId(id, chatId);
+        return ResponseEntity.ok().build();
     }
 }

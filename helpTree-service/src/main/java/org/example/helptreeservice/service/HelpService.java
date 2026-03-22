@@ -110,9 +110,14 @@ public class HelpService {
             HelpEvent event = HelpEvent.builder()
                     .helpId(savedHelp.getId())
                     .postId(post.getId())
+                    .postTitle(post.getTitle())
+                    .authorId(receiver.getId())
+                    .authorEmail(receiver.getEmail())
+                    .authorName(receiver.getName())
                     .helperId(helper.getId())
-                    .receiverId(receiver.getId())
-                    .eventType("ACCEPTED")
+                    .helperEmail(helper.getEmail())
+                    .helperName(helper.getName())
+                    .eventType("HELP_ACCEPTED")
                     .timestamp(LocalDateTime.now())
                     .build();
             kafkaProducerService.sendHelpEvent(event);
@@ -187,9 +192,14 @@ public class HelpService {
             HelpEvent event = HelpEvent.builder()
                     .helpId(updatedHelp.getId())
                     .postId(help.getPost().getId())
+                    .postTitle(help.getPost().getTitle())
+                    .authorId(help.getReceiver().getId())
+                    .authorEmail(help.getReceiver().getEmail())
+                    .authorName(help.getReceiver().getName())
                     .helperId(help.getHelper().getId())
-                    .receiverId(help.getReceiver().getId())
-                    .eventType("COMPLETED")
+                    .helperEmail(help.getHelper().getEmail())
+                    .helperName(help.getHelper().getName())
+                    .eventType("HELP_COMPLETED")
                     .timestamp(LocalDateTime.now())
                     .duration(duration)
                     .build();
@@ -263,9 +273,14 @@ public class HelpService {
             HelpEvent event = HelpEvent.builder()
                     .helpId(updatedHelp.getId())
                     .postId(post.getId())
+                    .postTitle(post.getTitle())
+                    .authorId(help.getReceiver().getId())
+                    .authorEmail(help.getReceiver().getEmail())
+                    .authorName(help.getReceiver().getName())
                     .helperId(help.getHelper().getId())
-                    .receiverId(help.getReceiver().getId())
-                    .eventType("CONFIRMED")
+                    .helperEmail(help.getHelper().getEmail())
+                    .helperName(help.getHelper().getName())
+                    .eventType("HELP_CONFIRMED")
                     .timestamp(LocalDateTime.now())
                     .build();
             kafkaProducerService.sendHelpEvent(event);
@@ -325,9 +340,14 @@ public class HelpService {
             HelpEvent event = HelpEvent.builder()
                     .helpId(updatedHelp.getId())
                     .postId(post.getId())
+                    .postTitle(post.getTitle())
+                    .authorId(help.getReceiver().getId())
+                    .authorEmail(help.getReceiver().getEmail())
+                    .authorName(help.getReceiver().getName())
                     .helperId(help.getHelper().getId())
-                    .receiverId(help.getReceiver().getId())
-                    .eventType("CANCELLED")
+                    .helperEmail(help.getHelper().getEmail())
+                    .helperName(help.getHelper().getName())
+                    .eventType("HELP_CANCELLED")
                     .timestamp(LocalDateTime.now())
                     .build();
             kafkaProducerService.sendHelpEvent(event);
@@ -364,7 +384,7 @@ public class HelpService {
                 throw new NotFoundException("Пользователь не найден");
             }
 
-            List<HelpResponse> helps = helpRepository.findByHelper(helper).stream()
+            List<HelpResponse> helps = helpRepository.findByHelperWithDetails(helper).stream()
                     .filter(h -> h.getDeleted() == null || !h.getDeleted())
                     .map(helpMapper::toResponse)
                     .collect(Collectors.toList());
@@ -400,7 +420,7 @@ public class HelpService {
                 throw new NotFoundException("Пользователь не найден");
             }
 
-            List<HelpResponse> helps = helpRepository.findByReceiver(receiver).stream()
+            List<HelpResponse> helps = helpRepository.findByReceiverWithDetails(receiver).stream()
                     .filter(h -> h.getDeleted() == null || !h.getDeleted())
                     .map(helpMapper::toResponse)
                     .collect(Collectors.toList());
