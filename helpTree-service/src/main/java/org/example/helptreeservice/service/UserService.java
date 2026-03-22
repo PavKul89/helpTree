@@ -45,6 +45,7 @@ public class UserService {
         User user = new User();
         user.setName(request.getName());
         user.setEmail(request.getEmail());
+        passwordService.validate(request.getPassword());
         user.setPassword(passwordService.encode(request.getPassword()));
         user.setPhone(request.getPhone());
         user.setCity(request.getCity());

@@ -39,20 +39,20 @@ public class KafkaConsumerService {
                     event.getEventType(), event.getHelpId(), event.getHelperId(), event.getReceiverId());
 
             switch (event.getEventType()) {
-                case "ACCEPTED":
-                    log.info("✅ ОБРАБОТКА ACCEPTED");
+                case "HELP_ACCEPTED":
+                    log.info("✅ ОБРАБОТКА HELP_ACCEPTED");
                     handleAcceptedEvent(event);
                     break;
-                case "COMPLETED":
-                    log.info("✅ ОБРАБОТКА COMPLETED, duration={}", event.getDuration());
+                case "HELP_COMPLETED":
+                    log.info("✅ ОБРАБОТКА HELP_COMPLETED, duration={}", event.getDuration());
                     handleCompletedEvent(event);
                     break;
-                case "CONFIRMED":
-                    log.info("✅ ОБРАБОТКА CONFIRMED");
+                case "HELP_CONFIRMED":
+                    log.info("✅ ОБРАБОТКА HELP_CONFIRMED");
                     handleConfirmedEvent(event);
                     break;
-                case "CANCELLED":
-                    log.info("✅ ОБРАБОТКА CANCELLED");
+                case "HELP_CANCELLED":
+                    log.info("✅ ОБРАБОТКА HELP_CANCELLED");
                     handleCancelledEvent(event);
                     break;
                 default:

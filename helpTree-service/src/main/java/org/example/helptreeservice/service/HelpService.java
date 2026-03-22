@@ -385,7 +385,6 @@ public class HelpService {
             }
 
             List<HelpResponse> helps = helpRepository.findByHelperWithDetails(helper).stream()
-                    .filter(h -> h.getDeleted() == null || !h.getDeleted())
                     .map(helpMapper::toResponse)
                     .collect(Collectors.toList());
 
@@ -421,7 +420,6 @@ public class HelpService {
             }
 
             List<HelpResponse> helps = helpRepository.findByReceiverWithDetails(receiver).stream()
-                    .filter(h -> h.getDeleted() == null || !h.getDeleted())
                     .map(helpMapper::toResponse)
                     .collect(Collectors.toList());
 

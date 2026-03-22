@@ -20,10 +20,10 @@ public interface HelpRepository extends JpaRepository<Help, Long> {
 
     List<Help> findByReceiver(User receiver);
 
-    @Query("SELECT h FROM Help h JOIN FETCH h.post JOIN FETCH h.helper JOIN FETCH h.receiver WHERE h.receiver = :receiver")
+    @Query("SELECT h FROM Help h JOIN FETCH h.post JOIN FETCH h.helper JOIN FETCH h.receiver WHERE h.receiver = :receiver AND (h.deleted = false OR h.deleted IS NULL)")
     List<Help> findByReceiverWithDetails(@Param("receiver") User receiver);
 
-    @Query("SELECT h FROM Help h JOIN FETCH h.post JOIN FETCH h.helper JOIN FETCH h.receiver WHERE h.helper = :helper")
+    @Query("SELECT h FROM Help h JOIN FETCH h.post JOIN FETCH h.helper JOIN FETCH h.receiver WHERE h.helper = :helper AND (h.deleted = false OR h.deleted IS NULL)")
     List<Help> findByHelperWithDetails(@Param("helper") User helper);
 
     Optional<Help> findByPostAndStatusNot(Post post, HelpStatus status);
