@@ -56,6 +56,18 @@ public class GatewayServiceApplication {
                                 .circuitBreaker(config -> config
                                         .setName("ratingService")))
                         .uri("http://localhost:8085"))
+
+                .route("helpTree-internal", r -> r
+                        .path("/internal/users/**")
+                        .filters(f -> f
+                                .addRequestHeader("X-Forwarded-For", "gateway"))
+                        .uri("http://localhost:8081"))
+
+                .route("rating-internal", r -> r
+                        .path("/internal/ratings/**")
+                        .filters(f -> f
+                                .addRequestHeader("X-Forwarded-For", "gateway"))
+                        .uri("http://localhost:8085"))
                 .build();
     }
 }

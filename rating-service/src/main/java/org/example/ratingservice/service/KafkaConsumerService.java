@@ -10,11 +10,13 @@ import org.example.ratingservice.entity.UserRatingStats;
 import org.example.ratingservice.repository.UserRatingStatsRepository;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
+@Transactional
 public class KafkaConsumerService {
 
     private final UserRatingStatsRepository statsRepository;
@@ -86,13 +88,15 @@ public class KafkaConsumerService {
             log.warn("⚠️ HELP_CONFIRMED: helperId or receiverId is null, skipping");
             return;
         }
+        
         updateHelperStats(event.getHelperId(), "confirmed");
-
-        log.info("🔄 Пересчет рейтинга для helperId={}", event.getHelperId());
+        updateReceiverStats(event.getReceiverId(), "confirmed");
+        
         ratingCalculationService.calculateUserRating(event.getHelperId());
-
-        log.info("🔄 Пересчет рейтинга для receiverId={}", event.getReceiverId());
         ratingCalculationService.calculateUserRating(event.getReceiverId());
+        
+        log.info("✅ HELP_CONFIRMED обработан: helpId={}, helper={}, receiver={}", 
+                event.getHelpId(), event.getHelperId(), event.getReceiverId());
     }
 
     private void handleCancelledEvent(HelpEvent event) {
@@ -133,8 +137,12 @@ public class KafkaConsumerService {
         if ("accepted".equals(action)) {
             stats.setTotalHelpsReceived(stats.getTotalHelpsReceived() + 1);
             log.info("📈 receiverId={}: totalHelpsReceived -> {}", receiverId, stats.getTotalHelpsReceived());
-            statsRepository.save(stats);
+        } else if ("confirmed".equals(action)) {
+            stats.setSuccessfulHelps(stats.getSuccessfulHelps() + 1);
+            log.info("📈 receiverId={}: successfulHelps (received) -> {}", receiverId, stats.getSuccessfulHelps());
         }
+
+        statsRepository.save(stats);
     }
 
     private void updateResponseTime(Long helperId, Long duration) {

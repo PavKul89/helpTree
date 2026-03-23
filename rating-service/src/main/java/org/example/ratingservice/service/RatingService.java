@@ -40,7 +40,19 @@ public class RatingService {
 
         UserDto user = userServiceClient.getUserById(userId);
         UserRatingStats stats = statsRepository.findByUserId(userId)
-                .orElseGet(() -> createDefaultStats(userId));
+                .orElseGet(() -> {
+                    log.info("Создание дефолтной статистики для пользователя ID: {} (в памяти, без сохранения)", userId);
+                    return UserRatingStats.builder()
+                            .userId(userId)
+                            .totalHelpsGiven(0L)
+                            .totalHelpsReceived(0L)
+                            .successfulHelps(0L)
+                            .cancelledHelps(0L)
+                            .currentRating(3.0)
+                            .ratingTrend("STABLE")
+                            .lastCalculated(LocalDateTime.now())
+                            .build();
+                });
 
         return buildRatingResponse(user, stats);
     }

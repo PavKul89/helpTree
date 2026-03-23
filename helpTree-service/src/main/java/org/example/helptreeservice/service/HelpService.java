@@ -117,6 +117,7 @@ public class HelpService {
                     .helperId(helper.getId())
                     .helperEmail(helper.getEmail())
                     .helperName(helper.getName())
+                    .receiverId(receiver.getId())
                     .eventType("HELP_ACCEPTED")
                     .timestamp(LocalDateTime.now())
                     .build();
@@ -190,7 +191,6 @@ public class HelpService {
 
             // Отправляем событие в Kafka
             HelpEvent event = HelpEvent.builder()
-                    .helpId(updatedHelp.getId())
                     .postId(help.getPost().getId())
                     .postTitle(help.getPost().getTitle())
                     .authorId(help.getReceiver().getId())
@@ -199,6 +199,7 @@ public class HelpService {
                     .helperId(help.getHelper().getId())
                     .helperEmail(help.getHelper().getEmail())
                     .helperName(help.getHelper().getName())
+                    .receiverId(help.getReceiver().getId())
                     .eventType("HELP_COMPLETED")
                     .timestamp(LocalDateTime.now())
                     .duration(duration)
@@ -280,6 +281,7 @@ public class HelpService {
                     .helperId(help.getHelper().getId())
                     .helperEmail(help.getHelper().getEmail())
                     .helperName(help.getHelper().getName())
+                    .receiverId(help.getReceiver().getId())
                     .eventType("HELP_CONFIRMED")
                     .timestamp(LocalDateTime.now())
                     .build();
@@ -347,6 +349,7 @@ public class HelpService {
                     .helperId(help.getHelper().getId())
                     .helperEmail(help.getHelper().getEmail())
                     .helperName(help.getHelper().getName())
+                    .receiverId(help.getReceiver().getId())
                     .eventType("HELP_CANCELLED")
                     .timestamp(LocalDateTime.now())
                     .build();

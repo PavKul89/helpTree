@@ -30,6 +30,7 @@ public class RoleBasedAuthFilter implements GlobalFilter {
             "/api/auth/login",
             "/api/reviews/help",
             "/api/reviews/user",
+            "/api/ratings/",
             "/actuator/health"
     );
 
@@ -68,6 +69,10 @@ public class RoleBasedAuthFilter implements GlobalFilter {
         log.debug("RBAC: {} {}", method, path);
 
         if (isPublicPath(path)) {
+            return chain.filter(exchange);
+        }
+
+        if (path.startsWith("/internal/")) {
             return chain.filter(exchange);
         }
 

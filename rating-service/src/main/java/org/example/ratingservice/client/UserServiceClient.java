@@ -23,6 +23,6 @@ public interface UserServiceClient {
     @GetMapping("/api/users")
     List<UserDto> getAllUsers();
 
-    @PutMapping("/api/users/{id}/rating")
+    @PutMapping("/internal/users/{id}/rating")
     void updateUserRating(@PathVariable("id") Long id, @RequestParam("rating") Double rating);
 }
