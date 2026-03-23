@@ -84,7 +84,7 @@ logging:
     org.hibernate.SQL: DEBUG
     org.hibernate.type.descriptor.sql.BasicBinder: TRACE
     org.springframework.web: DEBUG
-    com.example.helptreeservice: DEBUG
+    org.example.helptreeservice: DEBUG
     io.micrometer.tracing: DEBUG
     io.opentelemetry: DEBUG
     io.opentelemetry.exporter.otlp: DEBUG

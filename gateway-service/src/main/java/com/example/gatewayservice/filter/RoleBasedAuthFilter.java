@@ -31,6 +31,8 @@ public class RoleBasedAuthFilter implements GlobalFilter {
             "/api/reviews/help",
             "/api/reviews/user",
             "/api/ratings/",
+            "/api/posts/*/comments",
+            "/api/posts/*/comments/",
             "/actuator/health"
     );
 
