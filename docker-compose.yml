@@ -58,13 +58,14 @@ services:
       # КРИТИЧЕСКИ ВАЖНО: Очищаем meta.properties при запуске
       KAFKA_CLEANUP_POLICY: "delete"
       KAFKA_LOG_DIRS: /var/lib/kafka/data
+
     volumes:
       - kafka_data:/var/lib/kafka/data
     networks:
       - helpTree-network
     command: >
       bash -c "
-        rm -rf /var/lib/kafka/data/*
+        rm -f /var/lib/kafka/data/meta.properties
         /etc/confluent/docker/run
       "
   kafka-ui:
