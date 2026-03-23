@@ -28,6 +28,8 @@ public class RoleBasedAuthFilter implements GlobalFilter {
     private static final Set<String> PUBLIC_PATHS = Set.of(
             "/api/auth/register",
             "/api/auth/login",
+            "/api/reviews/help",
+            "/api/reviews/user",
             "/actuator/health"
     );
 
@@ -42,11 +44,13 @@ public class RoleBasedAuthFilter implements GlobalFilter {
     private static final Set<String> USER_PATH_EXCEPTIONS = Set.of(
             "/api/users/me",
             "/api/users/telegram",
-            "/api/users/current"
+            "/api/users/current",
+            "/api/reviews"
     );
 
     private static final Set<String> USER_ID_PATH_EXCEPTIONS = Set.of(
-            "/telegram"
+            "/telegram",
+            "/reviews"
     );
 
     private static final Set<HttpMethod> ADMIN_ONLY_METHODS = Set.of(

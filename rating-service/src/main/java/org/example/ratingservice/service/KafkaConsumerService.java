@@ -65,17 +65,27 @@ public class KafkaConsumerService {
     }
 
     private void handleAcceptedEvent(HelpEvent event) {
+        if (event.getHelperId() == null || event.getReceiverId() == null) {
+            log.warn("⚠️ HELP_ACCEPTED: helperId or receiverId is null, skipping");
+            return;
+        }
         updateHelperStats(event.getHelperId(), "accepted");
         updateReceiverStats(event.getReceiverId(), "accepted");
     }
 
     private void handleCompletedEvent(HelpEvent event) {
-        if (event.getDuration() != null) {
-            updateResponseTime(event.getHelperId(), event.getDuration());
+        if (event.getHelperId() == null || event.getDuration() == null) {
+            log.warn("⚠️ HELP_COMPLETED: helperId or duration is null, skipping");
+            return;
         }
+        updateResponseTime(event.getHelperId(), event.getDuration());
     }
 
     private void handleConfirmedEvent(HelpEvent event) {
+        if (event.getHelperId() == null || event.getReceiverId() == null) {
+            log.warn("⚠️ HELP_CONFIRMED: helperId or receiverId is null, skipping");
+            return;
+        }
         updateHelperStats(event.getHelperId(), "confirmed");
 
         log.info("🔄 Пересчет рейтинга для helperId={}", event.getHelperId());
@@ -86,6 +96,10 @@ public class KafkaConsumerService {
     }
 
     private void handleCancelledEvent(HelpEvent event) {
+        if (event.getHelperId() == null) {
+            log.warn("⚠️ HELP_CANCELLED: helperId is null, skipping");
+            return;
+        }
         updateHelperStats(event.getHelperId(), "cancelled");
         ratingCalculationService.calculateUserRating(event.getHelperId());
     }
