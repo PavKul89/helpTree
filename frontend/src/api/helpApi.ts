@@ -1,0 +1,39 @@
+import api from './axios';
+import type { Help, HelpRequest } from '../types';
+
+export const helpApi = {
+  acceptHelp: async (data: HelpRequest): Promise<Help> => {
+    const response = await api.post<Help>('/api/helps/accept', data);
+    return response.data;
+  },
+
+  completeHelp: async (helpId: number): Promise<Help> => {
+    const response = await api.post<Help>(`/api/helps/${helpId}/complete`);
+    return response.data;
+  },
+
+  confirmHelp: async (helpId: number): Promise<Help> => {
+    const response = await api.post<Help>(`/api/helps/${helpId}/confirm`);
+    return response.data;
+  },
+
+  cancelHelp: async (helpId: number): Promise<Help> => {
+    const response = await api.post<Help>(`/api/helps/${helpId}/cancel`);
+    return response.data;
+  },
+
+  getHelpsByHelper: async (helperId: number): Promise<Help[]> => {
+    const response = await api.get<Help[]>(`/api/helps/helper/${helperId}`);
+    return response.data;
+  },
+
+  getHelpsByReceiver: async (receiverId: number): Promise<Help[]> => {
+    const response = await api.get<Help[]>(`/api/helps/receiver/${receiverId}`);
+    return response.data;
+  },
+
+  getHelpsByPost: async (postId: number): Promise<Help[]> => {
+    const response = await api.get<Help[]>(`/api/helps/post/${postId}`);
+    return response.data;
+  },
+};

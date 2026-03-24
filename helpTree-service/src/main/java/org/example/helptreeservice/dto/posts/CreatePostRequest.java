@@ -16,5 +16,8 @@ public class CreatePostRequest {
     @Size(max = 2000, message = "Описание не может быть длиннее 2000 символов")
     private String description;
 
+    @NotBlank(message = "Категория обязательна")
+    private String category;
+
     private List<String> imageUrls;
 }

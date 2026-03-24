@@ -375,6 +375,13 @@ public class HelpService {
      * Получить все помощи пользователя (где он помогал)
      */
     @Transactional(readOnly = true)
+    public List<HelpResponse> getHelpsByPost(Long postId) {
+        return helpRepository.findByPostId(postId).stream()
+                .map(helpMapper::toResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
     public List<HelpResponse> getHelpsByHelper(Long helperId) {
         log.info("Запрос всех откликов помощника с ID: {}", helperId);
 

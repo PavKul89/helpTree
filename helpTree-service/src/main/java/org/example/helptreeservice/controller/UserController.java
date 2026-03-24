@@ -45,6 +45,20 @@ public class UserController {
         return ResponseEntity.ok(userService.getAllUsers());
     }
 
+    @GetMapping("/public")
+    public ResponseEntity<List<UserPublicDto>> getAllUsersPublic() {
+        return ResponseEntity.ok(userService.getAllUsersPublic());
+    }
+
+    @GetMapping("/me")
+    public ResponseEntity<UserDto> getCurrentUser() {
+        UserContext user = authService.getCurrentUser();
+        if (user == null) {
+            throw new ForbiddenException("Вы не авторизованы");
+        }
+        return ResponseEntity.ok(userService.getUserById(user.getUserId()));
+    }
+
     @GetMapping("/{id}/public")
     public ResponseEntity<UserPublicDto> getUserPublic(@PathVariable Long id) {
         return ResponseEntity.ok(userService.getUserPublicById(id));

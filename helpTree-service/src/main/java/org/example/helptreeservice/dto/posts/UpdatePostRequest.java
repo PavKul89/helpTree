@@ -4,6 +4,8 @@ import org.example.helptreeservice.enums.PostStatus;
 import lombok.Data;
 import jakarta.validation.constraints.Size;
 
+import java.util.List;
+
 @Data
 public class UpdatePostRequest {
 
@@ -17,4 +19,6 @@ public class UpdatePostRequest {
     private String authorName;
 
     private PostStatus status;
+
+    private List<String> imageUrls;
 }

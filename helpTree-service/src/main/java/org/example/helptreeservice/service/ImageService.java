@@ -120,6 +120,10 @@ public class ImageService {
     }
 
     private String extractFilename(String url) {
-        return url.substring(url.lastIndexOf("/") + 1);
+        String filename = url.substring(url.lastIndexOf("/") + 1);
+        if (filename.contains("?")) {
+            filename = filename.substring(0, filename.indexOf("?"));
+        }
+        return filename;
     }
 }

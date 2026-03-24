@@ -2,6 +2,7 @@ package org.example.helptreeservice.mapper;
 
 import org.example.helptreeservice.dto.users.UpdateUserRequest;
 import org.example.helptreeservice.dto.users.UserDto;
+import org.example.helptreeservice.dto.users.UserPublicDto;
 import org.example.helptreeservice.entity.User;
 import org.mapstruct.Mapper;
 import org.mapstruct.MappingTarget;
@@ -13,6 +14,8 @@ import org.mapstruct.ReportingPolicy;
 public interface UserMapper {
 
     UserDto toDto(User user);
+
+    UserPublicDto toPublicDto(User user);
 
     void updateFromDto(UpdateUserRequest dto, @MappingTarget User user);
 }

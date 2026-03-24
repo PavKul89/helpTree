@@ -31,6 +31,11 @@ public class HelpController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
+    @GetMapping("/post/{postId}")
+    public ResponseEntity<List<HelpResponse>> getHelpsByPost(@PathVariable Long postId) {
+        return ResponseEntity.ok(helpService.getHelpsByPost(postId));
+    }
+
     @PostMapping("/{helpId}/complete")
     public ResponseEntity<HelpResponse> completeHelp(@PathVariable Long helpId) {
         Help help = helpService.getHelpById(helpId);

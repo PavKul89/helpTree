@@ -51,6 +51,7 @@ public class PostService {
             post.setUser(user);
             post.setTitle(request.getTitle());
             post.setDescription(request.getDescription());
+            post.setCategory(request.getCategory());
             post.setAuthorName(user.getName());
             post.setCreatedAt(LocalDateTime.now());
             post.setUpdatedAt(LocalDateTime.now());
@@ -141,12 +142,12 @@ public class PostService {
     }
 
     @Transactional(readOnly = true)
-    public Page<PostDto> getPosts(Long userId, PostStatus status, String title, String authorName, Pageable pageable) {
-        log.info("Запрос постов с фильтрацией: userId={}, status={}, title={}, authorName={}, page={}, size={}",
-                userId, status, title, authorName, pageable.getPageNumber(), pageable.getPageSize());
+    public Page<PostDto> getPosts(Long userId, PostStatus status, String title, String authorName, String category, Pageable pageable) {
+        log.info("Запрос постов с фильтрацией: userId={}, status={}, title={}, authorName={}, category={}, page={}, size={}",
+                userId, status, title, authorName, category, pageable.getPageNumber(), pageable.getPageSize());
 
         try {
-            Specification<Post> spec = PostSpecification.filter(userId, status, title, authorName);
+            Specification<Post> spec = PostSpecification.filter(userId, status, title, authorName, category);
             Page<PostDto> postsPage = postRepository.findAll(spec, pageable).map(postMapper::toDto);
 
             log.info("Найдено постов с фильтрацией: {}, всего страниц: {}",
@@ -198,9 +199,15 @@ public class PostService {
                 log.debug("Изменен статус поста с {} на {}", oldStatus, request.getStatus());
             }
 
+            if (request.getImageUrls() != null) {
+                post.setImageUrls(request.getImageUrls());
+                changed = true;
+                log.debug("Обновлен список изображений");
+            }
+
             if (changed) {
                 post.setUpdatedAt(LocalDateTime.now());
-                Post updatedPost = postRepository.save(post);
+                Post updatedPost = postRepository.saveAndFlush(post);
                 log.info("Пост с ID {} успешно обновлен", id);
                 log.debug("Обновленный пост: title={}, status={}", updatedPost.getTitle(), updatedPost.getStatus());
                 return postMapper.toDto(updatedPost);

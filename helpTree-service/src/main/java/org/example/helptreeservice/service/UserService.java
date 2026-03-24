@@ -117,6 +117,13 @@ public class UserService {
         }
     }
 
+    @Transactional(readOnly = true)
+    public List<UserPublicDto> getAllUsersPublic() {
+        return userRepository.findByDeletedFalse().stream()
+                .map(userMapper::toPublicDto)
+                .collect(Collectors.toList());
+    }
+
     public UserDto updateUser(Long id, UpdateUserRequest request) {
         log.info("Обновление данных пользователя с ID: {}", id);
         log.debug("Данные для обновления: name={}, email={}, phone={}, city={}",

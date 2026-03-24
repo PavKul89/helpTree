@@ -19,6 +19,8 @@ public class HelpEvent {
     private Long helperId;
     private String helperEmail;
     private String helperName;
+    private Long receiverId;
+    private String receiverName;
     private String eventType;
     private LocalDateTime timestamp;
     private Long duration;

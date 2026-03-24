@@ -12,6 +12,7 @@ public class PostDto {
     private Long id;
     private String title;
     private String description;
+    private String category;
     private String authorName;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

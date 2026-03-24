@@ -22,6 +22,7 @@ public class Post {
 
     private String title;
     private String description;
+    private String category;
     private String authorName;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

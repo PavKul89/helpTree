@@ -16,7 +16,8 @@ public final class PostSpecification {
     public static Specification<Post> filter(final Long userId,
                                              final PostStatus status,
                                              final String title,
-                                             final String authorName) {
+                                             final String authorName,
+                                             final String category) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 
@@ -37,6 +38,10 @@ public final class PostSpecification {
 
             if (StringUtils.hasText(authorName)) {
                 predicates.add(cb.like(cb.lower(root.get("authorName")), "%" + authorName.toLowerCase() + "%"));
+            }
+
+            if (StringUtils.hasText(category)) {
+                predicates.add(cb.equal(root.get("category"), category));
             }
 
             return cb.and(predicates.toArray(new Predicate[0]));
