@@ -42,7 +42,6 @@ public class RatingHistory {
     @Column(name = "help_id")
     private Long helpId;
 
-    // Просто строка, не JSON
     @Column(name = "rating_components", length = 1000)
     private String ratingComponents;
 }

@@ -2,7 +2,7 @@ services:
   postgres:
     image: postgres:16
     container_name: postgres
-    restart: always
+    restart: unless-stopped
     environment:
       POSTGRES_USER: helpTree
       POSTGRES_PASSWORD: helpTree
@@ -22,6 +22,7 @@ services:
   zookeeper:
     image: confluentinc/cp-zookeeper:7.4.0
     container_name: zookeeper
+    restart: unless-stopped
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
@@ -38,6 +39,7 @@ services:
   kafka:
     image: confluentinc/cp-kafka:7.4.0
     container_name: kafka
+    restart: unless-stopped
     depends_on:
       zookeeper:
         condition: service_healthy
@@ -71,6 +73,7 @@ services:
   kafka-ui:
       image: provectuslabs/kafka-ui:latest
       container_name: kafka-ui
+      restart: unless-stopped
       depends_on:
         - kafka
       ports:
@@ -87,6 +90,7 @@ services:
   prometheus:
     image: prom/prometheus:v2.47.0
     container_name: prometheus_helpTree
+    restart: unless-stopped
     volumes:
       - ./helpTree-service/src/main/resources/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
@@ -96,7 +100,6 @@ services:
       - '--storage.tsdb.retention.time=15d'
     ports:
       - '9090:9090'
-    restart: unless-stopped
     networks:
       - helpTree-network
     depends_on:
@@ -106,6 +109,7 @@ services:
   grafana:
     image: grafana/grafana:10.2.2
     container_name: grafana_helpTree
+    restart: unless-stopped
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin
@@ -115,7 +119,6 @@ services:
       - '3000:3000'
     depends_on:
       - prometheus
-    restart: unless-stopped
     networks:
       - helpTree-network
     volumes:
@@ -124,6 +127,7 @@ services:
   jaeger:
     image: jaegertracing/all-in-one:1.50
     container_name: jaeger
+    restart: unless-stopped
     ports:
       - "16686:16686"  # UI
       - "6831:6831/udp"  # Jaeger agent (thrift compact)
@@ -133,7 +137,6 @@ services:
     environment:
       COLLECTOR_OTLP_ENABLED: "true"
       SPAN_STORAGE_TYPE: badger
-    restart: unless-stopped
     networks:
       - helpTree-network
     volumes:
@@ -147,6 +150,7 @@ services:
   minio:
     image: minio/minio:latest
     container_name: minio
+    restart: unless-stopped
     ports:
       - "9000:9000"
       - "9001:9001"

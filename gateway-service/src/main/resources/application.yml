@@ -6,6 +6,7 @@ spring:
     name: gateway-service
   main:
     web-application-type: reactive
+    allow-bean-definition-overriding: true
   cloud:
     gateway:
       enabled: true
@@ -15,6 +16,11 @@ spring:
     exclude:
       - org.springframework.boot.autoconfigure.security.reactive.ReactiveUserDetailsServiceAutoConfiguration
       - org.springframework.boot.autoconfigure.security.SecurityAutoConfiguration
+
+  security:
+    user:
+      name: disabled
+      password: disabled
 
 
 management:

@@ -4,6 +4,8 @@ server:
 spring:
   application:
     name: helpTree
+  main:
+    allow-bean-definition-overriding: true
 
   servlet:
     multipart:
@@ -25,6 +27,11 @@ spring:
     properties:
       hibernate:
         format_sql: true
+
+  security:
+    user:
+      name: disabled
+      password: disabled
 
   flyway:
     enabled: true

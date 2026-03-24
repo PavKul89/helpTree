@@ -41,7 +41,7 @@ public class UserRatingStats {
     private Long cancelledHelps = 0L;
 
     @Column(name = "average_response_time")
-    private Double averageResponseTime; // Среднее время реакции в минутах
+    private Double averageResponseTime;
 
     @Column(name = "last_calculated")
     private LocalDateTime lastCalculated;
@@ -52,7 +52,7 @@ public class UserRatingStats {
 
     @Builder.Default
     @Column(name = "rating_trend")
-    private String ratingTrend = "STABLE"; // UP, DOWN, STABLE
+    private String ratingTrend = "STABLE";
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
@@ -62,7 +62,6 @@ public class UserRatingStats {
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
 
-        // Дополнительная инициализация при первом сохранении
         if (lastCalculated == null) {
             lastCalculated = LocalDateTime.now();
         }

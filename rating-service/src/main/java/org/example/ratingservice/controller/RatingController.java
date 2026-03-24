@@ -22,18 +22,12 @@ public class RatingController {
 
     private final RatingService ratingService;
 
-    /**
-     * Получить рейтинг пользователя
-     */
     @GetMapping("/user/{userId}")
     public ResponseEntity<RatingResponse> getUserRating(@PathVariable Long userId) {
         log.info("GET /api/ratings/user/{}", userId);
         return ResponseEntity.ok(ratingService.getUserRating(userId));
     }
 
-    /**
-     * Получить топ пользователей по рейтингу
-     */
     @GetMapping("/top")
     public ResponseEntity<Page<RatingResponse>> getTopRated(
             @PageableDefault(size = 20, sort = "currentRating", direction = Sort.Direction.DESC) Pageable pageable) {
@@ -42,18 +36,12 @@ public class RatingController {
         return ResponseEntity.ok(ratingService.getTopRatedUsers(pageable));
     }
 
-    /**
-     * Принудительно пересчитать рейтинг пользователя
-     */
     @PostMapping("/user/{userId}/recalculate")
     public ResponseEntity<RatingResponse> recalculateUserRating(@PathVariable Long userId) {
         log.info("POST /api/ratings/user/{}/recalculate", userId);
         return ResponseEntity.ok(ratingService.recalculateUserRating(userId));
     }
 
-    /**
-     * Получить историю изменений рейтинга
-     */
     @GetMapping("/user/{userId}/history")
     public ResponseEntity<Page<RatingHistory>> getRatingHistory(
             @PathVariable Long userId,
