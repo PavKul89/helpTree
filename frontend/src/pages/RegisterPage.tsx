@@ -7,27 +7,21 @@ export const RegisterPage = () => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [phone, setPhone] = useState('');
+  const [city, setCity] = useState('');
   const [error, setError] = useState('');
   const [focused, setFocused] = useState<string | null>(null);
   const [buttonHover, setButtonHover] = useState(false);
-  const [fieldErrors, setFieldErrors] = useState<{name?: string; email?: string; password?: string}>({});
+  const [fieldErrors, setFieldErrors] = useState<{name?: string; email?: string; password?: string; phone?: string; city?: string}>({});
 
-  // 🔧 МАКСИМАЛЬНО ПРОСТАЯ ВАЛИДАЦИЯ EMAIL
-  const isValidEmail = (email: string): boolean => {
-    const trimmed = email.trim();
-    if (!trimmed) return false;
-    const hasAt = trimmed.includes('@');
-    const hasDot = trimmed.includes('.');
-    const result = hasAt && hasDot;
-
-    // Отладка в консоль
-    console.log('Email validation:', { email: trimmed, hasAt, hasDot, result });
-
-    return result;
+  // Валидация email
+  const validateEmail = (email: string) => {
+    const re = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    return re.test(email);
   };
 
   const handleBlur = (field: string, value: string) => {
-    const errors: {name?: string; email?: string; password?: string} = {};
+    const errors: {name?: string; email?: string; password?: string; phone?: string; city?: string} = {};
 
     if (field === 'name') {
       if (!value.trim()) {
@@ -41,16 +35,34 @@ export const RegisterPage = () => {
       const cleaned = value.trim();
       if (!cleaned) {
         errors.email = 'Введите email';
-      } else if (!isValidEmail(cleaned)) {
-        errors.email = 'Введите корректный email (например, name@example.com)';
+      } else if (!validateEmail(cleaned)) {
+        errors.email = 'Некорректный email';
       }
     }
 
     if (field === 'password') {
       if (!value) {
         errors.password = 'Введите пароль';
-      } else if (value.length < 6) {
-        errors.password = 'Пароль должен содержать не менее 6 символов';
+      } else if (value.length < 8) {
+        errors.password = 'Пароль должен содержать не менее 8 символов';
+      } else if (!/[A-Z]/.test(value)) {
+        errors.password = 'Пароль должен содержать хотя бы одну заглавную букву';
+      } else if (!/[a-z]/.test(value)) {
+        errors.password = 'Пароль должен содержать хотя бы одну строчную букву';
+      } else if (!/\d/.test(value)) {
+        errors.password = 'Пароль должен содержать хотя бы одну цифру';
+      }
+    }
+
+    if (field === 'phone') {
+      if (!value.trim()) {
+        errors.phone = 'Введите телефон';
+      }
+    }
+
+    if (field === 'city') {
+      if (!value.trim()) {
+        errors.city = 'Введите город';
       }
     }
 
@@ -64,7 +76,7 @@ export const RegisterPage = () => {
     e.preventDefault();
     setError('');
 
-    const errors: {name?: string; email?: string; password?: string} = {};
+    const errors: {name?: string; email?: string; password?: string; phone?: string; city?: string} = {};
 
     if (!name.trim()) {
       errors.name = 'Введите имя';
@@ -74,14 +86,28 @@ export const RegisterPage = () => {
 
     if (!email.trim()) {
       errors.email = 'Введите email';
-    } else if (!isValidEmail(email)) {
-      errors.email = 'Введите корректный email (например, name@example.com)';
+    } else if (!validateEmail(email)) {
+      errors.email = 'Некорректный email';
     }
 
     if (!password) {
       errors.password = 'Введите пароль';
-    } else if (password.length < 6) {
-      errors.password = 'Пароль должен содержать не менее 6 символов';
+    } else if (password.length < 8) {
+      errors.password = 'Пароль должен содержать не менее 8 символов';
+    } else if (!/[A-Z]/.test(password)) {
+      errors.password = 'Пароль должен содержать хотя бы одну заглавную букву';
+    } else if (!/[a-z]/.test(password)) {
+      errors.password = 'Пароль должен содержать хотя бы одну строчную букву';
+    } else if (!/\d/.test(password)) {
+      errors.password = 'Пароль должен содержать хотя бы одну цифру';
+    }
+
+    if (!phone.trim()) {
+      errors.phone = 'Введите телефон';
+    }
+
+    if (!city.trim()) {
+      errors.city = 'Введите город';
     }
 
     if (Object.keys(errors).length > 0) {
@@ -90,7 +116,7 @@ export const RegisterPage = () => {
     }
 
     try {
-      const response = await authApi.register({ name, email, password });
+      const response = await authApi.register({ name, email, password, phone, city });
       localStorage.setItem('accessToken', response.accessToken);
       login(response.accessToken, {
         id: response.userId,
@@ -182,6 +208,44 @@ export const RegisterPage = () => {
                     }}
                 />
                 {fieldErrors.password && <div style={styles.fieldError}>{fieldErrors.password}</div>}
+              </div>
+
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Телефон</label>
+                <input
+                    type="text"
+                    inputMode="tel"
+                    autoComplete="tel"
+                    value={phone}
+                    onChange={(e) => { setPhone(e.target.value); setFieldErrors(prev => ({...prev, phone: ''})); }}
+                    onFocus={() => setFocused('phone')}
+                    onBlur={() => handleBlur('phone', phone)}
+                    placeholder="+7 (999) 123-45-67"
+                    style={{
+                      ...styles.input,
+                      borderColor: fieldErrors.phone ? '#EF4444' : (focused === 'phone' ? '#6EE7B7' : 'rgba(255,255,255,0.2)'),
+                      boxShadow: fieldErrors.phone ? '0 0 0 3px rgba(239, 68, 68, 0.25)' : (focused === 'phone' ? '0 0 0 3px rgba(110, 231, 183, 0.2)' : 'none'),
+                    }}
+                />
+                {fieldErrors.phone && <div style={styles.fieldError}>{fieldErrors.phone}</div>}
+              </div>
+
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Город</label>
+                <input
+                    type="text"
+                    value={city}
+                    onChange={(e) => { setCity(e.target.value); setFieldErrors(prev => ({...prev, city: ''})); }}
+                    onFocus={() => setFocused('city')}
+                    onBlur={() => handleBlur('city', city)}
+                    placeholder="Москва"
+                    style={{
+                      ...styles.input,
+                      borderColor: fieldErrors.city ? '#EF4444' : (focused === 'city' ? '#6EE7B7' : 'rgba(255,255,255,0.2)'),
+                      boxShadow: fieldErrors.city ? '0 0 0 3px rgba(239, 68, 68, 0.25)' : (focused === 'city' ? '0 0 0 3px rgba(110, 231, 183, 0.2)' : 'none'),
+                    }}
+                />
+                {fieldErrors.city && <div style={styles.fieldError}>{fieldErrors.city}</div>}
               </div>
 
               {error && (

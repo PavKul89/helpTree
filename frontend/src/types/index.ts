@@ -93,6 +93,8 @@ export interface RegisterRequest {
   name: string;
   email: string;
   password: string;
+  phone: string;
+  city: string;
 }
 
 export interface CreatePostRequest {
