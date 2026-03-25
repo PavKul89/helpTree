@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { authApi } from '../api/authApi';
 import { useAuth } from '../context/AuthContext';
+import { theme } from '../theme';
 
 export const RegisterPage = () => {
   const [name, setName] = useState('');
@@ -281,7 +282,7 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
     padding: '40px 24px',
-    background: 'linear-gradient(135deg, #022c22 0%, #065F46 100%)',
+    background: 'linear-gradient(135deg, #0c4a6e 0%, #022c22 50%, #065F46 100%)',
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
   },
   card: {
@@ -292,7 +293,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   leftPanel: {
     flex: '0 0 40%',
-    background: 'linear-gradient(160deg, #047857 0%, #065F46 50%, #064E3B 100%)',
+    background: 'linear-gradient(160deg, #0e7490 0%, #065F46 50%, #0c4a6e 100%)',
     padding: '56px 44px',
     borderRadius: '20px',
     boxShadow: '0 20px 40px -8px rgba(6, 78, 59, 0.35), 0 8px 16px -4px rgba(6, 78, 59, 0.2)',
@@ -306,23 +307,25 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#fff',
     margin: '0 0 20px 0',
     letterSpacing: '-0.5px',
+    textShadow: '0 2px 10px rgba(0,0,0,0.2)',
   },
   leftText: {
     fontSize: '17px',
-    color: 'rgba(255,255,255,0.9)',
+    color: 'rgba(255,255,255,0.95)',
     margin: '0 0 28px 0',
     lineHeight: 1.6,
+    fontWeight: 500,
   },
   leftSubtext: {
     fontSize: '14px',
-    color: 'rgba(255,255,255,0.7)',
+    color: 'rgba(255,255,255,0.8)',
     lineHeight: 1.6,
     margin: 0,
   },
   rightPanel: {
     flex: '0 0 60%',
     padding: '52px 44px',
-    background: 'linear-gradient(160deg, #047857 0%, #065F46 50%, #064E3B 100%)',
+    background: 'linear-gradient(160deg, #0e7490 0%, #0891b2 50%, #164e63 100%)',
     borderRadius: '20px',
     boxShadow: '0 20px 40px -8px rgba(6, 78, 59, 0.35), 0 8px 16px -4px rgba(6, 78, 59, 0.2)',
   },
@@ -384,21 +387,21 @@ const styles: Record<string, React.CSSProperties> = {
   button: {
     width: '100%',
     padding: '16px',
-    background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+    background: 'linear-gradient(135deg, #22d3ee 0%, #06b6d4 100%)',
     border: 'none',
     borderRadius: '12px',
-    color: '#fff',
+    color: '#022c22',
     fontSize: '16px',
-    fontWeight: 600,
+    fontWeight: 700,
     cursor: 'pointer',
     transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
     marginTop: '8px',
-    boxShadow: '0 4px 14px -3px rgba(16, 185, 129, 0.5), 0 0 20px rgba(16, 185, 129, 0.2)',
+    boxShadow: '0 4px 14px -3px rgba(34, 211, 238, 0.5), 0 0 20px rgba(34, 211, 238, 0.2)',
     transform: 'perspective(1000px) translateZ(0)',
   },
   buttonHover: {
-    background: 'linear-gradient(135deg, #34D399 0%, #10B981 100%)',
-    boxShadow: '0 6px 20px -3px rgba(52, 211, 153, 0.6), 0 0 30px rgba(52, 211, 153, 0.3)',
+    background: 'linear-gradient(135deg, #67e8f9 0%, #22d3ee 100%)',
+    boxShadow: '0 6px 20px -3px rgba(34, 211, 238, 0.6), 0 0 30px rgba(34, 211, 238, 0.4)',
     transform: 'perspective(1000px) translateZ(5px)',
   },
   loginLink: {
@@ -408,9 +411,9 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop: '24px',
   },
   link: {
-    color: '#6EE7B7',
-    fontWeight: 600,
+    color: '#22d3ee',
+    fontWeight: 700,
     textDecoration: 'none',
-    transition: 'color 0.2s',
+    transition: 'all 0.2s',
   },
 };

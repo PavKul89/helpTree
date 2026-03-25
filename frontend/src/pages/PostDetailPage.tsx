@@ -6,6 +6,9 @@ import { reviewApi } from '../api/reviewApi';
 import { imagesApi } from '../api/imagesApi';
 import type { Post, Comment, Help, Review } from '../types';
 import { useAuth } from '../context/AuthContext';
+import { Card } from '../components/Card';
+import { Button } from '../components/Button';
+import { theme } from '../theme';
 
 export const PostDetailPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -171,137 +174,148 @@ export const PostDetailPage = () => {
     }
   };
 
-  if (loading) return <div>Загрузка...</div>;
-  if (!post) return <div>Пост не найден</div>;
+  const getStatusColor = (status: string) => {
+    const colors: Record<string, string> = {
+      OPEN: '#10B981',
+      ACCEPTED: '#38bdf8',
+      COMPLETED: '#F59E0B',
+      CONFIRMED: '#8B5CF6',
+      CANCELLED: '#EF4444',
+    };
+    return colors[status] || '#6B7280';
+  };
+
+  const getStatusLabel = (status: string) => {
+    const labels: Record<string, string> = {
+      OPEN: 'Открыт',
+      ACCEPTED: 'Принят',
+      COMPLETED: 'Завершён',
+      CONFIRMED: 'Подтверждён',
+      CANCELLED: 'Отменён',
+    };
+    return labels[status] || status;
+  };
+
+  if (loading) return <div style={styles.loading}>Загрузка...</div>;
+  if (!post) return <div style={styles.notFound}>Пост не найден</div>;
 
   const isAuthor = user?.id === post.userId;
   const canOfferHelp = user && !isAuthor && post.status === 'OPEN';
 
   return (
-    <div style={{ padding: 20 }}>
-      <Link to="/">← Назад</Link>
+    <div style={styles.container}>
+      <Link to="/" style={styles.backLink}>← На главную</Link>
       
-      {isEditing ? (
-        <div style={{ marginTop: 20 }}>
-          <input
-            type="text"
-            value={editForm.title}
-            onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
-            style={{ width: '100%', padding: 8, marginBottom: 10 }}
-          />
-          <textarea
-            value={editForm.description}
-            onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-            style={{ width: '100%', height: 100, padding: 8 }}
-          />
-          <button onClick={handleEditPost} style={{ marginRight: 10 }}>Сохранить</button>
-          <button onClick={() => setIsEditing(false)}>Отмена</button>
-        </div>
-      ) : (
-        <>
-          <h1>{post.title}</h1>
-          <p>{post.description}</p>
-        </>
-      )}
-      
-      {post.imageUrls && post.imageUrls.length > 0 ? (
-        <div style={{ marginTop: 15 }}>
-          <h3>Изображения ({post.imageUrls.length})</h3>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            {post.imageUrls.map((img, idx) => (
-              <div key={idx} style={{ position: 'relative' }}>
-                <img 
-                  src={img} 
-                  alt={`Изображение ${idx + 1}`} 
-                  style={{ maxWidth: 200, maxHeight: 200, borderRadius: 8, cursor: 'pointer' }}
-                  onClick={() => window.open(img, '_blank')}
-                />
-                {isAuthor && (
-                  <button 
-                    onClick={() => handleDeleteImage(img)}
-                    style={{
-                      position: 'absolute',
-                      top: -5,
-                      right: -5,
-                      background: 'red',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '50%',
-                      width: 20,
-                      height: 20,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    ×
-                  </button>
-                )}
-              </div>
-            ))}
+      <Card style={styles.mainCard}>
+        {isEditing ? (
+          <div>
+            <input
+              type="text"
+              value={editForm.title}
+              onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+              style={styles.input}
+            />
+            <textarea
+              value={editForm.description}
+              onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+              style={{ ...styles.input, height: 100 }}
+            />
+            <div style={styles.buttonGroup}>
+              <Button onClick={handleEditPost} style={{ marginRight: 10 }}>Сохранить</Button>
+              <Button variant="outline" onClick={() => setIsEditing(false)}>Отмена</Button>
+            </div>
           </div>
-        </div>
-      ) : null}
-      
-      <div style={{ margin: '15px 0' }}>
-        <strong>Категория:</strong> {post.category} |
-        <strong> Статус:</strong> {post.status} |
-        <strong> Автор:</strong> <Link to={`/profile/${post.userId}`}>{post.authorName}</Link>
-        {isAuthor && (
+        ) : (
           <>
-            <button onClick={startEdit} style={{ marginLeft: 10, backgroundColor: '#2196F3', color: 'white', border: 'none', padding: '5px 10px', borderRadius: 4, cursor: 'pointer' }}>
-              Редактировать
-            </button>
-            <button onClick={handleDeletePost} style={{ marginLeft: 10, backgroundColor: '#f44336', color: 'white', border: 'none', padding: '5px 10px', borderRadius: 4, cursor: 'pointer' }}>
-              Удалить пост
-            </button>
+            <h1 style={styles.title}>{post.title}</h1>
+            <p style={styles.description}>{post.description}</p>
           </>
         )}
-      </div>
+        
+        {post.imageUrls && post.imageUrls.length > 0 ? (
+          <div style={styles.imagesSection}>
+            <h3 style={styles.sectionTitle}>Изображения ({post.imageUrls.length})</h3>
+            <div style={styles.imagesGrid}>
+              {post.imageUrls.map((img, idx) => (
+                <div key={idx} style={styles.imageWrapper}>
+                  <img 
+                    src={img} 
+                    alt={`Изображение ${idx + 1}`} 
+                    style={styles.image}
+                    onClick={() => window.open(img, '_blank')}
+                  />
+                  {isAuthor && (
+                    <button 
+                      onClick={() => handleDeleteImage(img)}
+                      style={styles.removeImageBtn}
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+        
+        <div style={styles.meta}>
+          <span style={styles.metaItem}><strong>Категория:</strong> {post.category}</span>
+          <span style={{ ...styles.statusBadge, backgroundColor: getStatusColor(post.status) }}>
+            {getStatusLabel(post.status)}
+          </span>
+          <span style={styles.metaItem}><strong>Автор:</strong> <Link to={`/profile/${post.userId}`} style={styles.authorLink}>{post.authorName}</Link></span>
+        </div>
+
+        {isAuthor && (
+          <div style={styles.authorActions}>
+            <Button onClick={startEdit} style={{ marginRight: 10 }}>Редактировать</Button>
+            <Button variant="danger" onClick={handleDeletePost}>Удалить пост</Button>
+          </div>
+        )}
+      </Card>
 
       {canOfferHelp && (
-        <button onClick={handleOfferHelp} style={{ marginBottom: 20, padding: '10px 20px' }}>
+        <Button onClick={handleOfferHelp} style={{ marginBottom: 20 }}>
           Откликнуться на пост
-        </button>
+        </Button>
       )}
 
       {helps.length > 0 && (
-        <div style={{ marginBottom: 20 }}>
-          <h3>Отклики</h3>
+        <Card style={{ marginBottom: 20 }}>
+          <h3 style={styles.sectionTitle}>Отклики</h3>
           {helps.map((help) => (
-            <div key={help.id} style={{ border: '1px solid #ddd', padding: 10, margin: '10px 0', borderRadius: 4 }}>
-              <strong>{help.helperName}</strong> — статус: {help.status}
+            <div key={help.id} style={styles.helpItem}>
+              <strong>{help.helperName}</strong> — 
+              <span style={{ ...styles.statusBadge, backgroundColor: getStatusColor(help.status), marginLeft: 8 }}>
+                {getStatusLabel(help.status)}
+              </span>
               {help.status === 'ACCEPTED' && !isAuthor && help.helperId === user?.id && (
-                <button onClick={() => handleCompleteHelp(help.id)} style={{ marginLeft: 10 }}>
-                  Выполнено
-                </button>
+                <Button onClick={() => handleCompleteHelp(help.id)} style={{ marginLeft: 10 }}>Выполнено</Button>
               )}
 
               {help.status === 'COMPLETED' && isAuthor && (
-                <button onClick={() => handleConfirmHelp(help.id)} style={{ marginLeft: 10 }}>
-                  Подтвердить выполнение
-                </button>
+                <Button onClick={() => handleConfirmHelp(help.id)} style={{ marginLeft: 10 }}>Подтвердить</Button>
               )}
               {(help.status === 'ACCEPTED' || help.status === 'PENDING') && !isAuthor && help.helperId === user?.id && (
-                <button onClick={() => handleCancelHelp(help.id)} style={{ marginLeft: 10 }}>
-                  Отменить
-                </button>
+                <Button variant="outline" onClick={() => handleCancelHelp(help.id)} style={{ marginLeft: 10 }}>Отменить</Button>
               )}
             </div>
           ))}
-        </div>
+        </Card>
       )}
 
       {helps.some(h => h.status === 'CONFIRMED') && (
-        <div style={{ marginBottom: 20, padding: 15, backgroundColor: '#e8f5e9', borderRadius: 8 }}>
-          <h3>Отзывы</h3>
+        <Card style={{ marginBottom: 20 }}>
+          <h3 style={styles.sectionTitle}>Отзывы</h3>
           {reviews.length > 0 ? reviews.map((review) => (
-            <div key={review.id} style={{ border: '1px solid #ddd', padding: 10, margin: '10px 0', borderRadius: 4 }}>
+            <div key={review.id} style={styles.reviewItem}>
               <strong>{review.fromUserName}</strong> оценил <strong>{review.toUserName}</strong> на {review.rating} звёзд
-              {review.comment && <p>{review.comment}</p>}
+              {review.comment && <p style={styles.reviewComment}>{review.comment}</p>}
             </div>
-          )) : <p>Отзывов пока нет</p>}
+          )) : <p style={styles.emptyText}>Отзывов пока нет</p>}
           
           {user && (
-            <div style={{ marginTop: 15, padding: 15, backgroundColor: '#f5f5f5', borderRadius: 8 }}>
+            <div style={styles.reviewForm}>
               <h4>Оставить отзыв</h4>
               {(() => {
                 const confirmedHelps = helps.filter(h => h.status === 'CONFIRMED');
@@ -318,12 +332,12 @@ export const PostDetailPage = () => {
                   const toUserName = user.id === post.userId ? help.helperName : post.authorName;
                   
                   return (
-                    <div key={help.id} style={{ marginBottom: 10 }}>
-                      <p>Оценить пользователя: <strong>{toUserName}</strong></p>
+                    <div key={help.id} style={{ marginBottom: 12 }}>
+                      <p>Оценить: <strong>{toUserName}</strong></p>
                       <select 
                         value={reviewRating} 
                         onChange={(e) => setReviewRating(Number(e.target.value))}
-                        style={{ marginRight: 10 }}
+                        style={styles.select}
                       >
                         {[1,2,3,4,5].map(r => <option key={r} value={r}>{r} звёзд</option>)}
                       </select>
@@ -332,69 +346,281 @@ export const PostDetailPage = () => {
                         value={reviewComment}
                         onChange={(e) => setReviewComment(e.target.value)}
                         placeholder="Комментарий (необязательно)"
-                        style={{ marginRight: 10, width: 200 }}
+                        style={styles.inputSmall}
                       />
-                      <button onClick={() => handleSubmitReview(help.id, toUserId)}>
-                        Отправить отзыв
-                      </button>
+                      <Button onClick={() => handleSubmitReview(help.id, toUserId)}>Отправить</Button>
                     </div>
                   );
                 });
               })()}
             </div>
           )}
-        </div>
+        </Card>
       )}
 
-      <hr />
+      <div style={styles.divider} />
 
-      <h3>Комментарии ({comments.length})</h3>
+      <h3 style={styles.sectionTitle}>Комментарии ({comments.length})</h3>
       
       {user && (
-        <div style={{ marginBottom: 20 }}>
+        <Card style={{ marginBottom: 20 }}>
           <textarea
             value={newComment}
             onChange={(e) => setNewComment(e.target.value)}
             placeholder="Написать комментарий..."
-            style={{ width: '100%', height: 80 }}
+            style={styles.textarea}
           />
-          <button onClick={handleAddComment}>Отправить</button>
-        </div>
+          <Button onClick={handleAddComment}>Отправить</Button>
+        </Card>
       )}
 
       <div>
         {comments.map((comment) => (
-          <div key={comment.id} style={{ borderBottom: '1px solid #eee', padding: '10px 0', marginLeft: comment.parentCommentId ? 20 : 0 }}>
-            <strong>{comment.userName}</strong>
-            <span style={{ color: '#666', fontSize: 12 }}> — {new Date(comment.createdAt).toLocaleString()}</span>
+          <div key={comment.id} style={styles.commentItem}>
+            <div style={styles.commentHeader}>
+              <strong>{comment.userName}</strong>
+              <span style={styles.commentTime}> — {new Date(comment.createdAt).toLocaleString()}</span>
+            </div>
             {user && (
-              <button onClick={() => setReplyingTo(comment.id)} style={{ marginLeft: 10, backgroundColor: '#2196F3', color: 'white', border: 'none', padding: '2px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}>
-                Ответить
-              </button>
+              <Button variant="outline" onClick={() => setReplyingTo(comment.id)} style={styles.replyBtn}>Ответить</Button>
             )}
             {user?.id === comment.userId && (
-              <button onClick={() => handleDeleteComment(comment.id)} style={{ marginLeft: 5, backgroundColor: '#f44336', color: 'white', border: 'none', padding: '2px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}>
-                Удалить
-              </button>
+              <Button variant="danger" onClick={() => handleDeleteComment(comment.id)} style={styles.deleteBtn}>Удалить</Button>
             )}
-            <p>{comment.content}</p>
+            <p style={styles.commentContent}>{comment.content}</p>
             {replyingTo === comment.id && (
-              <div style={{ marginTop: 5, marginLeft: 20 }}>
+              <div style={styles.replyForm}>
                 <input
                   type="text"
                   value={replyContent}
                   onChange={(e) => setReplyContent(e.target.value)}
                   placeholder="Написать ответ..."
-                  style={{ width: '70%', padding: 5, marginRight: 5 }}
+                  style={styles.inputSmall}
                 />
-                <button onClick={() => handleReply(comment.id)} style={{ padding: '5px 10px' }}>Отправить</button>
-                <button onClick={() => { setReplyingTo(null); setReplyContent(''); }} style={{ marginLeft: 5, padding: '5px 10px' }}>Отмена</button>
+                <Button onClick={() => handleReply(comment.id)}>Отправить</Button>
+                <Button variant="outline" onClick={() => { setReplyingTo(null); setReplyContent(''); }}>Отмена</Button>
               </div>
             )}
           </div>
         ))}
-        {comments.length === 0 && <p>Комментариев пока нет</p>}
+        {comments.length === 0 && <p style={styles.emptyText}>Комментариев пока нет</p>}
       </div>
     </div>
   );
+};
+
+const styles: Record<string, React.CSSProperties> = {
+  container: {
+    padding: '24px',
+    maxWidth: 900,
+    margin: '0 auto',
+  },
+  loading: {
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    height: '200px',
+    color: theme.colors.text,
+    fontSize: '18px',
+  },
+  notFound: {
+    textAlign: 'center',
+    padding: '40px',
+    color: theme.colors.textMuted,
+  },
+  backLink: {
+    color: theme.colors.accentLight,
+    textDecoration: 'none',
+    fontSize: '14px',
+  },
+  mainCard: {
+    marginTop: '16px',
+    marginBottom: '24px',
+  },
+  title: {
+    color: theme.colors.text,
+    fontSize: '28px',
+    marginBottom: '16px',
+  },
+  description: {
+    color: theme.colors.textSecondary,
+    fontSize: '16px',
+    lineHeight: 1.6,
+  },
+  sectionTitle: {
+    color: theme.colors.text,
+    fontSize: '20px',
+    marginBottom: '16px',
+  },
+  imagesSection: {
+    marginTop: '20px',
+  },
+  imagesGrid: {
+    display: 'flex',
+    gap: '12px',
+    flexWrap: 'wrap',
+  },
+  imageWrapper: {
+    position: 'relative',
+  },
+  image: {
+    maxWidth: 200,
+    maxHeight: 200,
+    borderRadius: theme.borderRadius.md,
+    cursor: 'pointer',
+  },
+  removeImageBtn: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    background: theme.colors.error,
+    color: 'white',
+    border: 'none',
+    borderRadius: '50%',
+    width: 24,
+    height: 24,
+    cursor: 'pointer',
+    fontSize: '16px',
+  },
+  meta: {
+    marginTop: '20px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '16px',
+    flexWrap: 'wrap',
+  },
+  metaItem: {
+    color: theme.colors.textSecondary,
+    fontSize: '14px',
+  },
+  authorLink: {
+    color: theme.colors.accentLight,
+    textDecoration: 'none',
+  },
+  statusBadge: {
+    padding: '4px 12px',
+    borderRadius: 20,
+    fontSize: '12px',
+    fontWeight: 600,
+    color: '#fff',
+  },
+  authorActions: {
+    marginTop: '16px',
+    display: 'flex',
+    gap: '12px',
+  },
+  input: {
+    width: '100%',
+    padding: '12px',
+    fontSize: '15px',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    border: `1px solid ${theme.colors.border}`,
+    borderRadius: theme.borderRadius.md,
+    color: theme.colors.text,
+    outline: 'none',
+    marginBottom: '12px',
+  },
+  inputSmall: {
+    padding: '8px 12px',
+    fontSize: '14px',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    border: `1px solid ${theme.colors.border}`,
+    borderRadius: theme.borderRadius.md,
+    color: theme.colors.text,
+    outline: 'none',
+    marginRight: '8px',
+  },
+  buttonGroup: {
+    display: 'flex',
+    gap: '12px',
+    marginTop: '12px',
+  },
+  textarea: {
+    width: '100%',
+    height: '80px',
+    padding: '12px',
+    fontSize: '15px',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    border: `1px solid ${theme.colors.border}`,
+    borderRadius: theme.borderRadius.md,
+    color: theme.colors.text,
+    outline: 'none',
+    marginBottom: '12px',
+    resize: 'vertical',
+  },
+  select: {
+    padding: '8px 12px',
+    fontSize: '14px',
+    backgroundColor: theme.select.backgroundColor,
+    border: theme.select.border,
+    borderRadius: theme.borderRadius.md,
+    color: theme.select.color,
+    outline: 'none',
+    marginRight: '8px',
+    cursor: 'pointer',
+  },
+  helpItem: {
+    padding: '12px',
+    marginBottom: '12px',
+    borderBottom: `1px solid ${theme.colors.border}`,
+  },
+  reviewItem: {
+    padding: '12px',
+    marginBottom: '12px',
+    borderBottom: `1px solid ${theme.colors.border}`,
+  },
+  reviewComment: {
+    color: theme.colors.textSecondary,
+    fontSize: '14px',
+    marginTop: '8px',
+  },
+  reviewForm: {
+    marginTop: '16px',
+    paddingTop: '16px',
+    borderTop: `1px solid ${theme.colors.border}`,
+  },
+  divider: {
+    height: '1px',
+    backgroundColor: theme.colors.border,
+    margin: '24px 0',
+  },
+  commentItem: {
+    padding: '16px',
+    marginBottom: '12px',
+    borderBottom: `1px solid ${theme.colors.border}`,
+  },
+  commentHeader: {
+    marginBottom: '8px',
+  },
+  commentTime: {
+    color: theme.colors.textMuted,
+    fontSize: '12px',
+    marginLeft: '8px',
+  },
+  commentContent: {
+    color: theme.colors.textSecondary,
+    fontSize: '14px',
+    marginTop: '8px',
+  },
+  replyBtn: {
+    padding: '4px 10px',
+    fontSize: '12px',
+    marginLeft: '8px',
+  },
+  deleteBtn: {
+    padding: '4px 10px',
+    fontSize: '12px',
+    marginLeft: '8px',
+  },
+  replyForm: {
+    marginTop: '12px',
+    marginLeft: '20px',
+    display: 'flex',
+    gap: '8px',
+    alignItems: 'center',
+  },
+  emptyText: {
+    color: theme.colors.textMuted,
+    textAlign: 'center',
+  },
 };

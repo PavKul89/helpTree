@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
@@ -10,23 +10,26 @@ import { ChatListPage } from './pages/ChatListPage';
 import { ChatPage } from './pages/ChatPage';
 import { UsersPage } from './pages/UsersPage';
 import { MyOrdersPage } from './pages/MyOrdersPage';
+import { Navbar } from './components/Navbar';
+import { Layout } from './components/Layout';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, isLoading } = useAuth();
   
-  if (isLoading) return <div>Загрузка...</div>;
+  if (isLoading) return <div style={styles.loading}>Загрузка...</div>;
   if (!user) return <Navigate to="/login" />;
   
   return <>{children}</>;
 };
 
-function App() {
+const AppLayout = () => {
   return (
-    <AuthProvider>
-      <BrowserRouter>
+    <Layout>
+      <Navbar />
+      <main style={styles.main}>
         <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/login" element={<Navigate to="/" />} />
+          <Route path="/register" element={<Navigate to="/" />} />
           <Route path="/" element={<PostsPage />} />
           <Route path="/posts/new" element={
             <ProtectedRoute>
@@ -63,9 +66,96 @@ function App() {
             } 
           />
         </Routes>
+      </main>
+    </Layout>
+  );
+};
+
+function AppContent() {
+  const location = useLocation();
+  const isAuthPage = location.pathname === '/login' || location.pathname === '/register';
+  
+  return isAuthPage ? (
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/register" element={<RegisterPage />} />
+    </Routes>
+  ) : (
+    <AppLayout />
+  );
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <BrowserRouter>
+        <style>{`
+          @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+          @keyframes sway {
+            from { transform: rotate(-2deg); }
+            to { transform: rotate(2deg); }
+          }
+          @keyframes swayLeft {
+            from { transform: rotate(2deg); }
+            to { transform: rotate(-2deg); }
+          }
+          @keyframes slideUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+          }
+          * {
+            box-sizing: border-box;
+          }
+          body {
+            margin: 0;
+            padding: 0;
+          }
+          select {
+            background-color: #065F46 !important;
+            color: #ffffff !important;
+            border: 1px solid rgba(255, 255, 255, 0.2) !important;
+          }
+          select option {
+            background-color: #065F46 !important;
+            color: #ffffff !important;
+          }
+          nav a:hover {
+            color: #34D399 !important;
+            text-decoration: underline;
+          }
+          nav a:active {
+            opacity: 0.7;
+          }
+          nav a {
+            cursor: pointer;
+          }
+          nav .logo:hover {
+            opacity: 0.8;
+          }
+        `}</style>
+        <AppContent />
       </BrowserRouter>
     </AuthProvider>
   );
 }
+
+const styles: Record<string, React.CSSProperties> = {
+  main: {
+    padding: '24px',
+    maxWidth: '1200px',
+    margin: '0 auto',
+  },
+  loading: {
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    height: '100vh',
+    color: '#fff',
+    fontSize: '18px',
+  },
+};
 
 export default App;

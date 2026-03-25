@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { authApi } from '../api/authApi';
+import { Card } from '../components/Card';
+import { theme } from '../theme';
 import type { UserPublic } from '../types';
 
 export const UsersPage = () => {
@@ -14,25 +16,69 @@ export const UsersPage = () => {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div>Загрузка...</div>;
+  if (loading) return <div style={styles.loading}>Загрузка...</div>;
 
   return (
-    <div style={{ padding: 20 }}>
-      <header style={{ marginBottom: 20 }}>
-        <Link to="/">← На главную</Link>
-      </header>
-      <h1>Пользователи</h1>
-      <div style={{ display: 'grid', gap: 15 }}>
+    <div style={styles.container}>
+      <Link to="/" style={styles.backLink}>← На главную</Link>
+      <h1 style={styles.title}>Пользователи</h1>
+      <div style={styles.grid}>
         {users.map((user) => (
-          <div key={user.id} style={{ border: '1px solid #ddd', padding: 15, borderRadius: 8 }}>
-            <Link to={`/profile/${user.id}`}>
-              <strong>{user.name}</strong>
+          <Card key={user.id} hoverable>
+            <Link to={`/profile/${user.id}`} style={styles.userLink}>
+              <strong style={styles.userName}>{user.name}</strong>
             </Link>
-            <p>Рейтинг: {user.rating} | Помог: {user.helpedCount} | Долгов: {user.debtCount}</p>
-          </div>
+            <p style={styles.userStats}>★ Рейтинг: {user.rating} | Помог: {user.helpedCount} | Долгов: {user.debtCount}</p>
+          </Card>
         ))}
       </div>
-      {users.length === 0 && <p>Пользователей пока нет</p>}
+      {users.length === 0 && <p style={styles.empty}>Пользователей пока нет</p>}
     </div>
   );
+};
+
+const styles: Record<string, React.CSSProperties> = {
+  container: {
+    padding: '24px',
+  },
+  loading: {
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    height: '200px',
+    color: theme.colors.text,
+    fontSize: '18px',
+  },
+  backLink: {
+    color: theme.colors.accentLight,
+    textDecoration: 'none',
+    fontSize: '14px',
+  },
+  title: {
+    color: theme.colors.text,
+    fontSize: '28px',
+    marginBottom: '24px',
+  },
+  grid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+    gap: '16px',
+  },
+  userLink: {
+    textDecoration: 'none',
+    color: theme.colors.text,
+  },
+  userName: {
+    fontSize: '18px',
+  },
+  userStats: {
+    color: theme.colors.textSecondary,
+    fontSize: '14px',
+    marginTop: '8px',
+  },
+  empty: {
+    color: theme.colors.textMuted,
+    textAlign: 'center',
+    padding: '40px',
+  },
 };

@@ -3,6 +3,9 @@ import { Link, useNavigate } from 'react-router-dom';
 import { postsApi } from '../api/postsApi';
 import { helpApi } from '../api/helpApi';
 import { useAuth } from '../context/AuthContext';
+import { Card } from '../components/Card';
+import { Button } from '../components/Button';
+import { theme } from '../theme';
 import type { Post, Help } from '../types';
 
 export const MyOrdersPage = () => {
@@ -45,33 +48,39 @@ export const MyOrdersPage = () => {
 
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
-      OPEN: '#4CAF50',
-      ACCEPTED: '#2196F3',
-      COMPLETED: '#FF9800',
-      CONFIRMED: '#9C27B0',
-      CANCELLED: '#F44336',
+      OPEN: '#10B981',
+      ACCEPTED: '#38bdf8',
+      COMPLETED: '#F59E0B',
+      CONFIRMED: '#8B5CF6',
+      CANCELLED: '#EF4444',
     };
-    return colors[status] || '#999';
+    return colors[status] || '#6B7280';
   };
 
-  if (loading) return <div>Загрузка...</div>;
+  const getStatusLabel = (status: string) => {
+    const labels: Record<string, string> = {
+      OPEN: 'Открыт',
+      ACCEPTED: 'Принят',
+      COMPLETED: 'Завершён',
+      CONFIRMED: 'Подтверждён',
+      CANCELLED: 'Отменён',
+    };
+    return labels[status] || status;
+  };
+
+  if (loading) return <div style={styles.loading}>Загрузка...</div>;
 
   return (
-    <div style={{ padding: 20 }}>
-      <Link to="/">← На главную</Link>
-      <h1>Мои заказы</h1>
+    <div style={styles.container}>
+      <Link to="/" style={styles.backLink}>← На главную</Link>
+      <h1 style={styles.title}>Мои заказы</h1>
 
-      <div style={{ marginBottom: 20 }}>
+      <div style={styles.tabs}>
         <button
           onClick={() => setActiveTab('posts')}
           style={{
-            padding: '10px 20px',
-            marginRight: 10,
-            backgroundColor: activeTab === 'posts' ? '#2196F3' : '#ddd',
-            color: activeTab === 'posts' ? 'white' : 'black',
-            border: 'none',
-            borderRadius: 4,
-            cursor: 'pointer',
+            ...styles.tab,
+            ...(activeTab === 'posts' ? styles.tabActive : {}),
           }}
         >
           Мои посты ({myPosts.length})
@@ -79,12 +88,8 @@ export const MyOrdersPage = () => {
         <button
           onClick={() => setActiveTab('helps')}
           style={{
-            padding: '10px 20px',
-            backgroundColor: activeTab === 'helps' ? '#2196F3' : '#ddd',
-            color: activeTab === 'helps' ? 'white' : 'black',
-            border: 'none',
-            borderRadius: 4,
-            cursor: 'pointer',
+            ...styles.tab,
+            ...(activeTab === 'helps' ? styles.tabActive : {}),
           }}
         >
           Мои отклики ({myHelps.length})
@@ -94,20 +99,24 @@ export const MyOrdersPage = () => {
       {activeTab === 'posts' && (
         <div>
           {myPosts.length === 0 ? (
-            <p>У вас пока нет постов</p>
+            <Card><p style={styles.emptyText}>У вас пока нет постов</p></Card>
           ) : (
             myPosts.map((post) => (
-              <div key={post.id} style={{ border: '1px solid #ddd', padding: 15, marginBottom: 10, borderRadius: 8 }}>
-                <Link to={`/posts/${post.id}`}><strong>{post.title}</strong></Link>
-                <button onClick={() => handleDeletePost(post.id)} style={{ marginLeft: 10, backgroundColor: '#f44336', color: 'white', border: 'none', padding: '2px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}>
-                  Удалить
-                </button>
-                <p>{post.description}</p>
-                <small>
-                  Статус: <span style={{ backgroundColor: getStatusColor(post.status), color: 'white', padding: '2px 6px', borderRadius: 4 }}>{post.status}</span>
-                  {' | '}Категория: {post.category}
-                </small>
-              </div>
+              <Card key={post.id} style={styles.itemCard}>
+                <div style={styles.itemHeader}>
+                  <Link to={`/posts/${post.id}`} style={styles.itemTitle}>{post.title}</Link>
+                  <Button variant="danger" onClick={() => handleDeletePost(post.id)} style={styles.deleteBtn}>
+                    Удалить
+                  </Button>
+                </div>
+                <p style={styles.itemDesc}>{post.description}</p>
+                <div style={styles.itemMeta}>
+                  <span style={{ ...styles.statusBadge, backgroundColor: getStatusColor(post.status) }}>
+                    {getStatusLabel(post.status)}
+                  </span>
+                  <span style={styles.category}>{post.category}</span>
+                </div>
+              </Card>
             ))
           )}
         </div>
@@ -116,20 +125,109 @@ export const MyOrdersPage = () => {
       {activeTab === 'helps' && (
         <div>
           {myHelps.length === 0 ? (
-            <p>У вас пока нет откликов</p>
+            <Card><p style={styles.emptyText}>У вас пока нет откликов</p></Card>
           ) : (
             myHelps.map((help) => (
-              <div key={help.id} style={{ border: '1px solid #ddd', padding: 15, marginBottom: 10, borderRadius: 8 }}>
-                <Link to={`/posts/${help.postId}`}><strong>{help.postTitle}</strong></Link>
-                <p>Автор поста: {help.receiverName}</p>
-                <small>
-                  Статус: <span style={{ backgroundColor: getStatusColor(help.status), color: 'white', padding: '2px 6px', borderRadius: 4 }}>{help.status}</span>
-                </small>
-              </div>
+              <Card key={help.id} style={styles.itemCard}>
+                <Link to={`/posts/${help.postId}`} style={styles.itemTitle}>{help.postTitle}</Link>
+                <p style={styles.itemMeta}>Автор поста: {help.receiverName}</p>
+                <span style={{ ...styles.statusBadge, backgroundColor: getStatusColor(help.status) }}>
+                  {getStatusLabel(help.status)}
+                </span>
+              </Card>
             ))
           )}
         </div>
       )}
     </div>
   );
+};
+
+const styles: Record<string, React.CSSProperties> = {
+  container: {
+    padding: '24px',
+  },
+  loading: {
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    height: '200px',
+    color: theme.colors.text,
+    fontSize: '18px',
+  },
+  backLink: {
+    color: theme.colors.accentLight,
+    textDecoration: 'none',
+    fontSize: '14px',
+  },
+  title: {
+    color: theme.colors.text,
+    fontSize: '28px',
+    marginBottom: '24px',
+  },
+  tabs: {
+    display: 'flex',
+    gap: '12px',
+    marginBottom: '24px',
+  },
+  tab: {
+    padding: '12px 24px',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    color: theme.colors.textSecondary,
+    border: 'none',
+    borderRadius: theme.borderRadius.md,
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: 500,
+    transition: 'all 0.2s',
+  },
+  tabActive: {
+    backgroundColor: theme.colors.accent,
+    color: '#fff',
+  },
+  itemCard: {
+    marginBottom: '12px',
+  },
+  itemHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '8px',
+  },
+  itemTitle: {
+    color: theme.colors.text,
+    fontSize: '16px',
+    fontWeight: 600,
+    textDecoration: 'none',
+  } as React.CSSProperties,
+  itemDesc: {
+    color: theme.colors.textSecondary,
+    fontSize: '14px',
+    marginBottom: '12px',
+  },
+  itemMeta: {
+    color: theme.colors.textMuted,
+    fontSize: '13px',
+  },
+  statusBadge: {
+    padding: '4px 10px',
+    borderRadius: 20,
+    fontSize: '12px',
+    fontWeight: 600,
+    color: '#fff',
+    marginRight: '8px',
+  },
+  category: {
+    color: theme.colors.textMuted,
+    fontSize: '13px',
+  },
+  deleteBtn: {
+    padding: '6px 12px',
+    fontSize: '12px',
+  },
+  emptyText: {
+    color: theme.colors.textMuted,
+    textAlign: 'center',
+    margin: 0,
+  },
 };

@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { chatApi } from '../api/chatApi';
+import { Card } from '../components/Card';
+import { Button } from '../components/Button';
+import { theme } from '../theme';
 import type { Chat } from '../types';
 
 export const ChatListPage = () => {
@@ -36,63 +39,136 @@ export const ChatListPage = () => {
     }
   };
 
-  if (loading) return <div>Загрузка...</div>;
+  if (loading) return <div style={styles.loading}>Загрузка...</div>;
 
   return (
-    <div style={{ padding: 20 }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <h1>Чаты</h1>
-        <Link to="/">← На главную</Link>
+    <div style={styles.container}>
+      <header style={styles.header}>
+        <h1 style={styles.title}>Чаты</h1>
+        <Link to="/" style={styles.backLink}>← На главную</Link>
       </header>
 
-      <div style={{ display: 'grid', gap: 10 }}>
+      <div style={styles.grid}>
         {chats.map((chat) => (
-          <div 
+          <Card 
             key={chat.id} 
-            onClick={() => navigate(`/chats/${chat.id}`)}
-            style={{ 
-              border: '1px solid #ddd', 
-              padding: 15, 
-              borderRadius: 8,
-              cursor: 'pointer',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center'
-            }}
+            hoverable
+            style={styles.chatCard}
           >
-            <div>
-              <strong>{chat.participantName}</strong>
-              <p style={{ margin: 0, color: '#666', fontSize: 14 }}>
-                {chat.lastMessage || 'Нет сообщений'}
-              </p>
-              <small style={{ color: '#999' }}>
-                {chat.lastMessageAt ? new Date(chat.lastMessageAt).toLocaleString() : ''}
-              </small>
+            <div 
+              onClick={() => navigate(`/chats/${chat.id}`)}
+              style={styles.chatContent}
+            >
+              <div style={styles.chatInfo}>
+                <strong style={styles.participantName}>{chat.participantName}</strong>
+                <p style={styles.lastMessage}>
+                  {chat.lastMessage || 'Нет сообщений'}
+                </p>
+                <small style={styles.timestamp}>
+                  {chat.lastMessageAt ? new Date(chat.lastMessageAt).toLocaleString() : ''}
+                </small>
+              </div>
+              <div style={styles.chatActions}>
+                {chat.unreadCount > 0 && (
+                  <span style={styles.unreadBadge}>
+                    {chat.unreadCount}
+                  </span>
+                )}
+                <Button 
+                  variant="danger"
+                  onClick={(e) => handleDeleteChat(chat.id, e)}
+                  style={styles.deleteBtn}
+                >
+                  Удалить
+                </Button>
+              </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              {chat.unreadCount > 0 && (
-                <span style={{ 
-                  backgroundColor: '#2196F3', 
-                  color: 'white', 
-                  borderRadius: '50%', 
-                  padding: '4px 8px',
-                  fontSize: 12
-                }}>
-                  {chat.unreadCount}
-                </span>
-              )}
-              <button 
-                onClick={(e) => handleDeleteChat(chat.id, e)}
-                style={{ background: '#F44336', color: 'white', border: 'none', padding: '5px 10px', borderRadius: 4 }}
-              >
-                Удалить
-              </button>
-            </div>
-          </div>
+          </Card>
         ))}
       </div>
 
-      {chats.length === 0 && <p>Чатов пока нет</p>}
+      {chats.length === 0 && <p style={styles.empty}>Чатов пока нет</p>}
     </div>
   );
+};
+
+const styles: Record<string, React.CSSProperties> = {
+  container: {
+    padding: '24px',
+  },
+  loading: {
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    height: '200px',
+    color: theme.colors.text,
+    fontSize: '18px',
+  },
+  header: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '24px',
+  },
+  title: {
+    color: theme.colors.text,
+    fontSize: '28px',
+    margin: 0,
+  },
+  backLink: {
+    color: theme.colors.accentLight,
+    textDecoration: 'none',
+    fontSize: '14px',
+  },
+  grid: {
+    display: 'grid',
+    gap: '12px',
+  },
+  chatCard: {
+    padding: '16px',
+  },
+  chatContent: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    cursor: 'pointer',
+  },
+  chatInfo: {
+    flex: 1,
+  },
+  participantName: {
+    fontSize: '16px',
+    color: theme.colors.text,
+  },
+  lastMessage: {
+    margin: '4px 0',
+    color: theme.colors.textSecondary,
+    fontSize: '14px',
+  },
+  timestamp: {
+    color: theme.colors.textMuted,
+    fontSize: '12px',
+  },
+  chatActions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+  },
+  unreadBadge: {
+    backgroundColor: theme.colors.accent,
+    color: 'white',
+    borderRadius: '50%',
+    padding: '4px 10px',
+    fontSize: '12px',
+    fontWeight: 600,
+  },
+  deleteBtn: {
+    padding: '6px 12px',
+    fontSize: '12px',
+  },
+  empty: {
+    color: theme.colors.textMuted,
+    textAlign: 'center',
+    padding: '40px',
+  },
 };

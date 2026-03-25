@@ -2,6 +2,9 @@ import { useState, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { postsApi } from '../api/postsApi';
 import { imagesApi } from '../api/imagesApi';
+import { Card } from '../components/Card';
+import { Button } from '../components/Button';
+import { theme } from '../theme';
 
 export const CreatePostPage = () => {
   const [title, setTitle] = useState('');
@@ -45,90 +48,163 @@ export const CreatePostPage = () => {
   };
 
   return (
-    <div style={{ maxWidth: 600, margin: '50px auto', padding: 20 }}>
-      <Link to="/">← Назад</Link>
-      <h1>Создать пост</h1>
-      {error && <p style={{ color: 'red' }}>{error}</p>}
-      <form onSubmit={handleSubmit}>
-        <div style={{ marginBottom: 15 }}>
-          <label>Заголовок</label>
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            required
-            style={{ width: '100%', padding: 8, display: 'block' }}
-          />
-        </div>
-        <div style={{ marginBottom: 15 }}>
-          <label>Описание</label>
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            required
-            style={{ width: '100%', height: 150, padding: 8, display: 'block' }}
-          />
-        </div>
-        <div style={{ marginBottom: 15 }}>
-          <label>Категория</label>
-          <select
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            style={{ width: '100%', padding: 8, display: 'block' }}
-          >
-            <option value="Дрова">Дрова</option>
-            <option value="Уборка">Уборка</option>
-            <option value="Ремонт">Ремонт</option>
-            <option value="Доставка">Доставка</option>
-            <option value="Покупки">Покупки</option>
-            <option value="Другое">Другое</option>
-          </select>
-        </div>
-        <div style={{ marginBottom: 15 }}>
-          <label>Картинки</label>
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleImageChange}
-            accept="image/*"
-            multiple
-            style={{ display: 'none' }}
-          />
-          <button type="button" onClick={() => fileInputRef.current?.click()} style={{ padding: '8px 16px' }}>
-            Выбрать картинки
-          </button>
-          {previews.length > 0 && (
-            <div style={{ display: 'flex', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
-              {previews.map((preview, index) => (
-                <div key={index} style={{ position: 'relative' }}>
-                  <img src={preview} alt="" style={{ width: 100, height: 100, objectFit: 'cover', borderRadius: 8 }} />
-                  <button
-                    type="button"
-                    onClick={() => removeImage(index)}
-                    style={{
-                      position: 'absolute',
-                      top: -5,
-                      right: -5,
-                      background: 'red',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '50%',
-                      width: 20,
-                      height: 20,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-        <button type="submit" disabled={loading} style={{ padding: '10px 20px' }}>
-          {loading ? 'Создание...' : 'Создать'}
-        </button>
-      </form>
+    <div style={styles.container}>
+      <Link to="/" style={styles.backLink}>← На главную</Link>
+      <h1 style={styles.title}>Создать пост</h1>
+      {error && <p style={styles.error}>{error}</p>}
+      <Card>
+        <form onSubmit={handleSubmit}>
+          <div style={styles.field}>
+            <label style={styles.label}>Заголовок</label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              required
+              style={styles.input}
+            />
+          </div>
+          <div style={styles.field}>
+            <label style={styles.label}>Описание</label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              required
+              style={{ ...styles.input, height: 150 }}
+            />
+          </div>
+          <div style={styles.field}>
+            <label style={styles.label}>Категория</label>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              style={styles.select}
+            >
+              <option value="Дрова">Дрова</option>
+              <option value="Уборка">Уборка</option>
+              <option value="Ремонт">Ремонт</option>
+              <option value="Доставка">Доставка</option>
+              <option value="Покупки">Покупки</option>
+              <option value="Другое">Другое</option>
+            </select>
+          </div>
+          <div style={styles.field}>
+            <label style={styles.label}>Картинки</label>
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleImageChange}
+              accept="image/*"
+              multiple
+              style={{ display: 'none' }}
+            />
+            <Button type="button" onClick={() => fileInputRef.current?.click()}>
+              Выбрать картинки
+            </Button>
+            {previews.length > 0 && (
+              <div style={styles.previewGrid}>
+                {previews.map((preview, index) => (
+                  <div key={index} style={styles.previewItem}>
+                    <img src={preview} alt="" style={styles.previewImage} />
+                    <button
+                      type="button"
+                      onClick={() => removeImage(index)}
+                      style={styles.removeBtn}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <Button type="submit" disabled={loading}>
+            {loading ? 'Создание...' : 'Создать'}
+          </Button>
+        </form>
+      </Card>
     </div>
   );
+};
+
+const styles: Record<string, React.CSSProperties> = {
+  container: {
+    maxWidth: 600,
+    margin: '0 auto',
+    padding: '24px',
+  },
+  backLink: {
+    color: theme.colors.accentLight,
+    textDecoration: 'none',
+    fontSize: '14px',
+  },
+  title: {
+    color: theme.colors.text,
+    fontSize: '28px',
+    marginBottom: '24px',
+  },
+  error: {
+    color: theme.colors.error,
+    marginBottom: '16px',
+  },
+  field: {
+    marginBottom: '20px',
+  },
+  label: {
+    display: 'block',
+    color: theme.colors.textSecondary,
+    marginBottom: '8px',
+    fontSize: '14px',
+  },
+  input: {
+    width: '100%',
+    padding: '12px',
+    fontSize: '15px',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    border: `1px solid ${theme.colors.border}`,
+    borderRadius: theme.borderRadius.md,
+    color: theme.colors.text,
+    outline: 'none',
+  },
+  select: {
+    width: '100%',
+    padding: '12px',
+    fontSize: '15px',
+    backgroundColor: theme.select.backgroundColor,
+    border: theme.select.border,
+    borderRadius: theme.borderRadius.md,
+    color: theme.select.color,
+    outline: 'none',
+  },
+  previewGrid: {
+    display: 'flex',
+    gap: '12px',
+    marginTop: '16px',
+    flexWrap: 'wrap',
+  },
+  previewItem: {
+    position: 'relative',
+  },
+  previewImage: {
+    width: 100,
+    height: 100,
+    objectFit: 'cover',
+    borderRadius: theme.borderRadius.md,
+  },
+  removeBtn: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    background: theme.colors.error,
+    color: 'white',
+    border: 'none',
+    borderRadius: '50%',
+    width: 24,
+    height: 24,
+    cursor: 'pointer',
+    fontSize: '16px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 };

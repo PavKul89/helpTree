@@ -3,6 +3,9 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import { authApi } from '../api/authApi';
 import { chatApi } from '../api/chatApi';
 import { useAuth } from '../context/AuthContext';
+import { Card } from '../components/Card';
+import { Button } from '../components/Button';
+import { theme } from '../theme';
 import type { User, UserPublic } from '../types';
 
 export const ProfilePage = () => {
@@ -84,113 +87,183 @@ export const ProfilePage = () => {
     }
   };
 
-  if (loading) return <div>Загрузка...</div>;
-  if (!profileUser) return <div>Пользователь не найден</div>;
+  if (loading) return <div style={styles.loading}>Загрузка...</div>;
+  if (!profileUser) return <div style={styles.notFound}>Пользователь не найден</div>;
 
   const fullUser = profileUser as User;
 
   return (
-    <div style={{ maxWidth: 600, margin: '50px auto', padding: 20 }}>
-      <Link to="/">← На главную</Link>
-      <h1>{isOwnProfile ? 'Профиль' : `Профиль: ${profileUser.name}`}</h1>
+    <div style={styles.container}>
+      <Link to="/" style={styles.backLink}>← На главную</Link>
+      <h1 style={styles.title}>{isOwnProfile ? 'Профиль' : `Профиль: ${profileUser.name}`}</h1>
       
       {isEditing ? (
-        <div style={{ border: '1px solid #ddd', padding: 20, borderRadius: 8 }}>
-          <h3>Редактирование профиля</h3>
-          <div style={{ marginBottom: 15 }}>
-            <label>Имя:</label>
+        <Card>
+          <h3 style={styles.sectionTitle}>Редактирование профиля</h3>
+          <div style={styles.field}>
+            <label style={styles.label}>Имя:</label>
             <input
               type="text"
               value={editForm.name}
               onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-              style={{ width: '100%', padding: 8 }}
+              style={styles.input}
             />
           </div>
-          <div style={{ marginBottom: 15 }}>
-            <label>Email:</label>
+          <div style={styles.field}>
+            <label style={styles.label}>Email:</label>
             <input
               type="email"
               value={editForm.email}
               onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-              style={{ width: '100%', padding: 8 }}
+              style={styles.input}
             />
           </div>
-          <div style={{ marginBottom: 15 }}>
-            <label>Телефон:</label>
+          <div style={styles.field}>
+            <label style={styles.label}>Телефон:</label>
             <input
               type="text"
               value={editForm.phone}
               onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
-              style={{ width: '100%', padding: 8 }}
+              style={styles.input}
             />
           </div>
-          <div style={{ marginBottom: 15 }}>
-            <label>Город:</label>
+          <div style={styles.field}>
+            <label style={styles.label}>Город:</label>
             <input
               type="text"
               value={editForm.city}
               onChange={(e) => setEditForm({ ...editForm, city: e.target.value })}
-              style={{ width: '100%', padding: 8 }}
+              style={styles.input}
             />
           </div>
-          <button onClick={handleSaveProfile} style={{ marginRight: 10, padding: '8px 16px' }}>
-            Сохранить
-          </button>
-          <button onClick={() => setIsEditing(false)} style={{ padding: '8px 16px' }}>
-            Отмена
-          </button>
-        </div>
+          <div style={styles.buttonGroup}>
+            <Button onClick={handleSaveProfile} style={{ marginRight: 10 }}>
+              Сохранить
+            </Button>
+            <Button variant="outline" onClick={() => setIsEditing(false)}>
+              Отмена
+            </Button>
+          </div>
+        </Card>
       ) : (
-        <div style={{ border: '1px solid #ddd', padding: 20, borderRadius: 8 }}>
-          <p><strong>Имя:</strong> {profileUser.name}</p>
+        <Card>
+          <p style={styles.fieldRow}><strong style={styles.fieldLabel}>Имя:</strong> {profileUser.name}</p>
           
           {'email' in profileUser && (
-            <p><strong>Email:</strong> {profileUser.email}</p>
+            <p style={styles.fieldRow}><strong style={styles.fieldLabel}>Email:</strong> {profileUser.email}</p>
           )}
           
           {'phone' in fullUser && fullUser.phone && (
-            <p><strong>Телефон:</strong> {fullUser.phone}</p>
+            <p style={styles.fieldRow}><strong style={styles.fieldLabel}>Телефон:</strong> {fullUser.phone}</p>
           )}
           
           {'city' in fullUser && fullUser.city && (
-            <p><strong>Город:</strong> {fullUser.city}</p>
+            <p style={styles.fieldRow}><strong style={styles.fieldLabel}>Город:</strong> {fullUser.city}</p>
           )}
           
-          <p><strong>Рейтинг:</strong> {profileUser.rating}</p>
+          <p style={styles.fieldRow}><strong style={styles.fieldLabel}>Рейтинг:</strong> ★ {profileUser.rating}</p>
           
           {'helpedCount' in profileUser && (
             <>
-              <p><strong>Помог:</strong> {profileUser.helpedCount} раз</p>
-              <p><strong>Долгов:</strong> {profileUser.debtCount}</p>
+              <p style={styles.fieldRow}><strong style={styles.fieldLabel}>Помог:</strong> {profileUser.helpedCount} раз</p>
+              <p style={styles.fieldRow}><strong style={styles.fieldLabel}>Долгов:</strong> {profileUser.debtCount}</p>
             </>
           )}
           
           {'role' in profileUser && (
             <>
-              <p><strong>Роль:</strong> {profileUser.role}</p>
-              <p><strong>Telegram:</strong> {profileUser.telegramChatId || 'Не подключён'}</p>
+              <p style={styles.fieldRow}><strong style={styles.fieldLabel}>Роль:</strong> {profileUser.role}</p>
+              <p style={styles.fieldRow}><strong style={styles.fieldLabel}>Telegram:</strong> {profileUser.telegramChatId || 'Не подключён'}</p>
             </>
           )}
-        </div>
+        </Card>
       )}
 
-      {isOwnProfile && !isEditing && (
-        <button 
-          onClick={() => setIsEditing(true)}
-          style={{ marginTop: 20, padding: '10px 20px', cursor: 'pointer' }}
-        >
-          Редактировать профиль
-        </button>
-      )}
+      <div style={styles.actions}>
+        {isOwnProfile && !isEditing && (
+          <Button onClick={() => setIsEditing(true)}>
+            Редактировать профиль
+          </Button>
+        )}
 
-      {!isOwnProfile && (
-        <button 
-          onClick={handleStartChat}
-          style={{ marginTop: 20, padding: '10px 20px', cursor: 'pointer' }}
-        >
-          Написать сообщение
-        </button>
-      )}
+        {!isOwnProfile && (
+          <Button onClick={handleStartChat}>
+            Написать сообщение
+          </Button>
+        )}
+      </div>
     </div>
   );
+};
+
+const styles: Record<string, React.CSSProperties> = {
+  container: {
+    maxWidth: 600,
+    margin: '0 auto',
+    padding: '24px',
+  },
+  loading: {
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    height: '200px',
+    color: theme.colors.text,
+    fontSize: '18px',
+  },
+  notFound: {
+    textAlign: 'center',
+    padding: '40px',
+    color: theme.colors.textMuted,
+  },
+  backLink: {
+    color: theme.colors.accentLight,
+    textDecoration: 'none',
+    fontSize: '14px',
+  },
+  title: {
+    color: theme.colors.text,
+    fontSize: '28px',
+    marginBottom: '24px',
+  },
+  sectionTitle: {
+    color: theme.colors.text,
+    marginBottom: '16px',
+  },
+  field: {
+    marginBottom: '16px',
+  },
+  label: {
+    display: 'block',
+    color: theme.colors.textSecondary,
+    marginBottom: '6px',
+    fontSize: '14px',
+  },
+  input: {
+    width: '100%',
+    padding: '12px',
+    fontSize: '15px',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    border: `1px solid ${theme.colors.border}`,
+    borderRadius: theme.borderRadius.md,
+    color: theme.colors.text,
+    outline: 'none',
+  },
+  buttonGroup: {
+    display: 'flex',
+    gap: '12px',
+    marginTop: '20px',
+  },
+  fieldRow: {
+    marginBottom: '12px',
+    color: theme.colors.text,
+  },
+  fieldLabel: {
+    color: theme.colors.textSecondary,
+    marginRight: '8px',
+  },
+  actions: {
+    marginTop: '24px',
+    display: 'flex',
+    gap: '12px',
+  },
 };
