@@ -4,6 +4,7 @@ import { chatApi } from '../api/chatApi';
 import type { Message } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/Button';
+import { Spinner } from '../components/Spinner';
 import { theme } from '../theme';
 
 export const ChatPage = () => {
@@ -48,7 +49,7 @@ export const ChatPage = () => {
     }
   };
 
-  if (loading) return <div style={styles.loading}>Загрузка...</div>;
+  if (loading) return <Spinner message="Загрузка сообщений..." />;
 
   return (
     <div style={styles.container}>

@@ -3,12 +3,16 @@ import { Link, useNavigate } from 'react-router-dom';
 import { chatApi } from '../api/chatApi';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
+import { Spinner } from '../components/Spinner';
+import { EmptyState } from '../components/EmptyState';
+import { Modal } from '../components/Modal';
 import { theme } from '../theme';
 import type { Chat } from '../types';
 
 export const ChatListPage = () => {
   const [chats, setChats] = useState<Chat[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deleteChatId, setDeleteChatId] = useState<number | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -26,20 +30,24 @@ export const ChatListPage = () => {
     }
   };
 
-  const handleDeleteChat = async (chatId: number, e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (window.confirm('Удалить чат?')) {
-      try {
-        await chatApi.deleteChat(chatId);
-        loadChats();
-      } catch (err) {
-        console.error(err);
-      }
+  const handleDeleteChat = async () => {
+    if (!deleteChatId) return;
+    try {
+      await chatApi.deleteChat(deleteChatId);
+      setDeleteChatId(null);
+      loadChats();
+    } catch (err) {
+      console.error(err);
     }
   };
 
-  if (loading) return <div style={styles.loading}>Загрузка...</div>;
+  const confirmDeleteChat = (chatId: number, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDeleteChatId(chatId);
+  };
+
+  if (loading) return <Spinner message="Загрузка чатов..." />;
 
   return (
     <div style={styles.container}>
@@ -76,7 +84,7 @@ export const ChatListPage = () => {
                 )}
                 <Button 
                   variant="danger"
-                  onClick={(e) => handleDeleteChat(chat.id, e)}
+                  onClick={(e) => confirmDeleteChat(chat.id, e)}
                   style={styles.deleteBtn}
                 >
                   Удалить
@@ -87,7 +95,23 @@ export const ChatListPage = () => {
         ))}
       </div>
 
-      {chats.length === 0 && <p style={styles.empty}>Чатов пока нет</p>}
+      {chats.length === 0 && (
+        <EmptyState 
+          icon="💬" 
+          title="Чатов пока нет" 
+          description="Начните общение с другими пользователями!"
+        />
+      )}
+
+      <Modal
+        isOpen={!!deleteChatId}
+        onClose={() => setDeleteChatId(null)}
+        onConfirm={handleDeleteChat}
+        title="Удаление чата"
+        message="Вы уверены, что хотите удалить этот чат? Все сообщения будут потеряны."
+        confirmText="Удалить"
+        cancelText="Отмена"
+      />
     </div>
   );
 };

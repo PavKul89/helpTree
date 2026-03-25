@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { theme } from '../theme';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -12,9 +12,19 @@ export const Button: React.FC<ButtonProps> = ({
   style,
   ...props 
 }) => {
+  const [isHovered, setIsHovered] = useState(false);
+  
+  const variantStyles = getVariantStyles(variant, isHovered);
+  
   return (
     <button 
-      style={{ ...styles.button, ...styles[variant], ...style }}
+      style={{ 
+        ...styles.button, 
+        ...variantStyles,
+        ...style,
+      }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
       {...props}
     >
       {children}
@@ -22,28 +32,49 @@ export const Button: React.FC<ButtonProps> = ({
   );
 };
 
+const getVariantStyles = (variant: string, isHovered: boolean): React.CSSProperties => {
+  switch (variant) {
+    case 'primary':
+      return isHovered ? {
+        background: theme.gradients.buttonHover,
+        boxShadow: theme.shadows.buttonHover,
+        transform: 'translateY(-2px) scale(1.02)',
+      } : {
+        background: theme.gradients.button,
+        boxShadow: theme.shadows.button,
+      };
+    case 'outline':
+      return isHovered ? {
+        background: 'rgba(255,255,255,0.1)',
+        borderColor: '#22d3ee',
+        color: '#22d3ee',
+        transform: 'translateY(-2px)',
+      } : {
+        background: 'transparent',
+        border: `1px solid ${theme.colors.border}`,
+        color: theme.colors.text,
+      };
+    case 'danger':
+      return isHovered ? {
+        background: '#dc2626',
+        transform: 'translateY(-2px)',
+      } : {
+        background: theme.colors.error,
+      };
+    default:
+      return {};
+  }
+};
+
 const styles: Record<string, React.CSSProperties> = {
   button: {
-    padding: '10px 20px',
+    padding: '12px 24px',
     borderRadius: theme.borderRadius.md,
     fontSize: '14px',
     fontWeight: 600,
     cursor: 'pointer',
-    transition: 'all 0.3s ease',
+    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
     border: 'none',
-  },
-  primary: {
-    background: theme.gradients.button,
-    color: '#fff',
-    boxShadow: theme.shadows.button,
-  },
-  outline: {
-    background: 'transparent',
-    color: theme.colors.text,
-    border: `1px solid ${theme.colors.border}`,
-  },
-  danger: {
-    background: theme.colors.error,
-    color: '#fff',
+    outline: 'none',
   },
 };

@@ -106,6 +106,10 @@ function App() {
             from { opacity: 0; transform: translateY(20px); }
             to { opacity: 1; transform: translateY(0); }
           }
+          @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+          }
           * {
             box-sizing: border-box;
           }
@@ -122,18 +126,16 @@ function App() {
             background-color: #065F46 !important;
             color: #ffffff !important;
           }
-          nav a:hover {
-            color: #34D399 !important;
-            text-decoration: underline;
+          select:hover {
+            border-color: #22d3ee !important;
+            box-shadow: 0 0 10px rgba(34, 211, 238, 0.3);
           }
-          nav a:active {
-            opacity: 0.7;
+          input:hover, input:focus, textarea:hover, textarea:focus {
+            border-color: #22d3ee !important;
+            box-shadow: 0 0 15px rgba(34, 211, 238, 0.3) !important;
           }
-          nav a {
-            cursor: pointer;
-          }
-          nav .logo:hover {
-            opacity: 0.8;
+          .post-card:hover {
+            transform: translateY(-8px) scale(1.02);
           }
         `}</style>
         <AppContent />

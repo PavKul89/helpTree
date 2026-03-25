@@ -6,6 +6,15 @@ import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { theme } from '../theme';
 
+const CATEGORIES = [
+  { value: 'Дрова', icon: '🪓', label: 'Дрова' },
+  { value: 'Уборка', icon: '🧹', label: 'Уборка' },
+  { value: 'Ремонт', icon: '🔧', label: 'Ремонт' },
+  { value: 'Доставка', icon: '🚚', label: 'Доставка' },
+  { value: 'Покупки', icon: '🛒', label: 'Покупки' },
+  { value: 'Другое', icon: '✨', label: 'Другое' },
+];
+
 export const CreatePostPage = () => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -51,56 +60,76 @@ export const CreatePostPage = () => {
     <div style={styles.container}>
       <Link to="/" style={styles.backLink}>← На главную</Link>
       <h1 style={styles.title}>Создать пост</h1>
-      {error && <p style={styles.error}>{error}</p>}
+      {error && <div style={styles.errorBox}><span>⚠️</span> {error}</div>}
       <Card>
         <form onSubmit={handleSubmit}>
           <div style={styles.field}>
-            <label style={styles.label}>Заголовок</label>
+            <label style={styles.label}>
+              <span style={styles.labelIcon}>📝</span> Заголовок
+            </label>
             <input
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               required
+              placeholder="Например: Нужно наколоть дрова"
               style={styles.input}
             />
           </div>
           <div style={styles.field}>
-            <label style={styles.label}>Описание</label>
+            <label style={styles.label}>
+              <span style={styles.labelIcon}>📄</span> Описание
+            </label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               required
+              placeholder="Подробно опишите, какая помощь нужна..."
               style={{ ...styles.input, height: 150 }}
             />
           </div>
           <div style={styles.field}>
-            <label style={styles.label}>Категория</label>
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              style={styles.select}
-            >
-              <option value="Дрова">Дрова</option>
-              <option value="Уборка">Уборка</option>
-              <option value="Ремонт">Ремонт</option>
-              <option value="Доставка">Доставка</option>
-              <option value="Покупки">Покупки</option>
-              <option value="Другое">Другое</option>
-            </select>
+            <label style={styles.label}>
+              <span style={styles.labelIcon}>🏷️</span> Категория
+            </label>
+            <div style={styles.categoryGrid}>
+              {CATEGORIES.map((cat) => (
+                <div
+                  key={cat.value}
+                  style={{
+                    ...styles.categoryItem,
+                    ...(category === cat.value ? styles.categoryItemActive : {}),
+                  }}
+                  onClick={() => setCategory(cat.value)}
+                >
+                  <span style={styles.categoryIcon}>{cat.icon}</span>
+                  <span>{cat.label}</span>
+                </div>
+              ))}
+            </div>
           </div>
           <div style={styles.field}>
-            <label style={styles.label}>Картинки</label>
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleImageChange}
-              accept="image/*"
-              multiple
-              style={{ display: 'none' }}
-            />
-            <Button type="button" onClick={() => fileInputRef.current?.click()}>
-              Выбрать картинки
-            </Button>
+            <label style={styles.label}>
+              <span style={styles.labelIcon}>📷</span> Картинки
+            </label>
+            <div 
+              style={styles.uploadArea}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleImageChange}
+                accept="image/*"
+                multiple
+                style={{ display: 'none' }}
+              />
+              <div style={styles.uploadContent}>
+                <span style={styles.uploadIcon}>📁</span>
+                <span style={styles.uploadText}>Нажмите или перетащите изображения</span>
+                <span style={styles.uploadHint}>PNG, JPG до 10MB</span>
+              </div>
+            </div>
             {previews.length > 0 && (
               <div style={styles.previewGrid}>
                 {previews.map((preview, index) => (
@@ -118,8 +147,8 @@ export const CreatePostPage = () => {
               </div>
             )}
           </div>
-          <Button type="submit" disabled={loading}>
-            {loading ? 'Создание...' : 'Создать'}
+          <Button type="submit" disabled={loading} style={styles.submitBtn}>
+            {loading ? '⏳ Создание...' : '✨ Создать пост'}
           </Button>
         </form>
       </Card>
@@ -129,7 +158,7 @@ export const CreatePostPage = () => {
 
 const styles: Record<string, React.CSSProperties> = {
   container: {
-    maxWidth: 600,
+    maxWidth: 700,
     margin: '0 auto',
     padding: '24px',
   },
@@ -137,74 +166,147 @@ const styles: Record<string, React.CSSProperties> = {
     color: theme.colors.accentLight,
     textDecoration: 'none',
     fontSize: '14px',
+    display: 'inline-block',
+    marginBottom: '16px',
   },
   title: {
     color: theme.colors.text,
     fontSize: '28px',
     marginBottom: '24px',
+    fontWeight: 700,
   },
-  error: {
-    color: theme.colors.error,
-    marginBottom: '16px',
+  errorBox: {
+    background: 'rgba(239, 68, 68, 0.15)',
+    border: '1px solid rgba(239, 68, 68, 0.3)',
+    borderRadius: theme.borderRadius.md,
+    padding: '14px 18px',
+    color: '#FCA5A5',
+    marginBottom: '20px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
   },
   field: {
-    marginBottom: '20px',
+    marginBottom: '24px',
   },
   label: {
-    display: 'block',
+    display: 'flex',
+    alignItems: 'center',
     color: theme.colors.textSecondary,
-    marginBottom: '8px',
-    fontSize: '14px',
+    marginBottom: '10px',
+    fontSize: '15px',
+    fontWeight: 500,
+  },
+  labelIcon: {
+    marginRight: '8px',
+    fontSize: '16px',
   },
   input: {
     width: '100%',
-    padding: '12px',
-    fontSize: '15px',
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    border: `1px solid ${theme.colors.border}`,
+    padding: '14px 18px',
+    fontSize: '16px',
+    background: 'rgba(255,255,255,0.08)',
+    border: '1px solid rgba(34, 211, 238, 0.2)',
     borderRadius: theme.borderRadius.md,
     color: theme.colors.text,
     outline: 'none',
+    transition: 'all 0.3s ease',
+    boxSizing: 'border-box',
   },
-  select: {
-    width: '100%',
-    padding: '12px',
-    fontSize: '15px',
-    backgroundColor: theme.select.backgroundColor,
-    border: theme.select.border,
+  categoryGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(3, 1fr)',
+    gap: '12px',
+  },
+  categoryItem: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    padding: '14px 16px',
+    background: 'rgba(255,255,255,0.08)',
+    border: '1px solid rgba(34, 211, 238, 0.2)',
     borderRadius: theme.borderRadius.md,
-    color: theme.select.color,
-    outline: 'none',
+    cursor: 'pointer',
+    transition: 'all 0.3s ease',
+    fontSize: '14px',
+    color: theme.colors.textSecondary,
+  },
+  categoryItemActive: {
+    background: 'linear-gradient(135deg, rgba(34, 211, 238, 0.3) 0%, rgba(6, 182, 212, 0.3) 100%)',
+    border: '1px solid #22d3ee',
+    color: '#fff',
+    boxShadow: '0 0 15px rgba(34, 211, 238, 0.3)',
+  },
+  categoryIcon: {
+    fontSize: '20px',
+  },
+  uploadArea: {
+    border: '2px dashed rgba(34, 211, 238, 0.3)',
+    borderRadius: theme.borderRadius.lg,
+    padding: '32px',
+    textAlign: 'center',
+    cursor: 'pointer',
+    transition: 'all 0.3s ease',
+    background: 'rgba(255,255,255,0.03)',
+  },
+  uploadContent: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '8px',
+  },
+  uploadIcon: {
+    fontSize: '40px',
+    marginBottom: '8px',
+  },
+  uploadText: {
+    color: theme.colors.text,
+    fontSize: '15px',
+  },
+  uploadHint: {
+    color: theme.colors.textMuted,
+    fontSize: '12px',
   },
   previewGrid: {
-    display: 'flex',
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))',
     gap: '12px',
     marginTop: '16px',
-    flexWrap: 'wrap',
   },
   previewItem: {
     position: 'relative',
+    borderRadius: theme.borderRadius.md,
+    overflow: 'hidden',
+    aspectRatio: '1',
   },
   previewImage: {
-    width: 100,
-    height: 100,
+    width: '100%',
+    height: '100%',
     objectFit: 'cover',
-    borderRadius: theme.borderRadius.md,
   },
   removeBtn: {
     position: 'absolute',
-    top: -8,
-    right: -8,
+    top: '4px',
+    right: '4px',
     background: theme.colors.error,
     color: 'white',
-    border: 'none',
+    border: '2px solid rgba(255,255,255,0.8)',
     borderRadius: '50%',
     width: 24,
     height: 24,
     cursor: 'pointer',
-    fontSize: '16px',
+    fontSize: '14px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    transition: 'all 0.2s ease',
+  },
+  submitBtn: {
+    width: '100%',
+    padding: '16px',
+    fontSize: '16px',
+    fontWeight: 700,
+    marginTop: '8px',
   },
 };

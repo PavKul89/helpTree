@@ -5,11 +5,12 @@ interface CardProps {
   children: React.ReactNode;
   style?: React.CSSProperties;
   hoverable?: boolean;
+  className?: string;
 }
 
-export const Card: React.FC<CardProps> = ({ children, style, hoverable }) => {
+export const Card: React.FC<CardProps> = ({ children, style, hoverable, className }) => {
   return (
-    <div style={{ ...styles.card, ...(hoverable ? styles.hoverable : {}), ...style }}>
+    <div className={className} style={{ ...styles.card, ...(hoverable ? styles.hoverable : {}), ...style }}>
       {children}
     </div>
   );
@@ -25,6 +26,5 @@ const styles: Record<string, React.CSSProperties> = {
   },
   hoverable: {
     cursor: 'pointer',
-    transition: 'all 0.3s ease',
   },
 };

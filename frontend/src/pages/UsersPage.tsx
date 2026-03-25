@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { authApi } from '../api/authApi';
 import { Card } from '../components/Card';
+import { Spinner } from '../components/Spinner';
+import { EmptyState } from '../components/EmptyState';
 import { theme } from '../theme';
 import type { UserPublic } from '../types';
 
@@ -16,7 +18,7 @@ export const UsersPage = () => {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div style={styles.loading}>Загрузка...</div>;
+  if (loading) return <Spinner message="Загрузка пользователей..." />;
 
   return (
     <div style={styles.container}>
@@ -32,7 +34,13 @@ export const UsersPage = () => {
           </Card>
         ))}
       </div>
-      {users.length === 0 && <p style={styles.empty}>Пользователей пока нет</p>}
+      {users.length === 0 && (
+        <EmptyState 
+          icon="👥" 
+          title="Пользователей пока нет" 
+          description="Зарегистрируйтесь, чтобы стать первым пользователем!"
+        />
+      )}
     </div>
   );
 };

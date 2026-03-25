@@ -8,6 +8,8 @@ import type { Post, Comment, Help, Review } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
+import { Spinner } from '../components/Spinner';
+import { Modal } from '../components/Modal';
 import { theme } from '../theme';
 
 export const PostDetailPage = () => {
@@ -25,6 +27,8 @@ export const PostDetailPage = () => {
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({ title: '', description: '' });
+  const [showDeletePostModal, setShowDeletePostModal] = useState(false);
+  const [showDeleteImageModal, setShowDeleteImageModal] = useState<string | null>(null);
   const { user } = useAuth();
 
   useEffect(() => {
@@ -101,13 +105,16 @@ export const PostDetailPage = () => {
   };
 
   const handleDeletePost = async () => {
-    if (!window.confirm('Вы уверены, что хотите удалить пост?')) return;
     try {
       await postsApi.delete(Number(id));
       navigate('/');
     } catch (err) {
       console.error(err);
     }
+  };
+
+  const handleDeletePostClick = () => {
+    setShowDeletePostModal(true);
   };
 
   const handleEditPost = async () => {
@@ -125,8 +132,28 @@ export const PostDetailPage = () => {
     setIsEditing(true);
   };
 
+  const handleDeleteImageClick = (url: string) => {
+    setShowDeleteImageModal(url);
+  };
+
+  const handleDeleteImageConfirm = async () => {
+    if (!showDeleteImageModal || !post) return;
+    const url = showDeleteImageModal;
+    try {
+      const newImageUrls = post.imageUrls?.filter(img => img !== url) || [];
+      await postsApi.update(Number(id), { imageUrls: newImageUrls });
+      try {
+        await imagesApi.delete(url);
+      } catch (e) {
+        console.log('Изображение уже удалено из хранилища');
+      }
+      loadData();
+    } catch (err: any) {
+      console.error('Error updating post:', err?.response?.data || err);
+    }
+  };
+
   const handleDeleteImage = async (url: string) => {
-    if (!window.confirm('Удалить это изображение?')) return;
     if (!post) return;
     try {
       const newImageUrls = post.imageUrls?.filter(img => img !== url) || [];
@@ -177,9 +204,8 @@ export const PostDetailPage = () => {
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
       OPEN: '#10B981',
-      ACCEPTED: '#38bdf8',
+      IN_PROGRESS: '#38bdf8',
       COMPLETED: '#F59E0B',
-      CONFIRMED: '#8B5CF6',
       CANCELLED: '#EF4444',
     };
     return colors[status] || '#6B7280';
@@ -188,15 +214,14 @@ export const PostDetailPage = () => {
   const getStatusLabel = (status: string) => {
     const labels: Record<string, string> = {
       OPEN: 'Открыт',
-      ACCEPTED: 'Принят',
+      IN_PROGRESS: 'В работе',
       COMPLETED: 'Завершён',
-      CONFIRMED: 'Подтверждён',
       CANCELLED: 'Отменён',
     };
     return labels[status] || status;
   };
 
-  if (loading) return <div style={styles.loading}>Загрузка...</div>;
+  if (loading) return <Spinner message="Загрузка поста..." />;
   if (!post) return <div style={styles.notFound}>Пост не найден</div>;
 
   const isAuthor = user?.id === post.userId;
@@ -237,17 +262,26 @@ export const PostDetailPage = () => {
             <h3 style={styles.sectionTitle}>Изображения ({post.imageUrls.length})</h3>
             <div style={styles.imagesGrid}>
               {post.imageUrls.map((img, idx) => (
-                <div key={idx} style={styles.imageWrapper}>
+                <div 
+                  key={idx} 
+                  style={styles.imageWrapper} 
+                  className="post-image-wrapper"
+                  onClick={() => window.open(img, '_blank')}
+                >
                   <img 
                     src={img} 
                     alt={`Изображение ${idx + 1}`} 
                     style={styles.image}
-                    onClick={() => window.open(img, '_blank')}
                   />
+                  <div className="img-overlay" style={styles.imageOverlay}>
+                    <span style={{ color: '#fff', fontSize: '24px' }}>🔍</span>
+                  </div>
                   {isAuthor && (
                     <button 
-                      onClick={() => handleDeleteImage(img)}
+                      onClick={() => handleDeleteImageClick(img)}
                       style={styles.removeImageBtn}
+                      onMouseEnter={(e) => e.stopPropagation()}
+                      onMouseLeave={(e) => e.stopPropagation()}
                     >
                       ×
                     </button>
@@ -269,10 +303,30 @@ export const PostDetailPage = () => {
         {isAuthor && (
           <div style={styles.authorActions}>
             <Button onClick={startEdit} style={{ marginRight: 10 }}>Редактировать</Button>
-            <Button variant="danger" onClick={handleDeletePost}>Удалить пост</Button>
+            <Button variant="danger" onClick={handleDeletePostClick}>Удалить пост</Button>
           </div>
         )}
       </Card>
+
+      <Modal
+        isOpen={showDeletePostModal}
+        onClose={() => setShowDeletePostModal(false)}
+        onConfirm={handleDeletePost}
+        title="Удаление поста"
+        message="Вы уверены, что хотите удалить этот пост? Это действие нельзя отменить."
+        confirmText="Удалить"
+        cancelText="Отмена"
+      />
+
+      <Modal
+        isOpen={!!showDeleteImageModal}
+        onClose={() => setShowDeleteImageModal(null)}
+        onConfirm={handleDeleteImageConfirm}
+        title="Удаление изображения"
+        message="Вы уверены, что хотите удалить это изображение?"
+        confirmText="Удалить"
+        cancelText="Отмена"
+      />
 
       {canOfferHelp && (
         <Button onClick={handleOfferHelp} style={{ marginBottom: 20 }}>
@@ -453,34 +507,66 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: '16px',
   },
   imagesSection: {
-    marginTop: '20px',
+    marginTop: '24px',
+    paddingTop: '24px',
+    borderTop: `1px solid ${theme.colors.border}`,
   },
   imagesGrid: {
-    display: 'flex',
-    gap: '12px',
-    flexWrap: 'wrap',
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+    gap: '16px',
+    marginTop: '16px',
   },
   imageWrapper: {
     position: 'relative',
+    borderRadius: theme.borderRadius.lg,
+    overflow: 'hidden',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+    aspectRatio: '4/3',
+    cursor: 'pointer',
+    transition: 'all 0.3s ease',
   },
   image: {
-    maxWidth: 200,
-    maxHeight: 200,
-    borderRadius: theme.borderRadius.md,
-    cursor: 'pointer',
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+    transition: 'transform 0.3s ease',
+  },
+  imageOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: 'rgba(0,0,0,0.3)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    opacity: 0,
+    transition: 'opacity 0.3s ease',
+  },
+  imageOverlayVisible: {
+    opacity: 1,
   },
   removeImageBtn: {
     position: 'absolute',
-    top: -8,
-    right: -8,
+    top: '8px',
+    right: '8px',
     background: theme.colors.error,
     color: 'white',
-    border: 'none',
+    border: '2px solid rgba(255,255,255,0.8)',
     borderRadius: '50%',
-    width: 24,
-    height: 24,
+    width: 28,
+    height: 28,
     cursor: 'pointer',
-    fontSize: '16px',
+    fontSize: '18px',
+    fontWeight: 'bold',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+    transition: 'all 0.2s ease',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
   },
   meta: {
     marginTop: '20px',

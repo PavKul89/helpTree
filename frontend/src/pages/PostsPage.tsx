@@ -4,10 +4,12 @@ import { postsApi } from '../api/postsApi';
 import type { Post } from '../types';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
+import { Spinner } from '../components/Spinner';
+import { EmptyState } from '../components/EmptyState';
 import { theme } from '../theme';
 
 const CATEGORIES = ['Все', 'Дрова', 'Уборка', 'Ремонт', 'Доставка', 'Покупки', 'Другое'];
-const STATUSES = ['Все', 'OPEN', 'ACCEPTED', 'COMPLETED', 'CONFIRMED', 'CANCELLED'];
+const STATUSES = ['Все', 'OPEN', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'];
 
 export const PostsPage = () => {
   const [posts, setPosts] = useState<Post[]>([]);
@@ -65,9 +67,8 @@ export const PostsPage = () => {
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
       OPEN: '#10B981',
-      ACCEPTED: '#38bdf8',
+      IN_PROGRESS: '#38bdf8',
       COMPLETED: '#F59E0B',
-      CONFIRMED: '#8B5CF6',
       CANCELLED: '#EF4444',
     };
     return colors[status] || '#6B7280';
@@ -76,25 +77,22 @@ export const PostsPage = () => {
   const getStatusLabel = (status: string) => {
     const labels: Record<string, string> = {
       OPEN: 'Открыт',
-      ACCEPTED: 'Принят',
+      IN_PROGRESS: 'В работе',
       COMPLETED: 'Завершён',
-      CONFIRMED: 'Подтверждён',
       CANCELLED: 'Отменён',
     };
     return labels[status] || status;
   };
 
-  if (loading) return <div style={styles.loading}>Загрузка...</div>;
+  if (loading) return <Spinner message="Загрузка постов..." />;
 
   return (
     <div style={styles.container}>
       <header style={styles.header}>
         <h1 style={styles.title}>Посты о помощи</h1>
-        <div style={styles.headerActions}>
-          <Link to="/posts/new">
-            <Button>+ Создать пост</Button>
-          </Link>
-        </div>
+        <Link to="/posts/new" style={styles.createButton}>
+          <Button style={styles.createBtn}>+ Создать пост</Button>
+        </Link>
       </header>
 
       <Card style={styles.filterCard}>
@@ -131,7 +129,7 @@ export const PostsPage = () => {
       <div style={styles.grid}>
         {posts.map((post) => (
           <Link key={post.id} to={`/posts/${post.id}`} style={styles.cardLink}>
-            <Card hoverable style={styles.postCard}>
+            <Card hoverable style={styles.postCard} className="post-card">
               <div style={styles.postHeader}>
                 <span 
                   style={{
@@ -164,9 +162,16 @@ export const PostsPage = () => {
       </div>
 
       {posts.length === 0 && (
-        <Card style={styles.empty}>
-          <p style={styles.emptyText}>Постов не найдено</p>
-        </Card>
+        <EmptyState 
+          icon="🌲" 
+          title="Постов пока нет" 
+          description="Будьте первым, кто создаст пост о помощи!"
+          action={
+            <Link to="/posts/new">
+              <Button>+ Создать пост</Button>
+            </Link>
+          }
+        />
       )}
 
       {totalPages > 1 && (
@@ -223,10 +228,20 @@ const styles: Record<string, React.CSSProperties> = {
     color: theme.colors.text,
     margin: 0,
   },
-  headerActions: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
+  createButton: {
+    textDecoration: 'none',
+  },
+  createBtn: {
+    padding: '14px 28px',
+    fontSize: '15px',
+    fontWeight: 700,
+    background: 'linear-gradient(135deg, #22d3ee 0%, #06b6d4 100%)',
+    color: '#022c22',
+    boxShadow: '0 4px 15px rgba(34, 211, 238, 0.4)',
+    border: 'none',
+    borderRadius: '12px',
+    cursor: 'pointer',
+    transition: 'all 0.3s ease',
   },
   filterCard: {
     marginBottom: '24px',
@@ -242,21 +257,28 @@ const styles: Record<string, React.CSSProperties> = {
     minWidth: '200px',
     padding: '12px 16px',
     fontSize: '15px',
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    border: `1px solid ${theme.colors.border}`,
+    background: 'rgba(255,255,255,0.1)',
+    border: '1px solid rgba(34, 211, 238, 0.3)',
     borderRadius: theme.borderRadius.md,
-    color: theme.colors.text,
+    color: '#fff',
     outline: 'none',
+    transition: 'all 0.3s ease',
   },
   select: {
-    padding: '12px 16px',
+    padding: '12px 40px 12px 16px',
     fontSize: '15px',
-    backgroundColor: theme.select.backgroundColor,
-    border: theme.select.border,
+    background: `linear-gradient(135deg, rgba(6, 95, 70, 0.8) 0%, rgba(8, 145, 178, 0.8) 100%)`,
+    border: '1px solid rgba(34, 211, 238, 0.3)',
     borderRadius: theme.borderRadius.md,
-    color: theme.select.color,
-    outline: 'none',
+    color: '#fff',
     cursor: 'pointer',
+    outline: 'none',
+    appearance: 'none',
+    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23ffffff' d='M6 8L1 3h10z'/%3E%3C/svg%3E")`,
+    backgroundRepeat: 'no-repeat',
+    backgroundPosition: 'right 12px center',
+    transition: 'all 0.3s ease',
+    minWidth: '160px',
   },
   grid: {
     display: 'grid',
