@@ -33,7 +33,11 @@ public final class PostSpecification {
             }
 
             if (StringUtils.hasText(title)) {
-                predicates.add(cb.like(cb.lower(root.get("title")), "%" + title.toLowerCase() + "%"));
+                String searchTerm = "%" + title.toLowerCase() + "%";
+                Predicate titleMatch = cb.like(cb.lower(root.get("title")), searchTerm);
+                Predicate descMatch = cb.like(cb.lower(root.get("description")), searchTerm);
+                Predicate authorMatch = cb.like(cb.lower(root.get("user").get("name")), searchTerm);
+                predicates.add(cb.or(titleMatch, descMatch, authorMatch));
             }
 
             if (StringUtils.hasText(authorName)) {
