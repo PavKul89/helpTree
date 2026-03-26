@@ -33,7 +33,7 @@ export const UsersPage = () => {
 
         {users.length === 0 ? (
           <EmptyState 
-            icon="👥" 
+            variant="users"
             title="Пользователей пока нет" 
             description="Зарегистрируйтесь, чтобы стать первым пользователем!"
           />

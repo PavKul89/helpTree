@@ -78,7 +78,7 @@ export const ChatListPage = () => {
 
         {chats.length === 0 ? (
           <EmptyState 
-            icon="💬" 
+            variant="chats"
             title="Чатов пока нет" 
             description="Начните общение с другими пользователями!"
           />
@@ -100,6 +100,12 @@ export const ChatListPage = () => {
                   </div>
                 </div>
                 <div style={styles.chatRight}>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setDeleteChatId(chat.id); }}
+                    style={styles.deleteBtn}
+                  >
+                    🗑️
+                  </button>
                   <span style={styles.time}>
                     {formatTime(chat.lastMessageAt)}
                   </span>
@@ -207,6 +213,15 @@ const styles: Record<string, React.CSSProperties> = {
   time: {
     color: theme.colors.textMuted,
     fontSize: '12px',
+  },
+  deleteBtn: {
+    background: 'transparent',
+    border: 'none',
+    fontSize: '18px',
+    cursor: 'pointer',
+    padding: '4px 8px',
+    opacity: 0.6,
+    transition: 'opacity 0.2s',
   },
   unreadBadge: {
     background: theme.colors.accent,

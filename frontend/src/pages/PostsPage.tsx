@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { postsApi } from '../api/postsApi';
 import type { Post } from '../types';
@@ -55,30 +55,19 @@ export const PostsPage = () => {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
   const [category, setCategory] = useState('Все');
   const [status, setStatus] = useState('Все');
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const location = useLocation();
 
-  useEffect(() => {
-    setSearch('');
-    setCategory('Все');
-    setStatus('Все');
-    setPage(0);
-    loadPosts(0);
-  }, [location.key]);
-
-  const loadPosts = async (pageNum = 0, resetFilters = false) => {
+  const loadPosts = useCallback(async (pageNum = 0) => {
     try {
-      const searchToUse = resetFilters ? '' : search;
-      const categoryToUse = resetFilters ? 'Все' : category;
-      const statusToUse = resetFilters ? 'Все' : status;
-      
       const params: any = { page: pageNum, size: 10 };
-      if (searchToUse) params.title = searchToUse;
-      if (categoryToUse !== 'Все') params.category = categoryToUse;
-      if (statusToUse !== 'Все') params.status = statusToUse;
+      if (search) params.title = search;
+      if (category !== 'Все') params.category = category;
+      if (status !== 'Все') params.status = status;
       const data = await postsApi.getAll(params);
       setPosts(data.content);
       setTotalPages(data.totalPages);
@@ -88,18 +77,20 @@ export const PostsPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [search, category, status]);
 
   useEffect(() => {
     setSearch('');
+    setSearchInput('');
     setCategory('Все');
     setStatus('Все');
     setPage(0);
-    loadPosts(0, true);
+    loadPosts(0);
   }, [location.key]);
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSearch = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setSearch(searchInput);
     setLoading(true);
     loadPosts(0);
   };
@@ -147,55 +138,52 @@ export const PostsPage = () => {
     <div style={styles.container}>
       <header style={styles.header}>
         <h1 style={styles.title}>Посты о помощи</h1>
-        <Link to="/posts/new" style={styles.createButton}>
-          <Button style={styles.createBtn}>+ Создать пост</Button>
+        <Link to="/posts/new">
+          <Button>+ Создать пост</Button>
         </Link>
       </header>
 
-      <Card style={styles.filterCard}>
-        <form onSubmit={handleSearch} style={styles.filterForm}>
+      <div style={styles.filters}>
+        <form onSubmit={handleSearch} style={styles.searchForm}>
           <input
             type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Поиск по названию..."
+            placeholder="🔍 Поиск..."
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
             style={styles.searchInput}
           />
-          <select 
-            value={category} 
-            onChange={(e) => handleCategoryChange(e.target.value)} 
-            style={styles.select}
-          >
-            {CATEGORIES.map(cat => (
-              <option key={cat} value={cat}>{cat === 'Все' ? 'Все категории' : cat}</option>
-            ))}
-          </select>
-          <select 
-            value={status} 
-            onChange={(e) => handleStatusChange(e.target.value)} 
-            style={styles.select}
-          >
-            {STATUSES.map(s => (
-              <option key={s} value={s}>{s === 'Все' ? 'Все статусы' : getStatusLabel(s)}</option>
-            ))}
-          </select>
-          <Button type="submit">Найти</Button>
+          <Button type="submit" style={styles.searchBtn}>Найти</Button>
         </form>
-      </Card>
+        <select
+          value={category}
+          onChange={(e) => handleCategoryChange(e.target.value)}
+          style={styles.filterSelect}
+        >
+          {CATEGORIES.map((cat) => (
+            <option key={cat} value={cat}>{cat}</option>
+          ))}
+        </select>
+        <select
+          value={status}
+          onChange={(e) => handleStatusChange(e.target.value)}
+          style={styles.filterSelect}
+        >
+          {STATUSES.map((s) => (
+            <option key={s} value={s}>{s === 'Все' ? 'Все статусы' : getStatusLabel(s)}</option>
+          ))}
+        </select>
+      </div>
 
       <div style={styles.grid}>
         {posts.map((post) => (
           <Link key={post.id} to={`/posts/${post.id}`} style={styles.cardLink}>
-            <Card hoverable style={styles.postCard} className="post-card">
+            <Card hoverable style={styles.postCard}>
               <div style={styles.postHeader}>
-                <span 
-                  style={{
-                    ...styles.status,
-                    backgroundColor: getStatusColor(post.status),
-                  }}
-                >
-                  {getStatusLabel(post.status)}
-                </span>
+                <span style={{
+                  ...styles.statusDot,
+                  backgroundColor: getStatusColor(post.status)
+                }} />
+                <span style={styles.statusText}>{getStatusLabel(post.status)}</span>
                 <span style={styles.category}>{post.category}</span>
               </div>
               <h3 style={styles.postTitle}>{post.title}</h3>
@@ -219,7 +207,7 @@ export const PostsPage = () => {
 
       {posts.length === 0 && (
         <EmptyState 
-          icon="🌲" 
+          variant="posts"
           title="Постов пока нет" 
           description="Будьте первым, кто создаст пост о помощи!"
           action={
@@ -234,8 +222,8 @@ export const PostsPage = () => {
         <div style={styles.pagination}>
           <Button
             variant="outline"
-            onClick={() => handlePageChange(page - 1)}
             disabled={page === 0}
+            onClick={() => handlePageChange(page - 1)}
           >
             ← Назад
           </Button>
@@ -244,8 +232,8 @@ export const PostsPage = () => {
           </span>
           <Button
             variant="outline"
-            onClick={() => handlePageChange(page + 1)}
             disabled={page >= totalPages - 1}
+            onClick={() => handlePageChange(page + 1)}
           >
             Вперёд →
           </Button>
@@ -257,84 +245,59 @@ export const PostsPage = () => {
 
 const styles: Record<string, React.CSSProperties> = {
   container: {
+    maxWidth: 1200,
+    margin: '0 auto',
     padding: '24px',
-    position: 'relative',
-    zIndex: 1,
-  },
-  loading: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '12px',
-    height: '200px',
-    color: theme.colors.text,
-    fontSize: '16px',
   },
   header: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: '24px',
-    flexWrap: 'wrap',
-    gap: '16px',
   },
   title: {
+    color: theme.colors.text,
     fontSize: '28px',
     fontWeight: 700,
-    color: theme.colors.text,
     margin: 0,
   },
-  createButton: {
-    textDecoration: 'none',
-  },
-  createBtn: {
-    padding: '14px 28px',
-    fontSize: '15px',
-    fontWeight: 700,
-    background: 'linear-gradient(135deg, #22d3ee 0%, #06b6d4 100%)',
-    color: '#022c22',
-    boxShadow: '0 4px 15px rgba(34, 211, 238, 0.4)',
-    border: 'none',
-    borderRadius: '12px',
-    cursor: 'pointer',
-    transition: 'all 0.3s ease',
-  },
-  filterCard: {
-    marginBottom: '24px',
-  },
-  filterForm: {
+  filters: {
     display: 'flex',
     gap: '12px',
+    marginBottom: '24px',
     flexWrap: 'wrap',
     alignItems: 'center',
   },
-  searchInput: {
-    flex: '1',
+  searchForm: {
+    display: 'flex',
+    gap: '8px',
+    flex: 1,
+    order: 1,
     minWidth: '200px',
+  },
+  searchInput: {
+    flex: 1,
     padding: '12px 16px',
     fontSize: '15px',
-    background: 'rgba(255,255,255,0.1)',
-    border: '1px solid rgba(34, 211, 238, 0.3)',
+    background: 'rgba(255,255,255,0.08)',
+    border: `1px solid ${theme.colors.border}`,
     borderRadius: theme.borderRadius.md,
-    color: '#fff',
+    color: theme.colors.text,
     outline: 'none',
-    transition: 'all 0.3s ease',
   },
-  select: {
-    padding: '12px 40px 12px 16px',
+  searchBtn: {
+    padding: '12px 20px',
+    whiteSpace: 'nowrap',
+  },
+  filterSelect: {
+    padding: '12px 16px',
     fontSize: '15px',
-    background: `linear-gradient(135deg, rgba(6, 95, 70, 0.8) 0%, rgba(8, 145, 178, 0.8) 100%)`,
-    border: '1px solid rgba(34, 211, 238, 0.3)',
+    background: 'rgba(255,255,255,0.08)',
+    border: `1px solid ${theme.colors.border}`,
     borderRadius: theme.borderRadius.md,
-    color: '#fff',
+    color: theme.colors.text,
     cursor: 'pointer',
-    outline: 'none',
-    appearance: 'none',
-    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23ffffff' d='M6 8L1 3h10z'/%3E%3C/svg%3E")`,
-    backgroundRepeat: 'no-repeat',
-    backgroundPosition: 'right 12px center',
-    transition: 'all 0.3s ease',
-    minWidth: '160px',
+    minWidth: '150px',
   },
   grid: {
     display: 'grid',
@@ -348,69 +311,60 @@ const styles: Record<string, React.CSSProperties> = {
     height: '100%',
     display: 'flex',
     flexDirection: 'column',
-    transition: 'all 0.3s ease',
   },
   postHeader: {
     display: 'flex',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: '8px',
     marginBottom: '12px',
   },
-  status: {
-    padding: '4px 10px',
-    borderRadius: '20px',
-    fontSize: '12px',
-    fontWeight: 600,
-    color: '#fff',
+  statusDot: {
+    width: '8px',
+    height: '8px',
+    borderRadius: '50%',
   },
-  category: {
-    fontSize: '13px',
+  statusText: {
     color: theme.colors.textMuted,
+    fontSize: '12px',
+    textTransform: 'uppercase',
     fontWeight: 500,
   },
+  category: {
+    marginLeft: 'auto',
+    color: theme.colors.accent,
+    fontSize: '13px',
+    background: 'rgba(34, 211, 238, 0.15)',
+    padding: '4px 10px',
+    borderRadius: '4px',
+  },
   postTitle: {
+    color: theme.colors.text,
     fontSize: '18px',
     fontWeight: 600,
-    color: theme.colors.text,
-    margin: '0 0 8px 0',
+    margin: '0 0 10px 0',
   },
   postDescription: {
-    fontSize: '14px',
     color: theme.colors.textSecondary,
+    fontSize: '14px',
     lineHeight: 1.5,
-    margin: '0 0 16px 0',
     flex: 1,
+    margin: 0,
   },
   postFooter: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingTop: '12px',
+    marginTop: '16px',
+    paddingTop: '16px',
     borderTop: `1px solid ${theme.colors.border}`,
   },
   author: {
-    fontSize: '13px',
-    color: theme.colors.textSecondary,
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
-  },
-  rating: {
-    color: '#FBBF24',
-    fontWeight: 600,
   },
   date: {
-    fontSize: '12px',
     color: theme.colors.textMuted,
-  },
-  empty: {
-    textAlign: 'center',
-    padding: '40px',
-  },
-  emptyText: {
-    color: theme.colors.textMuted,
-    fontSize: '16px',
-    margin: 0,
+    fontSize: '13px',
   },
   pagination: {
     display: 'flex',

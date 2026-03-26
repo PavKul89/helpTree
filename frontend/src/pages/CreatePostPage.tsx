@@ -54,8 +54,32 @@ export const CreatePostPage = () => {
   const [previews, setPreviews] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [errors, setErrors] = useState<{ title?: string; description?: string }>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
+
+  const validate = () => {
+    const newErrors: { title?: string; description?: string } = {};
+    
+    if (!title.trim()) {
+      newErrors.title = 'Название обязательно';
+    } else if (title.trim().length < 5) {
+      newErrors.title = 'Название должно быть минимум 5 символов';
+    } else if (title.trim().length > 100) {
+      newErrors.title = 'Название должно быть не более 100 символов';
+    }
+    
+    if (!description.trim()) {
+      newErrors.description = 'Описание обязательно';
+    } else if (description.trim().length < 20) {
+      newErrors.description = 'Описание должно быть минимум 20 символов';
+    } else if (description.trim().length > 2000) {
+      newErrors.description = 'Описание должно быть не более 2000 символов';
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -72,6 +96,11 @@ export const CreatePostPage = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    
+    if (!validate()) {
+      return;
+    }
+    
     setLoading(true);
     try {
       let imageUrls: string[] = [];
@@ -101,11 +130,14 @@ export const CreatePostPage = () => {
             <input
               type="text"
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              required
+              onChange={(e) => { setTitle(e.target.value); setErrors({...errors, title: undefined}); }}
               placeholder="Например: Нужно наколоть дрова"
-              style={styles.input}
+              style={{
+                ...styles.input,
+                ...(errors.title ? styles.inputError : {}),
+              }}
             />
+            {errors.title && <div style={styles.errorText}>{errors.title}</div>}
           </div>
           <div style={styles.field}>
             <label style={styles.label}>
@@ -113,11 +145,15 @@ export const CreatePostPage = () => {
             </label>
             <textarea
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              required
+              onChange={(e) => { setDescription(e.target.value); setErrors({...errors, description: undefined}); }}
               placeholder="Подробно опишите, какая помощь нужна..."
-              style={{ ...styles.input, height: 150 }}
+              style={{
+                ...styles.input,
+                height: 150,
+                ...(errors.description ? styles.inputError : {}),
+              }}
             />
+            {errors.description && <div style={styles.errorText}>{errors.description}</div>}
           </div>
           <div style={styles.field}>
             <label style={styles.label}>
@@ -239,6 +275,14 @@ const styles: Record<string, React.CSSProperties> = {
     outline: 'none',
     transition: 'all 0.3s ease',
     boxSizing: 'border-box',
+  },
+  inputError: {
+    borderColor: '#ef4444',
+  },
+  errorText: {
+    color: '#ef4444',
+    fontSize: '13px',
+    marginTop: '6px',
   },
   select: {
     width: '100%',
