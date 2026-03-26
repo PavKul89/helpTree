@@ -4,6 +4,7 @@ import { postsApi } from '../api/postsApi';
 import { helpApi } from '../api/helpApi';
 import { reviewApi } from '../api/reviewApi';
 import { imagesApi } from '../api/imagesApi';
+import { chatApi } from '../api/chatApi';
 import type { Post, Comment, Help, Review } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { Card } from '../components/Card';
@@ -297,8 +298,23 @@ export const PostDetailPage = () => {
             {getStatusLabel(post.status)}
           </span>
           <span style={styles.metaItem}>
-            <strong>Автор:</strong> <Avatar name={post.authorName} avatarUrl={post.authorAvatarUrl} size="small" showName withRating={post.authorRating} />
+            <strong>Автор:</strong> <Avatar name={post.authorName} avatarUrl={post.authorAvatarUrl} size="small" showName withRating={post.authorRating} clickable userId={post.userId} />
           </span>
+          {user && user.id !== post.userId && (
+            <Button 
+              onClick={async () => {
+                try {
+                  const chat = await chatApi.createChat({ participantId: post.userId });
+                  navigate(`/chats/${chat.id}`);
+                } catch (err) {
+                  console.error('Ошибка при создании чата:', err);
+                }
+              }}
+              style={{ marginLeft: 'auto', padding: '8px 16px', fontSize: '13px' }}
+            >
+              💬 Написать
+            </Button>
+          )}
         </div>
 
         {isAuthor && (

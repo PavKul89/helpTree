@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { theme } from '../theme';
 
 interface AvatarProps {
@@ -7,6 +8,8 @@ interface AvatarProps {
   size?: 'small' | 'medium' | 'large';
   showName?: boolean;
   withRating?: number;
+  clickable?: boolean;
+  userId?: number;
 }
 
 const SIZES = {
@@ -45,7 +48,9 @@ export const Avatar: React.FC<AvatarProps> = ({
   avatarUrl,
   size = 'medium', 
   showName = false,
-  withRating
+  withRating,
+  clickable = false,
+  userId
 }) => {
   const sizeConfig = SIZES[size];
   const backgroundColor = getColorFromName(name);
@@ -73,12 +78,16 @@ export const Avatar: React.FC<AvatarProps> = ({
     backgroundImage: avatarUrl ? `url(${avatarUrl})` : undefined,
     backgroundSize: 'cover',
     backgroundPosition: 'center',
+    cursor: clickable ? 'pointer' : 'default',
+    transition: 'transform 0.2s ease, box-shadow 0.2s ease',
   };
 
   const nameStyle: React.CSSProperties = {
     color: theme.colors.text,
     fontSize: size === 'small' ? '13px' : '15px',
     fontWeight: 500,
+    cursor: clickable ? 'pointer' : 'default',
+    transition: 'color 0.2s ease',
   };
 
   const ratingStyle: React.CSSProperties = {
@@ -88,15 +97,51 @@ export const Avatar: React.FC<AvatarProps> = ({
     marginLeft: '2px',
   };
 
-  return (
-    <div style={containerStyle}>
-      <div style={avatarStyle}>{!avatarUrl && initials}</div>
+  const handleMouseEnter = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (clickable) {
+      e.currentTarget.style.transform = 'scale(1.05)';
+      e.currentTarget.style.boxShadow = '0 0 10px rgba(34, 211, 238, 0.5)';
+    }
+  };
+
+  const handleMouseLeave = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (clickable) {
+      e.currentTarget.style.transform = 'scale(1)';
+      e.currentTarget.style.boxShadow = 'none';
+    }
+  };
+
+  const avatarContent = (
+    <>
+      <div 
+        style={avatarStyle}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+      >
+        {!avatarUrl && initials}
+      </div>
       {showName && (
-        <span style={nameStyle}>
+        <span style={clickable ? { ...nameStyle, color: '#22d3ee' } : nameStyle}>
           {name}
           {withRating !== undefined && <span style={ratingStyle}> ★ {withRating}</span>}
         </span>
       )}
+    </>
+  );
+
+  if (clickable && userId) {
+    return (
+      <Link to={`/profile/${userId}`} style={{ textDecoration: 'none' }}>
+        <div style={containerStyle}>
+          {avatarContent}
+        </div>
+      </Link>
+    );
+  }
+
+  return (
+    <div style={containerStyle}>
+      {avatarContent}
     </div>
   );
 };

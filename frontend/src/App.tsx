@@ -12,6 +12,7 @@ import { UsersPage } from './pages/UsersPage';
 import { MyOrdersPage } from './pages/MyOrdersPage';
 import { Navbar } from './components/Navbar';
 import { Layout } from './components/Layout';
+import { ToastProvider } from './components/Toast';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, isLoading } = useAuth();
@@ -88,7 +89,8 @@ function AppContent() {
 function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
+      <ToastProvider>
+        <BrowserRouter>
         <style>{`
           @keyframes spin {
             from { transform: rotate(0deg); }
@@ -140,6 +142,7 @@ function App() {
         `}</style>
         <AppContent />
       </BrowserRouter>
+      </ToastProvider>
     </AuthProvider>
   );
 }

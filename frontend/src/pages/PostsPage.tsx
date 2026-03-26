@@ -137,43 +137,45 @@ export const PostsPage = () => {
 
   return (
     <div style={styles.container}>
-      <header className="page-header" style={styles.header}>
-        <h1 className="page-title" style={styles.title}>Посты о помощи</h1>
-        <Link to="/posts/new">
-          <Button>+ Создать пост</Button>
-        </Link>
-      </header>
+      <div style={styles.stickyContainer}>
+        <header className="page-header" style={styles.header}>
+          <h1 className="page-title" style={styles.title}>Посты о помощи</h1>
+          <Link to="/posts/new">
+            <Button>+ Создать пост</Button>
+          </Link>
+        </header>
 
-      <div style={styles.filters}>
-        <div style={styles.searchForm}>
-          <input
-            type="text"
-            placeholder="🔍 Поиск..."
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-            style={styles.searchInput}
-          />
-          <Button onClick={handleSearch} style={styles.searchBtn}>Найти</Button>
+        <div style={styles.filters}>
+          <div style={styles.searchForm}>
+            <input
+              type="text"
+              placeholder="🔍 Поиск..."
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+              style={styles.searchInput}
+            />
+            <Button onClick={handleSearch} style={styles.searchBtn}>Найти</Button>
+          </div>
+          <select
+            value={category}
+            onChange={(e) => handleCategoryChange(e.target.value)}
+            style={styles.filterSelect}
+          >
+            {CATEGORIES.map((cat) => (
+              <option key={cat} value={cat}>{cat}</option>
+            ))}
+          </select>
+          <select
+            value={status}
+            onChange={(e) => handleStatusChange(e.target.value)}
+            style={styles.filterSelect}
+          >
+            {STATUSES.map((s) => (
+          <option key={s} value={s}>{s === 'Все' ? 'Все статусы' : getStatusLabel(s)}</option>
+            ))}
+          </select>
         </div>
-        <select
-          value={category}
-          onChange={(e) => handleCategoryChange(e.target.value)}
-          style={styles.filterSelect}
-        >
-          {CATEGORIES.map((cat) => (
-            <option key={cat} value={cat}>{cat}</option>
-          ))}
-        </select>
-        <select
-          value={status}
-          onChange={(e) => handleStatusChange(e.target.value)}
-          style={styles.filterSelect}
-        >
-          {STATUSES.map((s) => (
-            <option key={s} value={s}>{s === 'Все' ? 'Все статусы' : getStatusLabel(s)}</option>
-          ))}
-        </select>
       </div>
 
       <div style={styles.grid}>
@@ -196,7 +198,7 @@ export const PostsPage = () => {
               </p>
               <div style={styles.postFooter}>
                 <div style={styles.author}>
-                  <Avatar name={post.authorName} avatarUrl={post.authorAvatarUrl} size="small" showName withRating={post.authorRating} />
+                  <Avatar name={post.authorName} avatarUrl={post.authorAvatarUrl} size="small" showName withRating={post.authorRating} clickable userId={post.userId} />
                 </div>
                 <span style={styles.date}>
                   {new Date(post.createdAt).toLocaleDateString('ru-RU')}
@@ -250,6 +252,16 @@ const styles: Record<string, React.CSSProperties> = {
     maxWidth: 1200,
     margin: '0 auto',
     padding: '24px',
+  },
+  stickyContainer: {
+    position: 'sticky',
+    top: 0,
+    zIndex: 100,
+    background: 'linear-gradient(180deg, rgba(2, 44, 34, 0.98) 0%, rgba(2, 44, 34, 0.95) 100%)',
+    backdropFilter: 'blur(12px)',
+    padding: '24px 24px 16px',
+    margin: '-24px -24px 16px',
+    borderBottom: '1px solid rgba(34, 211, 238, 0.2)',
   },
   header: {
     display: 'flex',

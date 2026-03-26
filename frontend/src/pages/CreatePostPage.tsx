@@ -5,6 +5,7 @@ import { imagesApi } from '../api/imagesApi';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { theme } from '../theme';
+import { useToast } from '../components/Toast';
 
 const CATEGORIES = [
   { value: 'Дрова', icon: '🪓', label: 'Дрова' },
@@ -57,6 +58,7 @@ export const CreatePostPage = () => {
   const [errors, setErrors] = useState<{ title?: string; description?: string }>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
+  const { showToast } = useToast();
 
   const validate = () => {
     const newErrors: { title?: string; description?: string } = {};
@@ -108,9 +110,11 @@ export const CreatePostPage = () => {
         imageUrls = await imagesApi.uploadMultiple(images);
       }
       await postsApi.create({ title, description, category, imageUrls });
+      showToast('Пост успешно создан!', 'success');
       navigate('/');
     } catch (err: any) {
       setError(err.response?.data?.message || 'Ошибка создания поста');
+      showToast(err.response?.data?.message || 'Ошибка создания поста', 'error');
     } finally {
       setLoading(false);
     }
