@@ -48,22 +48,26 @@ export const Navbar: React.FC = () => {
     navigate('/login');
   };
 
+  const handleLogoClick = () => {
+    navigate('/');
+  };
+
   return (
     <nav style={styles.navbar}>
       <div style={styles.container}>
-        <Link to="/" style={styles.logo}>
+        <div onClick={handleLogoClick} style={styles.logo}>
           <svg viewBox="0 0 100 120" width="40" height="48">
             <path d="M50 120 L50 70" stroke="#065F46" strokeWidth="4" fill="none"/>
             <circle cx="50" cy="40" r="25" fill="#059669" opacity="0.9"/>
-            <circle cx="38" cy="48" r="16" fill="#10B981" opacity="0.8"/>
-            <circle cx="62" cy="48" r="16" fill="#10B981" opacity="0.8"/>
-            <circle cx="50" cy="28" r="16" fill="#34D399" opacity="0.7"/>
+            <circle cx="38" cy="48" r="16" fill="#10b981" opacity="0.8"/>
+            <circle cx="62" cy="48" r="16" fill="#10b981" opacity="0.8"/>
+            <circle cx="50" cy="28" r="16" fill="#34d399" opacity="0.7"/>
           </svg>
           <span style={styles.logoText}>Древо Помощи</span>
-        </Link>
+        </div>
 
         <div style={styles.links}>
-          <Link to="/" style={styles.link}>Главная</Link>
+          <div onClick={handleLogoClick} style={styles.link}>Главная</div>
           {user && (
             <>
               <Link to="/my-orders" style={styles.link}>Мои заказы</Link>
@@ -131,6 +135,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '15px',
     fontWeight: 500,
     transition: 'color 0.2s',
+    cursor: 'pointer',
   } as React.CSSProperties,
   linkContainer: {
     position: 'relative',

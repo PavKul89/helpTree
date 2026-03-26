@@ -72,7 +72,7 @@ export const ChatListPage = () => {
       
       <Card style={styles.mainCard}>
         <div style={styles.header}>
-          <h1 style={styles.title}>Сообщения</h1>
+          <h1 className="page-title" style={styles.title}>Сообщения</h1>
           <span style={styles.count}>{chats.length} чатов</span>
         </div>
 

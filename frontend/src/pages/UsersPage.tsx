@@ -27,7 +27,7 @@ export const UsersPage = () => {
       
       <Card style={styles.mainCard}>
         <div style={styles.header}>
-          <h1 style={styles.title}>Пользователи</h1>
+          <h1 className="page-title" style={styles.title}>Пользователи</h1>
           <span style={styles.count}>{users.length} чел.</span>
         </div>
 

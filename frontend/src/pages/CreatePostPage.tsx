@@ -119,7 +119,7 @@ export const CreatePostPage = () => {
   return (
     <div style={styles.container}>
       <Link to="/" style={styles.backLink}>← На главную</Link>
-      <h1 style={styles.title}>Создать пост</h1>
+      <h1 className="page-title" style={styles.title}>Создать пост</h1>
       {error && <div style={styles.errorBox}><span>⚠️</span> {error}</div>}
       <Card>
         <form onSubmit={handleSubmit}>
@@ -286,15 +286,20 @@ const styles: Record<string, React.CSSProperties> = {
   },
   select: {
     width: '100%',
-    padding: '14px 18px',
+    padding: '14px 40px 14px 18px',
     fontSize: '16px',
-    background: 'rgba(255,255,255,0.08)',
-    border: '1px solid rgba(34, 211, 238, 0.2)',
-    borderRadius: theme.borderRadius.md,
+    background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.15) 0%, rgba(8, 145, 178, 0.15) 100%)',
+    border: '1px solid rgba(34, 211, 238, 0.3)',
+    borderRadius: theme.borderRadius.lg,
     color: theme.colors.text,
     outline: 'none',
     cursor: 'pointer',
     boxSizing: 'border-box',
+    appearance: 'none',
+    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 14 14'%3E%3Cpath fill='%2322d3ee' d='M7 9L2 4h10z'/%3E%3C/svg%3E")`,
+    backgroundRepeat: 'no-repeat',
+    backgroundPosition: 'right 14px center',
+    transition: 'all 0.2s ease',
   },
   categoryGrid: {
     display: 'grid',

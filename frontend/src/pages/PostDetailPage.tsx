@@ -253,7 +253,7 @@ export const PostDetailPage = () => {
           </div>
         ) : (
           <>
-            <h1 style={styles.title}>{post.title}</h1>
+            <h1 className="page-title" style={styles.title}>{post.title}</h1>
             <p style={styles.description}>{post.description}</p>
           </>
         )}
@@ -636,15 +636,20 @@ const styles: Record<string, React.CSSProperties> = {
     resize: 'vertical',
   },
   select: {
-    padding: '8px 12px',
+    padding: '8px 32px 8px 12px',
     fontSize: '14px',
-    backgroundColor: theme.select.backgroundColor,
-    border: theme.select.border,
-    borderRadius: theme.borderRadius.md,
+    background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.15) 0%, rgba(8, 145, 178, 0.15) 100%)',
+    border: '1px solid rgba(34, 211, 238, 0.3)',
+    borderRadius: theme.borderRadius.lg,
     color: theme.select.color,
     outline: 'none',
     marginRight: '8px',
     cursor: 'pointer',
+    appearance: 'none',
+    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2322d3ee' d='M6 8L1 3h10z'/%3E%3C/svg%3E")`,
+    backgroundRepeat: 'no-repeat',
+    backgroundPosition: 'right 10px center',
+    transition: 'all 0.2s ease',
   },
   helpItem: {
     padding: '12px',

@@ -92,7 +92,7 @@ export const MyOrdersPage = () => {
       
       <Card style={styles.mainCard}>
         <div style={styles.header}>
-          <h1 style={styles.title}>Мои заказы</h1>
+          <h1 className="page-title" style={styles.title}>Мои заказы</h1>
           <Link to="/posts/new">
             <Button>Создать пост</Button>
           </Link>

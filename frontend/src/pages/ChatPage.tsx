@@ -17,6 +17,7 @@ export const ChatPage = () => {
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const isFirstLoad = useRef(true);
   const { user } = useAuth();
 
   useEffect(() => {
@@ -26,6 +27,7 @@ export const ChatPage = () => {
   }, []);
 
   useEffect(() => {
+    isFirstLoad.current = true;
     loadMessages();
     const interval = setInterval(loadMessages, 5000);
     return () => clearInterval(interval);
@@ -33,7 +35,10 @@ export const ChatPage = () => {
   }, [id]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (isFirstLoad.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+      isFirstLoad.current = false;
+    }
   }, [messages]);
 
   const loadMessages = async () => {
@@ -151,7 +156,7 @@ const styles: Record<string, React.CSSProperties> = {
     overflowY: 'auto',
     padding: '20px',
     display: 'flex',
-    flexDirection: 'column',
+    flexDirection: 'column-reverse',
     gap: '12px',
   },
   empty: {

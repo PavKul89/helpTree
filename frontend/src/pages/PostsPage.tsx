@@ -62,10 +62,11 @@ export const PostsPage = () => {
   const [totalPages, setTotalPages] = useState(0);
   const location = useLocation();
 
-  const loadPosts = useCallback(async (pageNum = 0) => {
+  const loadPosts = useCallback(async (pageNum = 0, searchTerm?: string) => {
     try {
+      const searchToUse = searchTerm !== undefined ? searchTerm : search;
       const params: any = { page: pageNum, size: 10 };
-      if (search) params.title = search;
+      if (searchToUse) params.title = searchToUse;
       if (category !== 'Все') params.category = category;
       if (status !== 'Все') params.status = status;
       const data = await postsApi.getAll(params);
@@ -85,14 +86,14 @@ export const PostsPage = () => {
     setCategory('Все');
     setStatus('Все');
     setPage(0);
-    loadPosts(0);
+    loadPosts(0, '');
   }, [location.key]);
 
   const handleSearch = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setSearch(searchInput);
     setLoading(true);
-    loadPosts(0);
+    loadPosts(0, searchInput);
   };
 
   const handleCategoryChange = (value: string) => {
@@ -136,24 +137,25 @@ export const PostsPage = () => {
 
   return (
     <div style={styles.container}>
-      <header style={styles.header}>
-        <h1 style={styles.title}>Посты о помощи</h1>
+      <header className="page-header" style={styles.header}>
+        <h1 className="page-title" style={styles.title}>Посты о помощи</h1>
         <Link to="/posts/new">
           <Button>+ Создать пост</Button>
         </Link>
       </header>
 
       <div style={styles.filters}>
-        <form onSubmit={handleSearch} style={styles.searchForm}>
+        <div style={styles.searchForm}>
           <input
             type="text"
             placeholder="🔍 Поиск..."
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
             style={styles.searchInput}
           />
-          <Button type="submit" style={styles.searchBtn}>Найти</Button>
-        </form>
+          <Button onClick={handleSearch} style={styles.searchBtn}>Найти</Button>
+        </div>
         <select
           value={category}
           onChange={(e) => handleCategoryChange(e.target.value)}
@@ -290,14 +292,19 @@ const styles: Record<string, React.CSSProperties> = {
     whiteSpace: 'nowrap',
   },
   filterSelect: {
-    padding: '12px 16px',
+    padding: '12px 40px 12px 16px',
     fontSize: '15px',
-    background: 'rgba(255,255,255,0.08)',
-    border: `1px solid ${theme.colors.border}`,
-    borderRadius: theme.borderRadius.md,
+    background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.15) 0%, rgba(8, 145, 178, 0.15) 100%)',
+    border: '1px solid rgba(34, 211, 238, 0.3)',
+    borderRadius: theme.borderRadius.lg,
     color: theme.colors.text,
     cursor: 'pointer',
     minWidth: '150px',
+    appearance: 'none',
+    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2322d3ee' d='M6 8L1 3h10z'/%3E%3C/svg%3E")`,
+    backgroundRepeat: 'no-repeat',
+    backgroundPosition: 'right 12px center',
+    transition: 'all 0.2s ease',
   },
   grid: {
     display: 'grid',
