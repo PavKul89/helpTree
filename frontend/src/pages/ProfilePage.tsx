@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { authApi } from '../api/authApi';
 import { chatApi } from '../api/chatApi';
@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { Spinner } from '../components/Spinner';
+import { Avatar } from '../components/Avatar';
 import { theme } from '../theme';
 import type { User, UserPublic, Post } from '../types';
 
@@ -22,6 +23,8 @@ export const ProfilePage = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [activeTab, setActiveTab] = useState<'info' | 'posts'>('info');
   const [editForm, setEditForm] = useState({ name: '', email: '', phone: '', city: '' });
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -111,6 +114,23 @@ export const ProfilePage = () => {
     }
   };
 
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !currentUser) return;
+    
+    setUploadingAvatar(true);
+    try {
+      const avatarUrl = await authApi.uploadAvatar(currentUser.id, file);
+      const updatedUser = { ...currentUser, avatarUrl };
+      setProfileUser(updatedUser);
+      setUser(updatedUser);
+    } catch (err) {
+      console.error('Ошибка при загрузке аватара:', err);
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('ru-RU', { 
@@ -146,9 +166,31 @@ export const ProfilePage = () => {
       
       <Card style={styles.mainCard}>
         <div style={styles.header}>
-          <div style={styles.avatarLarge}>
-            {getInitials(profileUser.name)}
-          </div>
+        <div 
+          style={{
+            ...styles.avatarLarge,
+            ...(isOwnProfile ? { cursor: 'pointer' } : {}),
+          }} 
+          onClick={() => isOwnProfile && avatarInputRef.current?.click()}
+        >
+          {'avatarUrl' in fullUser && fullUser.avatarUrl ? (
+            <img src={fullUser.avatarUrl} alt="Avatar" style={styles.avatarImage} />
+          ) : (
+            getInitials(profileUser.name)
+          )}
+          {isOwnProfile && (
+            <div style={styles.avatarOverlay}>
+              {uploadingAvatar ? '...' : '📷'}
+            </div>
+          )}
+        </div>
+          <input
+            type="file"
+            ref={avatarInputRef}
+            onChange={handleAvatarChange}
+            accept="image/*"
+            style={{ display: 'none' }}
+          />
           <div style={styles.headerInfo}>
             <h1 style={styles.name}>{profileUser.name}</h1>
             {isAdmin && <span style={styles.adminBadge}>Администратор</span>}
@@ -380,6 +422,25 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#042f3a',
     flexShrink: 0,
     boxShadow: '0 4px 20px rgba(34, 211, 238, 0.3)',
+    position: 'relative',
+    overflow: 'hidden',
+    cursor: 'pointer',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+  },
+  avatarOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    background: 'rgba(0,0,0,0.6)',
+    color: '#fff',
+    fontSize: '20px',
+    padding: '4px',
+    textAlign: 'center',
   },
   headerInfo: {
     flex: 1,

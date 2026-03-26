@@ -24,4 +24,5 @@ public class UserDto {
     private Role role;
     private UserStatus status;
     private LocalDateTime createdAt;
+    private String avatarUrl;
 }

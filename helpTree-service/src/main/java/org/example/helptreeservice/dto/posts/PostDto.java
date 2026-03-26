@@ -14,6 +14,7 @@ public class PostDto {
     private String description;
     private String category;
     private String authorName;
+    private String authorAvatarUrl;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private Long userId;

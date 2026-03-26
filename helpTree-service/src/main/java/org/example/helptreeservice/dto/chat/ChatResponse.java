@@ -16,6 +16,7 @@ public class ChatResponse {
     private Long id;
     private Long participantId;
     private String participantName;
+    private String participantAvatarUrl;
     private String lastMessage;
     private LocalDateTime lastMessageAt;
     private Long unreadCount;

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { postsApi } from '../api/postsApi';
 import type { Post } from '../types';
 import { Card } from '../components/Card';
@@ -44,17 +44,26 @@ export const PostsPage = () => {
   const [status, setStatus] = useState('Все');
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
+  const location = useLocation();
 
   useEffect(() => {
-    loadPosts();
-  }, []);
+    setSearch('');
+    setCategory('Все');
+    setStatus('Все');
+    setPage(0);
+    loadPosts(0);
+  }, [location.key]);
 
-  const loadPosts = async (pageNum = 0) => {
+  const loadPosts = async (pageNum = 0, resetFilters = false) => {
     try {
+      const searchToUse = resetFilters ? '' : search;
+      const categoryToUse = resetFilters ? 'Все' : category;
+      const statusToUse = resetFilters ? 'Все' : status;
+      
       const params: any = { page: pageNum, size: 10 };
-      if (search) params.title = search;
-      if (category !== 'Все') params.category = category;
-      if (status !== 'Все') params.status = status;
+      if (searchToUse) params.title = searchToUse;
+      if (categoryToUse !== 'Все') params.category = categoryToUse;
+      if (statusToUse !== 'Все') params.status = statusToUse;
       const data = await postsApi.getAll(params);
       setPosts(data.content);
       setTotalPages(data.totalPages);
@@ -65,6 +74,14 @@ export const PostsPage = () => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    setSearch('');
+    setCategory('Все');
+    setStatus('Все');
+    setPage(0);
+    loadPosts(0, true);
+  }, [location.key]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -174,7 +191,7 @@ export const PostsPage = () => {
               </p>
               <div style={styles.postFooter}>
                 <div style={styles.author}>
-                  <Avatar name={post.authorName} size="small" showName withRating={post.authorRating} />
+                  <Avatar name={post.authorName} avatarUrl={post.authorAvatarUrl} size="small" showName withRating={post.authorRating} />
                 </div>
                 <span style={styles.date}>
                   {new Date(post.createdAt).toLocaleDateString('ru-RU')}

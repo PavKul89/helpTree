@@ -279,10 +279,8 @@ export const PostDetailPage = () => {
                   </div>
                   {isAuthor && (
                     <button 
-                      onClick={() => handleDeleteImageClick(img)}
+                      onClick={(e) => { e.stopPropagation(); handleDeleteImageClick(img); }}
                       style={styles.removeImageBtn}
-                      onMouseEnter={(e) => e.stopPropagation()}
-                      onMouseLeave={(e) => e.stopPropagation()}
                     >
                       ×
                     </button>
@@ -299,7 +297,7 @@ export const PostDetailPage = () => {
             {getStatusLabel(post.status)}
           </span>
           <span style={styles.metaItem}>
-            <strong>Автор:</strong> <Avatar name={post.authorName} size="small" showName withRating={post.authorRating} />
+            <strong>Автор:</strong> <Avatar name={post.authorName} avatarUrl={post.authorAvatarUrl} size="small" showName withRating={post.authorRating} />
           </span>
         </div>
 

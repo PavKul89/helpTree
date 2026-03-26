@@ -1,11 +1,47 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { chatApi } from '../api/chatApi';
 import { theme } from '../theme';
 
 export const Navbar: React.FC = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [unreadChats, setUnreadChats] = useState(0);
+
+  useEffect(() => {
+    if (user) {
+      const loadUnread = () => {
+        chatApi.getChats()
+          .then(chats => {
+            const total = chats.reduce((sum, chat) => sum + chat.unreadCount, 0);
+            setUnreadChats(total);
+          })
+          .catch(console.error);
+      };
+      
+      loadUnread();
+      
+      const interval = setInterval(loadUnread, 30000);
+      
+      const handleVisibility = () => {
+        if (!document.hidden) loadUnread();
+      };
+      
+      const handleChatsUpdated = () => {
+        loadUnread();
+      };
+      
+      document.addEventListener('visibilitychange', handleVisibility);
+      document.addEventListener('chatsUpdated', handleChatsUpdated);
+      
+      return () => {
+        clearInterval(interval);
+        document.removeEventListener('visibilitychange', handleVisibility);
+        document.removeEventListener('chatsUpdated', handleChatsUpdated);
+      };
+    }
+  }, [user]);
 
   const handleLogout = () => {
     logout();
@@ -31,7 +67,12 @@ export const Navbar: React.FC = () => {
           {user && (
             <>
               <Link to="/my-orders" style={styles.link}>Мои заказы</Link>
-              <Link to="/chats" style={styles.link}>Чаты</Link>
+              <Link to="/chats" style={styles.linkContainer}>
+                <span style={styles.link}>Чаты</span>
+                {unreadChats > 0 && (
+                  <span style={styles.badge}>{unreadChats}</span>
+                )}
+              </Link>
               <Link to="/profile" style={styles.link}>
                 {user.name || user.email}
               </Link>
@@ -91,6 +132,27 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 500,
     transition: 'color 0.2s',
   } as React.CSSProperties,
+  linkContainer: {
+    position: 'relative',
+    display: 'flex',
+    alignItems: 'center',
+    textDecoration: 'none',
+  },
+  badge: {
+    position: 'absolute',
+    top: '-8px',
+    right: '-12px',
+    background: '#ef4444',
+    color: '#fff',
+    borderRadius: '50%',
+    width: '18px',
+    height: '18px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '11px',
+    fontWeight: 600,
+  },
   loginBtn: {
     background: theme.gradients.button,
     color: theme.colors.text,

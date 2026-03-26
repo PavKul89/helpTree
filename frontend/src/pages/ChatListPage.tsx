@@ -48,61 +48,70 @@ export const ChatListPage = () => {
     setDeleteChatId(chatId);
   };
 
+  const formatTime = (dateString?: string) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    
+    if (diffMins < 1) return 'только что';
+    if (diffMins < 60) return `${diffMins} мин назад`;
+    if (diffHours < 24) return `${diffHours} ч назад`;
+    if (diffDays < 7) return `${diffDays} дн назад`;
+    return date.toLocaleDateString('ru-RU');
+  };
+
   if (loading) return <Spinner message="Загрузка чатов..." />;
 
   return (
     <div style={styles.container}>
-      <header style={styles.header}>
-        <h1 style={styles.title}>Чаты</h1>
-        <Link to="/" style={styles.backLink}>← На главную</Link>
-      </header>
+      <Link to="/" style={styles.backLink}>← На главную</Link>
+      
+      <Card style={styles.mainCard}>
+        <div style={styles.header}>
+          <h1 style={styles.title}>Сообщения</h1>
+          <span style={styles.count}>{chats.length} чатов</span>
+        </div>
 
-      <div style={styles.grid}>
-        {chats.map((chat) => (
-          <Card 
-            key={chat.id} 
-            hoverable
-            style={styles.chatCard}
-          >
-            <div 
-              onClick={() => navigate(`/chats/${chat.id}`)}
-              style={styles.chatContent}
-            >
-              <div style={styles.chatInfo}>
-                <Avatar name={chat.participantName} size="medium" showName />
-                <p style={styles.lastMessage}>
-                  {chat.lastMessage || 'Нет сообщений'}
-                </p>
-                <small style={styles.timestamp}>
-                  {chat.lastMessageAt ? new Date(chat.lastMessageAt).toLocaleString() : ''}
-                </small>
-              </div>
-              <div style={styles.chatActions}>
-                {chat.unreadCount > 0 && (
-                  <span style={styles.unreadBadge}>
-                    {chat.unreadCount}
+        {chats.length === 0 ? (
+          <EmptyState 
+            icon="💬" 
+            title="Чатов пока нет" 
+            description="Начните общение с другими пользователями!"
+          />
+        ) : (
+          <div style={styles.list}>
+            {chats.map((chat) => (
+              <div 
+                key={chat.id} 
+                style={styles.chatItem}
+                onClick={() => navigate(`/chats/${chat.id}`)}
+              >
+                <div style={styles.chatLeft}>
+                  <Avatar name={chat.participantName} avatarUrl={chat.participantAvatarUrl} size="large" />
+                  <div style={styles.chatInfo}>
+                    <div style={styles.chatName}>{chat.participantName}</div>
+                    <div style={styles.lastMessage}>
+                      {chat.lastMessage || 'Нет сообщений'}
+                    </div>
+                  </div>
+                </div>
+                <div style={styles.chatRight}>
+                  <span style={styles.time}>
+                    {formatTime(chat.lastMessageAt)}
                   </span>
-                )}
-                <Button 
-                  variant="danger"
-                  onClick={(e) => confirmDeleteChat(chat.id, e)}
-                  style={styles.deleteBtn}
-                >
-                  Удалить
-                </Button>
+                  {chat.unreadCount > 0 && (
+                    <span style={styles.unreadBadge}>{chat.unreadCount}</span>
+                  )}
+                </div>
               </div>
-            </div>
-          </Card>
-        ))}
-      </div>
-
-      {chats.length === 0 && (
-        <EmptyState 
-          icon="💬" 
-          title="Чатов пока нет" 
-          description="Начните общение с другими пользователями!"
-        />
-      )}
+            ))}
+          </div>
+        )}
+      </Card>
 
       <Modal
         isOpen={!!deleteChatId}
@@ -119,77 +128,96 @@ export const ChatListPage = () => {
 
 const styles: Record<string, React.CSSProperties> = {
   container: {
+    maxWidth: 700,
+    margin: '0 auto',
     padding: '24px',
-  },
-  loading: {
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    height: '200px',
-    color: theme.colors.text,
-    fontSize: '18px',
-  },
-  header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '24px',
-  },
-  title: {
-    color: theme.colors.text,
-    fontSize: '28px',
-    margin: 0,
   },
   backLink: {
     color: theme.colors.accentLight,
     textDecoration: 'none',
     fontSize: '14px',
+    display: 'inline-block',
+    marginBottom: '16px',
   },
-  grid: {
-    display: 'grid',
-    gap: '12px',
+  mainCard: {
+    padding: '0',
+    overflow: 'hidden',
   },
-  chatCard: {
-    padding: '16px',
-  },
-  chatContent: {
+  header: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
+    padding: '24px 32px',
+    background: 'linear-gradient(180deg, rgba(34, 211, 238, 0.08) 0%, transparent 100%)',
+    borderBottom: `1px solid ${theme.colors.border}`,
+  },
+  title: {
+    color: theme.colors.text,
+    fontSize: '24px',
+    fontWeight: 700,
+    margin: 0,
+  },
+  count: {
+    color: theme.colors.textMuted,
+    fontSize: '14px',
+  },
+  list: {
+    padding: '8px',
+  },
+  chatItem: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '16px 20px',
+    borderRadius: theme.borderRadius.md,
     cursor: 'pointer',
+    transition: 'all 0.2s ease',
+  },
+  chatLeft: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '14px',
+    flex: 1,
+    minWidth: 0,
   },
   chatInfo: {
     flex: 1,
+    minWidth: 0,
+  },
+  chatName: {
+    color: theme.colors.text,
+    fontSize: '15px',
+    fontWeight: 600,
+    marginBottom: '4px',
   },
   lastMessage: {
-    margin: '4px 0',
     color: theme.colors.textSecondary,
-    fontSize: '14px',
+    fontSize: '13px',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    maxWidth: '300px',
   },
-  timestamp: {
-    color: theme.colors.textMuted,
-    fontSize: '12px',
-  },
-  chatActions: {
+  chatRight: {
     display: 'flex',
     alignItems: 'center',
-    gap: '12px',
+    gap: '10px',
+    flexShrink: 0,
+  },
+  time: {
+    color: theme.colors.textMuted,
+    fontSize: '12px',
   },
   unreadBadge: {
-    backgroundColor: theme.colors.accent,
-    color: 'white',
+    background: theme.colors.accent,
+    color: '#fff',
     borderRadius: '50%',
-    padding: '4px 10px',
-    fontSize: '12px',
+    width: '22px',
+    height: '22px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '11px',
     fontWeight: 600,
-  },
-  deleteBtn: {
-    padding: '6px 12px',
-    fontSize: '12px',
-  },
-  empty: {
-    color: theme.colors.textMuted,
-    textAlign: 'center',
-    padding: '40px',
   },
 };

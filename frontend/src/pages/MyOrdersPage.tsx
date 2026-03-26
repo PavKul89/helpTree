@@ -82,7 +82,7 @@ export const MyOrdersPage = () => {
   if (loading) return <Spinner message="Загрузка заказов..." />;
 
   const openPosts = myPosts.filter(p => p.status === 'OPEN').length;
-  const inProgressPosts = myPosts.filter(p => (p.status as string) === 'IN_PROGRESS').length;
+  const inProgressPosts = myPosts.filter(p => p.status === 'IN_PROGRESS').length;
   const completedPosts = myPosts.filter(p => p.status === 'COMPLETED').length;
   const completedHelps = myHelps.filter(h => h.status === 'COMPLETED').length;
 
@@ -155,9 +155,9 @@ export const MyOrdersPage = () => {
                       <div style={styles.itemHeader}>
                         <span style={{
                           ...styles.statusDot,
-                          backgroundColor: getStatusColor(post.status as string)
+                          backgroundColor: getStatusColor(post.status)
                         }} />
-                        <span style={styles.statusText}>{getStatusLabel(post.status as string)}</span>
+                        <span style={styles.statusText}>{getStatusLabel(post.status)}</span>
                       </div>
                       <div style={styles.itemTitle}>{post.title}</div>
                       <div style={styles.itemDesc}>
@@ -205,9 +205,9 @@ export const MyOrdersPage = () => {
                       <div style={styles.itemHeader}>
                         <span style={{
                           ...styles.statusDot,
-                          backgroundColor: getStatusColor(help.status as string)
+                          backgroundColor: getStatusColor(help.status)
                         }} />
-                        <span style={styles.statusText}>{getStatusLabel(help.status as string)}</span>
+                        <span style={styles.statusText}>{getStatusLabel(help.status)}</span>
                       </div>
                       <div style={styles.itemTitle}>{help.postTitle}</div>
                       <div style={styles.itemMeta}>

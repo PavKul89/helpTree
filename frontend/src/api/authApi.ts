@@ -1,5 +1,28 @@
-import api from './axios';
+import axios from 'axios';
 import type { AuthResponse, LoginRequest, RegisterRequest, User, UserPublic } from '../types';
+
+const API_URL = 'http://localhost:8080';
+
+const createAuthApi = () => {
+  const instance = axios.create({
+    baseURL: API_URL,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+
+  instance.interceptors.request.use((config) => {
+    const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  });
+
+  return instance;
+};
+
+const api = createAuthApi();
 
 export const authApi = {
   login: async (data: LoginRequest): Promise<AuthResponse> => {
@@ -31,5 +54,17 @@ export const authApi = {
   updateProfile: async (id: number, data: { name?: string; email?: string; phone?: string; city?: string }): Promise<User> => {
     const response = await api.put<User>(`/api/users/${id}`, data);
     return response.data;
+  },
+
+  uploadAvatar: async (userId: number, file: File): Promise<string> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await axios.post(`${API_URL}/api/users/${userId}/avatar`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+        Authorization: `Bearer ${localStorage.getItem('accessToken') || localStorage.getItem('token')}`,
+      },
+    });
+    return response.data.url;
   },
 };

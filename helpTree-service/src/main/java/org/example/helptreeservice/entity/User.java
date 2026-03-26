@@ -75,6 +75,10 @@ public class User {
     @Column(name = "telegram_chat_id", length = 50)
     private String telegramChatId;
 
+    @Size(max = 500)
+    @Column(name = "avatar_url")
+    private String avatarUrl;
+
     @PrePersist
     protected void onCreate() {
         LocalDateTime now = LocalDateTime.now();

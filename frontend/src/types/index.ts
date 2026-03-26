@@ -7,6 +7,7 @@ export interface User {
   telegramChatId?: string;
   phone?: string;
   city?: string;
+  avatarUrl?: string;
   createdAt: string;
 }
 
@@ -16,6 +17,7 @@ export interface UserPublic {
   rating: number;
   helpedCount: number;
   debtCount: number;
+  avatarUrl?: string;
 }
 
 export interface Post {
@@ -23,9 +25,10 @@ export interface Post {
   title: string;
   description: string;
   category: string;
-  status: 'OPEN' | 'ACCEPTED' | 'COMPLETED' | 'CONFIRMED' | 'CANCELLED';
+  status: 'OPEN' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
   userId: number;
   authorName: string;
+  authorAvatarUrl?: string;
   authorRating: number;
   helperId?: number;
   helperName?: string;
@@ -60,6 +63,7 @@ export interface Chat {
   id: number;
   participantId: number;
   participantName: string;
+  participantAvatarUrl?: string;
   lastMessage?: string;
   lastMessageAt?: string;
   unreadCount: number;
@@ -70,6 +74,7 @@ export interface Message {
   chatId: number;
   senderId: number;
   senderName: string;
+  senderAvatarUrl?: string;
   content: string;
   createdAt: string;
   isRead: boolean;

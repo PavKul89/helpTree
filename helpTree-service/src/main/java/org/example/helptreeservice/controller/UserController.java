@@ -13,8 +13,10 @@ import org.example.helptreeservice.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Map;
@@ -185,5 +187,16 @@ public class UserController {
         }
         userService.bindTelegramChatId(id, chatId);
         return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/{id}/avatar")
+    public ResponseEntity<Map<String, String>> uploadAvatar(
+            @PathVariable Long id,
+            @RequestParam("file") MultipartFile file) {
+        if (!authService.canManageUser(id)) {
+            throw new ForbiddenException("Вы можете загрузить аватар только для своего профиля");
+        }
+        String avatarUrl = userService.uploadAvatar(id, file);
+        return ResponseEntity.ok(Map.of("url", avatarUrl));
     }
 }

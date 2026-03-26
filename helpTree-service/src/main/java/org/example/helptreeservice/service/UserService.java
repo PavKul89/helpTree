@@ -15,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -29,6 +30,7 @@ public class UserService {
     private final UserRepository userRepository;
     private final UserMapper userMapper;
     private final PasswordService passwordService;
+    private final ImageService imageService;
 
     public UserDto createUser(CreateUserRequest request) {
         return createUserWithRole(request, Role.USER);
@@ -362,5 +364,15 @@ public class UserService {
         return userRepository.findById(userId)
                 .map(User::getTelegramChatId)
                 .orElse(null);
+    }
+
+    public String uploadAvatar(Long userId, MultipartFile file) {
+        log.info("Загрузка аватара для пользователя ID: {}", userId);
+        User user = getUserEntityById(userId);
+        String avatarUrl = imageService.upload(file);
+        user.setAvatarUrl(avatarUrl);
+        userRepository.save(user);
+        log.info("Аватар для пользователя ID {} загружен: {}", userId, avatarUrl);
+        return avatarUrl;
     }
 }

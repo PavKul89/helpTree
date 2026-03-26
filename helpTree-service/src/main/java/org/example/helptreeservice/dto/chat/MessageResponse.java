@@ -17,6 +17,7 @@ public class MessageResponse {
     private Long chatId;
     private Long senderId;
     private String senderName;
+    private String senderAvatarUrl;
     private String content;
     private LocalDateTime createdAt;
     private Boolean isRead;

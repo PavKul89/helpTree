@@ -3,6 +3,7 @@ import { theme } from '../theme';
 
 interface AvatarProps {
   name: string;
+  avatarUrl?: string;
   size?: 'small' | 'medium' | 'large';
   showName?: boolean;
   withRating?: number;
@@ -41,6 +42,7 @@ const getInitials = (name: string): string => {
 
 export const Avatar: React.FC<AvatarProps> = ({ 
   name, 
+  avatarUrl,
   size = 'medium', 
   showName = false,
   withRating
@@ -59,7 +61,7 @@ export const Avatar: React.FC<AvatarProps> = ({
     width: sizeConfig.container,
     height: sizeConfig.container,
     borderRadius: '50%',
-    background: `linear-gradient(135deg, ${backgroundColor} 0%, ${backgroundColor}cc 100%)`,
+    background: avatarUrl ? 'transparent' : `linear-gradient(135deg, ${backgroundColor} 0%, ${backgroundColor}cc 100%)`,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -67,6 +69,10 @@ export const Avatar: React.FC<AvatarProps> = ({
     fontWeight: 700,
     color: '#022c22',
     flexShrink: 0,
+    overflow: 'hidden',
+    backgroundImage: avatarUrl ? `url(${avatarUrl})` : undefined,
+    backgroundSize: 'cover',
+    backgroundPosition: 'center',
   };
 
   const nameStyle: React.CSSProperties = {
@@ -84,7 +90,7 @@ export const Avatar: React.FC<AvatarProps> = ({
 
   return (
     <div style={containerStyle}>
-      <div style={avatarStyle}>{initials}</div>
+      <div style={avatarStyle}>{!avatarUrl && initials}</div>
       {showName && (
         <span style={nameStyle}>
           {name}

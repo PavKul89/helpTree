@@ -58,8 +58,7 @@ public class RoleBasedAuthFilter implements GlobalFilter {
 
     private static final Set<HttpMethod> ADMIN_ONLY_METHODS = Set.of(
             HttpMethod.POST,
-            HttpMethod.DELETE,
-            HttpMethod.PUT
+            HttpMethod.DELETE
     );
 
     @Override
@@ -134,6 +133,12 @@ public class RoleBasedAuthFilter implements GlobalFilter {
             return true;
         }
         if (USER_PATH_EXCEPTIONS.stream().anyMatch(path::startsWith)) {
+            return false;
+        }
+        if (path.matches("/api/users/\\d+")) {
+            return false;
+        }
+        if (path.matches("/api/users/\\d+/avatar")) {
             return false;
         }
         if (path.matches("/api/users/\\d+.*")) {
