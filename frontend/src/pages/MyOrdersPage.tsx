@@ -150,29 +150,34 @@ export const MyOrdersPage = () => {
             ) : (
               <div style={styles.list}>
                 {myPosts.map((post) => (
-                  <ListItem key={post.id} onDelete={() => confirmDeletePost(post.id)}>
-                    <Link to={`/posts/${post.id}`} style={styles.itemLink}>
-                      <div style={styles.itemMain}>
-                        <div style={styles.itemHeader}>
-                          <span style={{
-                            ...styles.statusDot,
-                            backgroundColor: getStatusColor(post.status as string)
-                          }} />
-                          <span style={styles.statusText}>{getStatusLabel(post.status as string)}</span>
-                        </div>
-                        <div style={styles.itemTitle}>{post.title}</div>
-                        <div style={styles.itemDesc}>
-                          {post.description.length > 120 
-                            ? post.description.slice(0, 120) + '...' 
-                            : post.description}
-                        </div>
+                  <Link key={post.id} to={`/posts/${post.id}`} style={styles.listItem}>
+                    <div style={styles.itemMain}>
+                      <div style={styles.itemHeader}>
+                        <span style={{
+                          ...styles.statusDot,
+                          backgroundColor: getStatusColor(post.status as string)
+                        }} />
+                        <span style={styles.statusText}>{getStatusLabel(post.status as string)}</span>
                       </div>
-                      <div style={styles.itemSide}>
-                        <span style={styles.itemCategory}>{post.category}</span>
-                        <span style={styles.itemDate}>{formatDate(post.createdAt)}</span>
+                      <div style={styles.itemTitle}>{post.title}</div>
+                      <div style={styles.itemDesc}>
+                        {post.description.length > 120 
+                          ? post.description.slice(0, 120) + '...' 
+                          : post.description}
                       </div>
-                    </Link>
-                  </ListItem>
+                    </div>
+                    <div style={styles.itemSide}>
+                      <span style={styles.itemCategory}>{post.category}</span>
+                      <span style={styles.itemDate}>{formatDate(post.createdAt)}</span>
+                      <Button 
+                        variant="danger" 
+                        onClick={(e) => { e.preventDefault(); confirmDeletePost(post.id); }}
+                        style={styles.deleteBtn}
+                      >
+                        Удалить
+                      </Button>
+                    </div>
+                  </Link>
                 ))}
               </div>
             )
@@ -235,31 +240,6 @@ export const MyOrdersPage = () => {
   function confirmDeletePost(postId: number) {
     setDeletePostId(postId);
   }
-};
-
-const ListItem = ({ children, onDelete }: { children: React.ReactNode; onDelete?: () => void }) => {
-  const [isHovered, setIsHovered] = useState(false);
-
-  return (
-    <div 
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      style={{
-        ...styles.listItem,
-        ...(isHovered ? styles.listItemHover : {}),
-      }}
-    >
-      {children}
-      {onDelete && isHovered && (
-        <button 
-          onClick={(e) => { e.stopPropagation(); onDelete(); }}
-          style={styles.deleteBtnHover}
-        >
-          Удалить
-        </button>
-      )}
-    </div>
-  );
 };
 
 const styles: Record<string, React.CSSProperties> = {
@@ -441,31 +421,5 @@ const styles: Record<string, React.CSSProperties> = {
   deleteBtn: {
     padding: '8px 14px',
     fontSize: '13px',
-  },
-  listItemHover: {
-    background: 'rgba(255,255,255,0.08)',
-    borderColor: 'rgba(34, 211, 238, 0.3)',
-  },
-  deleteBtnHover: {
-    position: 'absolute',
-    bottom: '12px',
-    right: '12px',
-    padding: '8px 16px',
-    background: '#dc2626',
-    color: '#fff',
-    border: 'none',
-    borderRadius: '6px',
-    fontSize: '13px',
-    fontWeight: 500,
-    cursor: 'pointer',
-    transition: 'background 0.2s ease',
-  },
-  itemLink: {
-    flex: 1,
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    textDecoration: 'none',
-    minWidth: 0,
   },
 };
