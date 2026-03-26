@@ -12,13 +12,29 @@ const CATEGORIES = [
   { value: 'Ремонт', icon: '🔧', label: 'Ремонт' },
   { value: 'Доставка', icon: '🚚', label: 'Доставка' },
   { value: 'Покупки', icon: '🛒', label: 'Покупки' },
+  { value: 'Готовка', icon: '🍳', label: 'Готовка' },
+  { value: 'Садоводство', icon: '🌱', label: 'Садоводство' },
+  { value: 'Перевозка', icon: '🚛', label: 'Перевозка' },
+  { value: 'Уход за животными', icon: '🐕', label: 'Уход за животными' },
+  { value: 'Помощь с детьми', icon: '👶', label: 'Помощь с детьми' },
+  { value: 'Компьютерная помощь', icon: '💻', label: 'Компьютеры' },
+  { value: 'Стрижка', icon: '✂️', label: 'Стрижка' },
+  { value: 'Медицинская помощь', icon: '💊', label: 'Медицина' },
+  { value: 'Юридическая консультация', icon: '⚖️', label: 'Юристы' },
+  { value: 'Обучение', icon: '📚', label: 'Обучение' },
+  { value: 'Репетитор', icon: '🎓', label: 'Репетитор' },
+  { value: 'Транспорт', icon: '🚗', label: 'Транспорт' },
+  { value: 'Строительство', icon: '🏠', label: 'Стройка' },
+  { value: 'Клининг', icon: '🧽', label: 'Клининг' },
+  { value: 'Курьер', icon: '📦', label: 'Курьер' },
+  { value: 'Волонтёрство', icon: '❤️', label: 'Волонтёрство' },
   { value: 'Другое', icon: '✨', label: 'Другое' },
 ];
 
 export const CreatePostPage = () => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [category, setCategory] = useState('TECHNICAL');
+  const [category, setCategory] = useState('Другое');
   const [images, setImages] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -92,21 +108,17 @@ export const CreatePostPage = () => {
             <label style={styles.label}>
               <span style={styles.labelIcon}>🏷️</span> Категория
             </label>
-            <div style={styles.categoryGrid}>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              style={styles.select}
+            >
               {CATEGORIES.map((cat) => (
-                <div
-                  key={cat.value}
-                  style={{
-                    ...styles.categoryItem,
-                    ...(category === cat.value ? styles.categoryItemActive : {}),
-                  }}
-                  onClick={() => setCategory(cat.value)}
-                >
-                  <span style={styles.categoryIcon}>{cat.icon}</span>
-                  <span>{cat.label}</span>
-                </div>
+                <option key={cat.value} value={cat.value}>
+                  {cat.icon} {cat.label}
+                </option>
               ))}
-            </div>
+            </select>
           </div>
           <div style={styles.field}>
             <label style={styles.label}>
@@ -211,6 +223,18 @@ const styles: Record<string, React.CSSProperties> = {
     color: theme.colors.text,
     outline: 'none',
     transition: 'all 0.3s ease',
+    boxSizing: 'border-box',
+  },
+  select: {
+    width: '100%',
+    padding: '14px 18px',
+    fontSize: '16px',
+    background: 'rgba(255,255,255,0.08)',
+    border: '1px solid rgba(34, 211, 238, 0.2)',
+    borderRadius: theme.borderRadius.md,
+    color: theme.colors.text,
+    outline: 'none',
+    cursor: 'pointer',
     boxSizing: 'border-box',
   },
   categoryGrid: {

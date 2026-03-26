@@ -10,6 +10,7 @@ import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { Spinner } from '../components/Spinner';
 import { Modal } from '../components/Modal';
+import { Avatar } from '../components/Avatar';
 import { theme } from '../theme';
 
 export const PostDetailPage = () => {
@@ -297,7 +298,9 @@ export const PostDetailPage = () => {
           <span style={{ ...styles.statusBadge, backgroundColor: getStatusColor(post.status) }}>
             {getStatusLabel(post.status)}
           </span>
-          <span style={styles.metaItem}><strong>Автор:</strong> <Link to={`/profile/${post.userId}`} style={styles.authorLink}>{post.authorName}</Link></span>
+          <span style={styles.metaItem}>
+            <strong>Автор:</strong> <Avatar name={post.authorName} size="small" showName withRating={post.authorRating} />
+          </span>
         </div>
 
         {isAuthor && (

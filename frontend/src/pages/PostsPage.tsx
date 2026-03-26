@@ -6,9 +6,34 @@ import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { Spinner } from '../components/Spinner';
 import { EmptyState } from '../components/EmptyState';
+import { Avatar } from '../components/Avatar';
 import { theme } from '../theme';
 
-const CATEGORIES = ['Все', 'Дрова', 'Уборка', 'Ремонт', 'Доставка', 'Покупки', 'Другое'];
+const CATEGORIES = [
+  'Все',
+  'Дрова',
+  'Уборка',
+  'Ремонт',
+  'Доставка',
+  'Покупки',
+  'Готовка',
+  'Садоводство',
+  'Перевозка',
+  'Уход за животными',
+  'Помощь с детьми',
+  'Компьютерная помощь',
+  'Стрижка',
+  'Медицинская помощь',
+  'Юридическая консультация',
+  'Обучение',
+  'Репетитор',
+  'Транспорт',
+  'Строительство',
+  'Клининг',
+  'Курьер',
+  'Волонтёрство',
+  'Другое',
+];
 const STATUSES = ['Все', 'OPEN', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'];
 
 export const PostsPage = () => {
@@ -148,10 +173,9 @@ export const PostsPage = () => {
                   : post.description}
               </p>
               <div style={styles.postFooter}>
-                <span style={styles.author}>
-                  👤 {post.authorName}
-                  <span style={styles.rating}>★ {post.authorRating}</span>
-                </span>
+                <div style={styles.author}>
+                  <Avatar name={post.authorName} size="small" showName withRating={post.authorRating} />
+                </div>
                 <span style={styles.date}>
                   {new Date(post.createdAt).toLocaleDateString('ru-RU')}
                 </span>

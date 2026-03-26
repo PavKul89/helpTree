@@ -6,6 +6,7 @@ import { Button } from '../components/Button';
 import { Spinner } from '../components/Spinner';
 import { EmptyState } from '../components/EmptyState';
 import { Modal } from '../components/Modal';
+import { Avatar } from '../components/Avatar';
 import { theme } from '../theme';
 import type { Chat } from '../types';
 
@@ -68,7 +69,7 @@ export const ChatListPage = () => {
               style={styles.chatContent}
             >
               <div style={styles.chatInfo}>
-                <strong style={styles.participantName}>{chat.participantName}</strong>
+                <Avatar name={chat.participantName} size="medium" showName />
                 <p style={styles.lastMessage}>
                   {chat.lastMessage || 'Нет сообщений'}
                 </p>
@@ -159,10 +160,6 @@ const styles: Record<string, React.CSSProperties> = {
   },
   chatInfo: {
     flex: 1,
-  },
-  participantName: {
-    fontSize: '16px',
-    color: theme.colors.text,
   },
   lastMessage: {
     margin: '4px 0',
