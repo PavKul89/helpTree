@@ -62,25 +62,40 @@ export const Avatar: React.FC<AvatarProps> = ({
     gap: size === 'small' ? '8px' : '10px',
   };
 
-  const avatarStyle: React.CSSProperties = {
-    width: sizeConfig.container,
-    height: sizeConfig.container,
-    borderRadius: '50%',
-    background: avatarUrl ? 'transparent' : `linear-gradient(135deg, ${backgroundColor} 0%, ${backgroundColor}cc 100%)`,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: sizeConfig.font,
-    fontWeight: 700,
-    color: '#022c22',
-    flexShrink: 0,
-    overflow: 'hidden',
-    backgroundImage: avatarUrl ? `url(${avatarUrl})` : undefined,
-    backgroundSize: 'cover',
-    backgroundPosition: 'center',
-    cursor: clickable ? 'pointer' : 'default',
-    transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-  };
+  const avatarStyle: React.CSSProperties = avatarUrl
+    ? {
+        width: sizeConfig.container,
+        height: sizeConfig.container,
+        borderRadius: '50%',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: sizeConfig.font,
+        fontWeight: 700,
+        color: '#022c22',
+        flexShrink: 0,
+        overflow: 'hidden',
+        backgroundImage: `url(${avatarUrl})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        cursor: clickable ? 'pointer' : 'default',
+        transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+      }
+    : {
+        width: sizeConfig.container,
+        height: sizeConfig.container,
+        borderRadius: '50%',
+        background: `linear-gradient(135deg, ${backgroundColor} 0%, ${backgroundColor}cc 100%)`,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: sizeConfig.font,
+        fontWeight: 700,
+        color: '#022c22',
+        flexShrink: 0,
+        cursor: clickable ? 'pointer' : 'default',
+        transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+      };
 
   const nameStyle: React.CSSProperties = {
     color: theme.colors.text,

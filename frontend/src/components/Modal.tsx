@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { Button } from './Button';
-import { theme } from '../theme';
 
 interface ModalProps {
   isOpen: boolean;

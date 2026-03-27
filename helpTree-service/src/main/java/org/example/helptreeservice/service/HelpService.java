@@ -482,7 +482,8 @@ public class HelpService {
 
     /**
      * Получить граф помощи для пользователя
-     * Показывает: кто помог мне → я → кому я помог → кому помогли они → ...
+     * Показывает только тех, кто пошёл ОТ пользователя (его помощь и её последствия)
+     * Пользователь всегда в корне - это придает ему веса и значимости
      */
     public org.example.helptreeservice.dto.graph.HelpGraphDto getHelpGraph(Long userId) {
         log.info("Построение графа помощи для userId: {}", userId);
@@ -495,17 +496,14 @@ public class HelpService {
         
         // Строим карту: кто помог → список кому помогли
         Map<Long, List<Long>> helperToReceivers = new HashMap<>();
-        // Строим карту: кому помогли → список кто помог (обратная)
-        Map<Long, List<Long>> receiverToHelpers = new HashMap<>();
         
         for (Help help : confirmedHelps) {
             Long helperId = help.getHelper().getId();
             Long receiverId = help.getReceiver().getId();
             helperToReceivers.computeIfAbsent(helperId, k -> new ArrayList<>()).add(receiverId);
-            receiverToHelpers.computeIfAbsent(receiverId, k -> new ArrayList<>()).add(helperId);
         }
         
-        // Собираем всех в цепочке: и тех кто помог мне, и тех кому я помог
+        // Собираем только тех, кто идёт ОТ userId (его дети и их дети)
         Set<Long> visitedUserIds = new HashSet<>();
         visitedUserIds.add(userId);
         
@@ -515,7 +513,7 @@ public class HelpService {
         while (!toProcess.isEmpty()) {
             Long currentId = toProcess.remove(0);
             
-            // Кому я помог (я был helper)
+            // Кому currentId помог (он был helper) - это его дети в цепочке
             List<Long> iHelped = helperToReceivers.get(currentId);
             if (iHelped != null) {
                 for (Long helpedId : iHelped) {
@@ -525,23 +523,27 @@ public class HelpService {
                     }
                 }
             }
-            
-            // Кто помог мне (я был receiver)
-            List<Long> helpedMe = receiverToHelpers.get(currentId);
-            if (helpedMe != null) {
-                for (Long helperId : helpedMe) {
-                    if (!visitedUserIds.contains(helperId)) {
-                        visitedUserIds.add(helperId);
-                        toProcess.add(helperId);
-                    }
-                }
-            }
         }
         
         // Создаем узлы
         Map<Long, org.example.helptreeservice.dto.graph.HelpGraphDto.Node> nodesMap = new HashMap<>();
         
+        // Добавляем текущего пользователя первым (корень)
+        User currentUser = userRepository.findById(userId).orElse(null);
+        if (currentUser != null) {
+            nodesMap.put(userId, org.example.helptreeservice.dto.graph.HelpGraphDto.Node.builder()
+                    .id(userId)
+                    .name(currentUser.getName())
+                    .avatarUrl(currentUser.getAvatarUrl())
+                    .helpedCount(currentUser.getHelpedCount())
+                    .debtCount(currentUser.getDebtCount())
+                    .rating(currentUser.getRating())
+                    .build());
+        }
+        
+        // Добавляем остальных
         for (Long id : visitedUserIds) {
+            if (id.equals(userId)) continue;
             User user = userRepository.findById(id).orElse(null);
             if (user != null) {
                 nodesMap.put(id, org.example.helptreeservice.dto.graph.HelpGraphDto.Node.builder()
@@ -555,7 +557,7 @@ public class HelpService {
             }
         }
         
-        // Создаем рёбра
+        // Создаем рёбра (только от userId и далее по цепочке)
         List<org.example.helptreeservice.dto.graph.HelpGraphDto.Edge> edges = new ArrayList<>();
         for (Help help : confirmedHelps) {
             Long fromId = help.getHelper().getId();

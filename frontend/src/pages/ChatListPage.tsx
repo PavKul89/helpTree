@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { chatApi } from '../api/chatApi';
-import { Card, Button, Spinner, EmptyState, Avatar, Modal } from '../components';
+import { Card, Spinner, EmptyState, Avatar, Modal } from '../components';
 import { theme } from '../theme';
-import { getRelativeTime } from '../utils/dateUtils';
 import type { Chat } from '../types';
 
 export const ChatListPage = () => {
@@ -36,12 +35,6 @@ export const ChatListPage = () => {
     } catch (err) {
       console.error(err);
     }
-  };
-
-  const confirmDeleteChat = (chatId: number, e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDeleteChatId(chatId);
   };
 
   const formatTime = (dateString?: string) => {

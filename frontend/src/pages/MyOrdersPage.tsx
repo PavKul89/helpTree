@@ -1,16 +1,15 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { postsApi } from '../api/postsApi';
 import { helpApi } from '../api/helpApi';
 import { useAuth } from '../context/AuthContext';
-import { Card, Button, Spinner, EmptyState, Avatar, Modal } from '../components';
+import { Card, Button, Spinner, Modal } from '../components';
 import { theme } from '../theme';
 import { getRelativeTime } from '../utils/dateUtils';
 import type { Post, Help } from '../types';
 
 export const MyOrdersPage = () => {
   const { user } = useAuth();
-  const navigate = useNavigate();
   const [myPosts, setMyPosts] = useState<Post[]>([]);
   const [myHelps, setMyHelps] = useState<Help[]>([]);
   const [loading, setLoading] = useState(true);

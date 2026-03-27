@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { helpApi } from '../api/helpApi';
 import { authApi } from '../api/authApi';
@@ -18,11 +18,19 @@ interface TreeNode {
 }
 
 const DEPTH_COLORS = [
-  '#065f46', // Level 0 - root
-  '#0e7490', // Level 1
-  '#7c3aed', // Level 2
-  '#db2777', // Level 3
-  '#dc2626', // Level 4+
+  '#065f46',
+  '#0e7490',
+  '#7c3aed',
+  '#db2777',
+  '#dc2626',
+];
+
+const DEPTH_BORDER = [
+  '#34d399',
+  '#22d3ee',
+  '#a78bfa',
+  '#f472b6',
+  '#f87171',
 ];
 
 export const HelpGraphPage = () => {
@@ -32,8 +40,8 @@ export const HelpGraphPage = () => {
   const [hoveredNode, setHoveredNode] = useState<any>(null);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [highlightedPath, setHighlightedPath] = useState<{id: number, name: string}[]>([]);
-  const [pathTree, setPathTree] = useState<TreeNode | null>(null);
-  const nodeRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+  const [animatedNodes, setAnimatedNodes] = useState<Set<number>>(new Set());
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     authApi.getCurrentUser()
@@ -46,7 +54,35 @@ export const HelpGraphPage = () => {
       .finally(() => setLoading(false));
   }, []);
 
-  const getSubtreeCount = (node: TreeNode): number => {
+  useEffect(() => {
+    if (graph && currentUser?.id) {
+      const treeLocal = buildTree();
+      if (treeLocal) {
+        const ids = new Set<number>();
+        const collectIds = (node: TreeNode) => {
+          ids.add(node.id);
+          node.children.forEach(collectIds);
+        };
+        collectIds(treeLocal);
+        
+        setAnimatedNodes(new Set());
+        
+        let delay = 0;
+        ids.forEach(id => {
+          setTimeout(() => {
+            setAnimatedNodes(prev => {
+              const newSet = new Set(prev);
+              newSet.add(id);
+              return newSet;
+            });
+          }, delay);
+          delay += 60;
+        });
+      }
+    }
+  }, [graph, currentUser?.id]);
+
+  const getSubtreeCount = useCallback((node: TreeNode): number => {
     let count = 0;
     const traverse = (n: TreeNode) => {
       count += n.children.length;
@@ -54,9 +90,9 @@ export const HelpGraphPage = () => {
     };
     traverse(node);
     return count;
-  };
+  }, []);
 
-  const getPathToNode = (nodeId: number, root: TreeNode): {id: number, name: string}[] => {
+  const getPathToNode = useCallback((nodeId: number, root: TreeNode): {id: number, name: string}[] => {
     const path: {id: number, name: string}[] = [];
     const find = (n: TreeNode): boolean => {
       path.push({ id: n.id, name: n.name });
@@ -69,7 +105,7 @@ export const HelpGraphPage = () => {
     };
     find(root);
     return path;
-  };
+  }, []);
 
   if (loading) return <Spinner message="Загрузка графа помощи..." />;
 
@@ -103,18 +139,8 @@ export const HelpGraphPage = () => {
       edgesByFrom.set(e.fromUserId, list);
     });
 
-    const findRoot = () => {
-      const fromIds = new Set(graph.edges.map((e: any) => e.fromUserId));
-      const toIds = new Set(graph.edges.map((e: any) => e.toUserId));
-      
-      for (const id of Array.from(fromIds)) {
-        if (!toIds.has(id)) return id;
-      }
-      return graph.edges[0]?.fromUserId;
-    };
-
-    const rootId = findRoot();
-    if (!rootId) return null;
+    const rootId = currentUser?.id;
+    if (!rootId || !nodeMap.has(rootId)) return null;
 
     const buildChildren = (parentId: number, depth: number, visited: Set<number>): TreeNode[] => {
       const edges = edgesByFrom.get(parentId) || [];
@@ -152,16 +178,14 @@ export const HelpGraphPage = () => {
     };
   };
 
-  const tree = buildTree();
-
   const getLayout = (node: TreeNode, x: number, y: number, level: number, positions: Map<number, {x: number, y: number, node: TreeNode}>) => {
     positions.set(node.id, { x, y, node });
     
     if (node.children.length === 0) return;
     
     const childCount = node.children.length;
-    const radius = 180 + level * 40;
-    const angleSpread = Math.PI * 0.8;
+    const radius = 200 + level * 50;
+    const angleSpread = Math.min(Math.PI * 0.9, Math.PI * 0.5 + childCount * 0.15);
     const angleStep = childCount > 1 ? angleSpread / (childCount - 1) : 0;
     const startAngle = Math.PI / 2 - angleSpread / 2;
     
@@ -177,17 +201,17 @@ export const HelpGraphPage = () => {
     if (!node) return null;
 
     const positions = new Map<number, {x: number, y: number, node: TreeNode}>();
-    getLayout(node, 400, 100, 0, positions);
+    getLayout(node, 400, 120, 0, positions);
     
     const posArray = Array.from(positions.values());
     const minX = posArray.reduce((min, p) => Math.min(min, p.x), Infinity);
     const maxX = posArray.reduce((max, p) => Math.max(max, p.x), -Infinity);
     const minY = posArray.reduce((min, p) => Math.min(min, p.y), Infinity);
     const maxY = posArray.reduce((max, p) => Math.max(max, p.y), -Infinity);
-    const svgWidth = Math.max(800, maxX - minX + 120);
-    const svgHeight = Math.max(500, maxY - minY + 120);
-    const offsetX = -minX + 60;
-    const offsetY = -minY + 60;
+    const svgWidth = Math.max(800, maxX - minX + 200);
+    const svgHeight = Math.max(500, maxY - minY + 150);
+    const offsetX = -minX + 100;
+    const offsetY = -minY + 80;
 
     const getPos = (id: number) => {
       const p = positions.get(id);
@@ -195,42 +219,47 @@ export const HelpGraphPage = () => {
     };
 
     const getColor = (depth: number) => DEPTH_COLORS[Math.min(depth, DEPTH_COLORS.length - 1)];
-
-    const isHighlighted = (id: number) => highlightedPath.some(p => p.id === id);
-    const isParentHighlighted = (id: number) => {
-      const idx = highlightedPath.findIndex(p => p.id === id);
-      return idx > 0 && highlightedPath[idx - 1].id === selectedNode?.id;
-    };
+    const getBorder = (depth: number) => DEPTH_BORDER[Math.min(depth, DEPTH_BORDER.length - 1)];
 
     const renderEdges = () => {
       const edges: React.ReactElement[] = [];
+      const renderedEdgeKeys = new Set<string>();
       
       const traverse = (n: TreeNode) => {
         const from = getPos(n.id);
         if (!from) return;
         
         n.children.forEach(child => {
+          const edgeKey = `${n.id}-${child.id}`;
+          if (renderedEdgeKeys.has(edgeKey)) return;
+          renderedEdgeKeys.add(edgeKey);
+          
           const to = getPos(child.id);
           if (!to) return;
           
           const isPath = highlightedPath.some(p => p.id === n.id) && highlightedPath.some(p => p.id === child.id);
-          const strokeColor = isPath ? '#fbbf24' : 'rgba(34, 211, 238, 0.4)';
+          const isDimmed = highlightedPath.length > 0 && !isPath;
+          const strokeColor = isPath ? '#fbbf24' : 'rgba(34, 211, 238, 0.3)';
           const strokeWidth = isPath ? 3 : 2;
           
           const midY = (from.y + to.y) / 2;
           edges.push(
-            <g key={`${n.id}-${child.id}`} style={{ 
-              transition: 'all 0.3s ease',
-              opacity: highlightedPath.length > 0 && !isPath ? 0.2 : 1 
-            }}>
+            <g 
+              key={`edge-${n.id}-${child.id}`} 
+              style={{ 
+                transition: 'opacity 0.3s ease',
+                opacity: isDimmed ? 0.15 : 1 
+              }}
+            >
               <path
-                d={`M ${from.x} ${from.y + 22} Q ${from.x} ${midY} ${to.x} ${to.y - 22}`}
+                d={`M ${from.x} ${from.y + 24} Q ${from.x} ${midY} ${to.x} ${to.y - 24}`}
                 stroke={strokeColor}
                 strokeWidth={strokeWidth}
                 fill="none"
+                strokeLinecap="round"
               />
               <polygon
-                points={`${to.x},${to.y - 22} ${to.x - 6},${to.y - 32} ${to.x + 6},${to.y - 32}`}
+                points={`${to.x},${to.y - 24} ${to.x - 5},${to.y - 34} ${to.x + 5},${to.y - 34}`}
                 fill={strokeColor}
               />
             </g>
@@ -245,24 +274,30 @@ export const HelpGraphPage = () => {
 
     const renderNodes = () => {
       const nodes: React.ReactElement[] = [];
+      const renderedIds = new Set<number>();
       
       const traverse = (n: TreeNode) => {
+        if (renderedIds.has(n.id)) return;
+        renderedIds.add(n.id);
+        
         const pos = getPos(n.id);
         if (!pos) return;
         
         const isSelected = selectedNode?.id === n.id;
         const isHovered = hoveredNode?.id === n.id;
+        const isAnimated = animatedNodes.has(n.id);
         const subtreeCount = getSubtreeCount(n);
         const color = getColor(n.depth);
+        const border = getBorder(n.depth);
         const isDimmed = highlightedPath.length > 0 && !highlightedPath.some(p => p.id === n.id);
 
         nodes.push(
           <g 
-            key={n.id}
+            key={`node-${n.id}`}
             style={{ 
               cursor: 'pointer',
-              transition: 'all 0.3s ease',
-              opacity: isDimmed ? 0.3 : 1,
+              transition: 'opacity 0.3s ease',
+              opacity: isDimmed ? 0.2 : (isAnimated ? 1 : 0),
             }}
             onClick={(e) => {
               e.stopPropagation();
@@ -276,32 +311,47 @@ export const HelpGraphPage = () => {
             <circle
               cx={pos.x}
               cy={pos.y}
-              r={isSelected ? 32 : isHovered ? 28 : 22}
+              r={isSelected ? 36 : isHovered ? 30 : 24}
               fill={isSelected ? '#fbbf24' : color}
-              stroke={isSelected ? '#fff' : isHovered ? '#fff' : '#34d399'}
+              stroke={isSelected ? '#fff' : isHovered ? '#fff' : border}
               strokeWidth={isSelected || isHovered ? 4 : 3}
               style={{ 
-                transition: 'all 0.3s ease',
-                filter: isHovered ? 'brightness(1.2)' : 'none',
+                transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                filter: isHovered ? 'drop-shadow(0 0 8px rgba(34, 211, 238, 0.6))' : 'none',
               }}
             />
             <text
               x={pos.x}
-              y={pos.y + 4}
+              y={pos.y + 5}
               textAnchor="middle"
               fill="#fff"
-              fontSize="12"
+              fontSize="13"
               fontWeight="bold"
+              style={{ pointerEvents: 'none' }}
             >
               {n.name.charAt(0).toUpperCase()}
             </text>
+            {n.depth === 0 && (
+              <text
+                x={pos.x}
+                y={pos.y - 32}
+                textAnchor="middle"
+                fill="#fbbf24"
+                fontSize="11"
+                fontWeight="600"
+                style={{ pointerEvents: 'none' }}
+              >
+                Вы
+              </text>
+            )}
             {subtreeCount > 0 && !isSelected && (
               <text
                 x={pos.x}
-                y={pos.y + 40}
+                y={pos.y + 44}
                 textAnchor="middle"
                 fill="rgba(255,255,255,0.6)"
                 fontSize="10"
+                style={{ pointerEvents: 'none' }}
               >
                 +{subtreeCount}
               </text>
@@ -319,13 +369,17 @@ export const HelpGraphPage = () => {
     return (
       <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} style={styles.svg}>
         <defs>
-          <filter id="glow">
-            <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+          <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
             <feMerge>
               <feMergeNode in="coloredBlur"/>
               <feMergeNode in="SourceGraphic"/>
             </feMerge>
           </filter>
+          <linearGradient id="edgeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="rgba(34, 211, 238, 0.5)" />
+            <stop offset="100%" stopColor="rgba(34, 211, 238, 0.2)" />
+          </linearGradient>
         </defs>
         {renderEdges()}
         {renderNodes()}
@@ -335,13 +389,15 @@ export const HelpGraphPage = () => {
 
   return (
     <div style={styles.container} onClick={() => { setSelectedNode(null); setHighlightedPath([]); }}>
-      <Link to="/" style={styles.backLink}>← На главную</Link>
-      <h1 className="page-title" style={styles.title}>🌳 Граф помощи</h1>
+      <div style={styles.header}>
+        <Link to="/" style={styles.backLink}>← На главную</Link>
+        <h1 className="page-title" style={styles.title}>🌳 Граф помощи</h1>
+      </div>
       
       <div style={styles.stats}>
         <div style={styles.statBox}>
           <div style={styles.statValue}>{graph.totalUsers}</div>
-          <div style={styles.statLabel}>Участников</div>
+          <div style={styles.statLabel}>В цепочке</div>
         </div>
         <div style={styles.statBox}>
           <div style={styles.statValue}>{graph.totalHelps}</div>
@@ -349,8 +405,8 @@ export const HelpGraphPage = () => {
         </div>
       </div>
 
-      <div style={styles.graphContainer}>
-        {renderTree(tree)}
+      <div style={styles.graphContainer} ref={containerRef}>
+        {renderTree(graph ? buildTree() : null)}
         
         {hoveredNode && !selectedNode && (
           <div style={styles.tooltip}>
@@ -376,6 +432,12 @@ export const HelpGraphPage = () => {
                 )}
               </div>
             </div>
+            <button 
+              style={styles.closeBtn}
+              onClick={() => { setSelectedNode(null); setHighlightedPath([]); }}
+            >
+              ✕
+            </button>
           </div>
           
           {selectedNode.depth > 0 && selectedNode.postTitle && (
@@ -392,11 +454,13 @@ export const HelpGraphPage = () => {
 
           {highlightedPath.length > 1 && (
             <div style={styles.pathInfo}>
-              <div style={styles.pathLabel}>Полная цепочка:</div>
+              <div style={styles.pathLabel}>Цепочка:</div>
               <div style={styles.pathList}>
                 {highlightedPath.map((pathItem, idx) => (
-                  <React.Fragment key={pathItem.id}>
-                    <span style={styles.pathItem}>{pathItem.name}</span>
+                  <React.Fragment key={`path-${pathItem.id}-${idx}`}>
+                    <span style={idx === highlightedPath.length - 1 ? styles.pathItemActive : styles.pathItem}>
+                      {pathItem.name}
+                    </span>
                     {idx < highlightedPath.length - 1 && <span style={styles.pathArrow}>→</span>}
                   </React.Fragment>
                 ))}
@@ -406,112 +470,115 @@ export const HelpGraphPage = () => {
 
           <div style={styles.nodeActions}>
             <Link to={`/profile/${selectedNode.id}`} style={styles.profileLink}>
-              Перейти в профиль
+              Перейти в профиль →
             </Link>
           </div>
         </div>
       )}
 
       <div style={styles.legend}>
-        <h3 style={styles.legendTitle}>Уровни помощи:</h3>
+        <h3 style={styles.legendTitle}>Уровни:</h3>
         <div style={styles.legendItems}>
           {DEPTH_COLORS.map((color, i) => (
-            <div key={i} style={styles.legendItem}>
-              <div style={{ ...styles.legendDot, background: color }} />
-              <span style={styles.legendText}>Уровень {i}</span>
+            <div key={`legend-${i}`} style={styles.legendItem}>
+              <div style={{ ...styles.legendDot, background: color, border: `2px solid ${DEPTH_BORDER[i]}` }} />
+              <span style={styles.legendText}>{i === 0 ? 'Вы' : `Уровень ${i}`}</span>
             </div>
           ))}
         </div>
-        <p style={styles.legendHint}>
-          +N - сколько людей получили помощь через этого человека
-        </p>
+        <p style={styles.legendHint}>+N — сколько получили помощь через этого человека</p>
       </div>
     </div>
   );
 };
 
-const positions: any = {};
-
 const styles: Record<string, React.CSSProperties> = {
   container: {
-    maxWidth: 1200,
+    maxWidth: 1000,
     margin: '0 auto',
-    padding: '24px',
+    padding: '20px',
     minHeight: '100vh',
+    background: 'linear-gradient(180deg, rgba(2, 44, 34, 0.3) 0%, rgba(6, 78, 59, 0.2) 100%)',
+  },
+  header: {
+    marginBottom: '16px',
   },
   backLink: {
     color: theme.colors.accentLight,
     textDecoration: 'none',
     fontSize: '14px',
     display: 'inline-block',
-    marginBottom: '16px',
+    marginBottom: '8px',
   },
   title: {
     color: theme.colors.text,
     fontSize: '28px',
     fontWeight: 700,
-    margin: '0 0 20px 0',
+    margin: 0,
   },
   stats: {
     display: 'flex',
-    gap: '20px',
-    marginBottom: '20px',
+    gap: '16px',
+    marginBottom: '16px',
   },
   statBox: {
     background: 'linear-gradient(135deg, #065f46 0%, #0e7490 100%)',
-    padding: '16px 24px',
+    padding: '12px 20px',
     borderRadius: '12px',
     textAlign: 'center',
     border: '1px solid rgba(34, 211, 238, 0.3)',
   },
   statValue: {
     color: '#fff',
-    fontSize: '28px',
+    fontSize: '24px',
     fontWeight: 700,
   },
   statLabel: {
     color: 'rgba(255,255,255,0.7)',
-    fontSize: '13px',
-    marginTop: '4px',
+    fontSize: '12px',
+    marginTop: '2px',
   },
   graphContainer: {
-    background: 'linear-gradient(180deg, rgba(2, 44, 34, 0.9) 0%, rgba(6, 78, 59, 0.9) 100%)',
-    borderRadius: '16px',
+    background: 'linear-gradient(180deg, rgba(2, 44, 34, 0.5) 0%, rgba(6, 78, 59, 0.4) 100%)',
+    borderRadius: '20px',
     padding: '20px',
     border: '1px solid rgba(34, 211, 238, 0.2)',
-    marginBottom: '20px',
+    marginBottom: '16px',
     position: 'relative',
-    minHeight: '500px',
+    minHeight: '450px',
+    overflow: 'auto',
   },
   svg: {
+    display: 'block',
     width: '100%',
-    minWidth: '800px',
+    minWidth: '700px',
     height: 'auto',
   },
   tooltip: {
     position: 'absolute',
-    top: '20px',
-    right: '20px',
-    background: 'rgba(0,0,0,0.8)',
-    padding: '12px 16px',
-    borderRadius: '8px',
+    top: '16px',
+    right: '16px',
+    background: 'rgba(0,0,0,0.85)',
+    padding: '14px 18px',
+    borderRadius: '12px',
     border: '1px solid rgba(34, 211, 238, 0.5)',
     zIndex: 100,
+    backdropFilter: 'blur(8px)',
   },
   tooltipName: {
     color: '#fff',
     fontSize: '16px',
     fontWeight: 600,
+    marginBottom: '6px',
   },
   tooltipStat: {
     color: '#fbbf24',
     fontSize: '13px',
-    marginTop: '4px',
   },
   tooltipSubtree: {
-    color: 'rgba(255,255,255,0.7)',
+    color: 'rgba(255,255,255,0.6)',
     fontSize: '12px',
-    marginTop: '2px',
+    marginTop: '4px',
   },
   emptyState: {
     textAlign: 'center',
@@ -534,20 +601,37 @@ const styles: Record<string, React.CSSProperties> = {
   },
   nodeInfo: {
     background: 'linear-gradient(135deg, #065f46 0%, #0e7490 100%)',
-    borderRadius: '12px',
+    borderRadius: '16px',
     padding: '20px',
     border: '1px solid rgba(34, 211, 238, 0.3)',
-    marginBottom: '20px',
+    marginBottom: '16px',
+    position: 'relative',
   },
   nodeHeader: {
     display: 'flex',
     alignItems: 'center',
     gap: '16px',
   },
+  closeBtn: {
+    position: 'absolute',
+    top: '12px',
+    right: '12px',
+    background: 'rgba(255,255,255,0.1)',
+    border: 'none',
+    borderRadius: '50%',
+    width: '28px',
+    height: '28px',
+    color: 'rgba(255,255,255,0.7)',
+    cursor: 'pointer',
+    fontSize: '14px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   nodeName: {
     color: '#fff',
     fontSize: '20px',
-    margin: '0 0 8px 0',
+    margin: '0 0 6px 0',
     fontWeight: 600,
   },
   nodeStats: {
@@ -564,10 +648,10 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '14px',
   },
   helpInfo: {
-    marginTop: '16px',
+    marginTop: '14px',
     padding: '12px',
     background: 'rgba(0,0,0,0.2)',
-    borderRadius: '8px',
+    borderRadius: '10px',
   },
   helpInfoLabel: {
     color: 'rgba(255,255,255,0.6)',
@@ -585,10 +669,10 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop: '4px',
   },
   pathInfo: {
-    marginTop: '16px',
+    marginTop: '14px',
     padding: '12px',
     background: 'rgba(251, 191, 36, 0.1)',
-    borderRadius: '8px',
+    borderRadius: '10px',
     border: '1px solid rgba(251, 191, 36, 0.3)',
   },
   pathLabel: {
@@ -600,21 +684,29 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     flexWrap: 'wrap',
-    gap: '4px',
+    gap: '6px',
   },
   pathItem: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: '13px',
+    padding: '4px 8px',
+    background: 'rgba(0,0,0,0.2)',
+    borderRadius: '4px',
+  },
+  pathItemActive: {
     color: '#fff',
     fontSize: '13px',
-    fontWeight: 500,
+    fontWeight: 600,
+    padding: '4px 8px',
+    background: 'rgba(251, 191, 36, 0.3)',
+    borderRadius: '4px',
   },
   pathArrow: {
     color: '#fbbf24',
     fontSize: '14px',
   },
   nodeActions: {
-    marginTop: '16px',
-    display: 'flex',
-    gap: '12px',
+    marginTop: '14px',
   },
   profileLink: {
     display: 'inline-block',
@@ -629,35 +721,35 @@ const styles: Record<string, React.CSSProperties> = {
   legend: {
     background: 'rgba(0,0,0,0.2)',
     padding: '16px',
-    borderRadius: '8px',
+    borderRadius: '12px',
   },
   legendTitle: {
     color: theme.colors.text,
-    fontSize: '16px',
+    fontSize: '14px',
     margin: '0 0 12px 0',
   },
   legendItems: {
     display: 'flex',
-    gap: '16px',
+    gap: '14px',
     flexWrap: 'wrap',
   },
   legendItem: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
+    gap: '6px',
   },
   legendDot: {
-    width: '16px',
-    height: '16px',
+    width: '14px',
+    height: '14px',
     borderRadius: '50%',
   },
   legendText: {
     color: theme.colors.textMuted,
-    fontSize: '13px',
+    fontSize: '12px',
   },
   legendHint: {
     color: theme.colors.textMuted,
-    fontSize: '12px',
-    marginTop: '12px',
+    fontSize: '11px',
+    marginTop: '10px',
   },
 };

@@ -169,22 +169,6 @@ export const PostDetailPage = () => {
     }
   };
 
-  const handleDeleteImage = async (url: string) => {
-    if (!post) return;
-    try {
-      const newImageUrls = post.imageUrls?.filter(img => img !== url) || [];
-      await postsApi.update(Number(id), { imageUrls: newImageUrls });
-      try {
-        await imagesApi.delete(url);
-      } catch (e) {
-        console.log('Изображение уже удалено из хранилища');
-      }
-      loadData();
-    } catch (err: any) {
-      console.error('Error updating post:', err?.response?.data || err);
-    }
-  };
-
   const handleDeleteComment = async (commentId: number) => {
     try {
       await postsApi.deleteComment(Number(id), commentId);

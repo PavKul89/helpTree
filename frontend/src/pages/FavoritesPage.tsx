@@ -1,34 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { postsApi } from '../api/postsApi';
 import { authApi } from '../api/authApi';
 import type { Post } from '../types';
 import { Card, Button, Spinner, EmptyState, Avatar, Modal } from '../components';
 import { theme } from '../theme';
 import { getRelativeTime } from '../utils/dateUtils';
-
-const STATUSES = ['Все', 'OPEN', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'];
-const CATEGORIES = [
-  'Все',
-  'Дрова',
-  'Уборка',
-  'Ремонт',
-  'Доставка',
-  'Покупки',
-  'Готовка',
-  'Сад',
-  'Животные',
-  'Транспорт',
-  'Компьютеры',
-  'Электроника',
-  'Одежда',
-  'Дети',
-  'Здоровье',
-  'Образование',
-  'Бизнес',
-  'Недвижимость',
-  'Другое',
-];
 
 export const FavoritesPage = () => {
   const [posts, setPosts] = useState<Post[]>([]);
