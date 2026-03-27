@@ -3,10 +3,12 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import { authApi } from '../api/authApi';
 import { chatApi } from '../api/chatApi';
 import { postsApi } from '../api/postsApi';
+import { achievementApi, Achievement } from '../api/achievementApi';
 import { useAuth } from '../context/AuthContext';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { Spinner } from '../components/Spinner';
+import { useToast } from '../components/Toast';
 import { theme } from '../theme';
 import type { User, UserPublic, Post } from '../types';
 
@@ -14,14 +16,16 @@ export const ProfilePage = () => {
   const { userId } = useParams<{ userId?: string }>();
   const navigate = useNavigate();
   const { user: currentUser, setUser } = useAuth();
+  const { showToast } = useToast();
   
   const [profileUser, setProfileUser] = useState<User | UserPublic | null>(null);
   const [userPosts, setUserPosts] = useState<Post[]>([]);
+  const [achievements, setAchievements] = useState<Achievement[]>([]);
   const [loading, setLoading] = useState(true);
   const [isOwnProfile, setIsOwnProfile] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [activeTab, setActiveTab] = useState<'info' | 'posts'>('info');
-  const [editForm, setEditForm] = useState({ name: '', email: '', phone: '', city: '' });
+  const [activeTab, setActiveTab] = useState<'info' | 'posts' | 'achievements'>('info');
+  const [editForm, setEditForm] = useState({ name: '', email: '', phone: '', city: '', birthDate: '' });
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
@@ -49,6 +53,7 @@ export const ProfilePage = () => {
               email: userData.email,
               phone: (userData as User).phone || '',
               city: (userData as User).city || '',
+              birthDate: (userData as User).birthDate ? ((userData as User).birthDate || '').split('T')[0] : '',
             });
           }
         }
@@ -79,9 +84,45 @@ export const ProfilePage = () => {
         console.error('Error loading user posts:', err);
       }
     };
+
+    const loadAchievements = async () => {
+      const targetUserId = userId && !isNaN(Number(userId)) 
+        ? Number(userId) 
+        : currentUser?.id;
+      
+      if (!targetUserId) return;
+      
+      try {
+        const allAchievements = await achievementApi.getAllAchievements(targetUserId);
+        const earnedAchievements = allAchievements.filter(a => a.isEarned);
+        if (!cancelled) {
+          setAchievements(earnedAchievements);
+          
+          if (isOwnProfile && earnedAchievements.length > 0) {
+            const lastSeenKey = 'lastSeenAchievementDate';
+            const lastSeenDate = localStorage.getItem(lastSeenKey);
+            const latestAchievement = earnedAchievements[0];
+            
+            if (latestAchievement.earnedAt) {
+              if (lastSeenDate) {
+                const lastSeen = new Date(lastSeenDate);
+                const latest = new Date(latestAchievement.earnedAt);
+                if (latest > lastSeen) {
+                  showToast(`🎉 Получено достижение: ${latestAchievement.name}!`, 'success');
+                }
+              }
+              localStorage.setItem(lastSeenKey, latestAchievement.earnedAt);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error loading achievements:', err);
+      }
+    };
     
     loadUser();
     loadUserPosts();
+    loadAchievements();
     
     return () => { cancelled = true; };
   }, [userId, currentUser?.id]);
@@ -104,6 +145,7 @@ export const ProfilePage = () => {
         email: editForm.email,
         phone: editForm.phone || undefined,
         city: editForm.city || undefined,
+        birthDate: editForm.birthDate ? new Date(editForm.birthDate).toISOString() : null,
       });
       setProfileUser(updatedUser);
       setUser(updatedUser);
@@ -150,6 +192,17 @@ export const ProfilePage = () => {
       case 'COMPLETED': return '#06b6d4';
       case 'CANCELLED': return '#ef4444';
       default: return '#6b7280';
+    }
+  };
+
+  const getRarityColor = (rarity: string) => {
+    switch (rarity) {
+      case 'COMMON': return '#9ca3af';
+      case 'UNCOMMON': return '#22c55e';
+      case 'RARE': return '#3b82f6';
+      case 'EPIC': return '#a855f7';
+      case 'LEGENDARY': return '#f59e0b';
+      default: return '#9ca3af';
     }
   };
 
@@ -280,6 +333,12 @@ export const ProfilePage = () => {
           >
             Публикации ({userPosts.length})
           </button>
+          <button 
+            style={activeTab === 'achievements' ? styles.tabActive : styles.tab}
+            onClick={() => setActiveTab('achievements')}
+          >
+            Достижения ({achievements.length})
+          </button>
         </div>
 
         {activeTab === 'info' && (
@@ -323,6 +382,15 @@ export const ProfilePage = () => {
                     style={styles.input}
                   />
                 </div>
+                <div style={styles.formRow}>
+                  <label style={styles.formLabel}>Дата рождения</label>
+                  <input
+                    type="date"
+                    value={editForm.birthDate}
+                    onChange={(e) => setEditForm({ ...editForm, birthDate: e.target.value })}
+                    style={styles.input}
+                  />
+                </div>
                 <div style={styles.formActions}>
                   <Button onClick={handleSaveProfile}>Сохранить</Button>
                   <Button variant="outline" onClick={() => setIsEditing(false)}>Отмена</Button>
@@ -340,6 +408,12 @@ export const ProfilePage = () => {
                   <div style={styles.infoRow}>
                     <span style={styles.infoLabel}>Город</span>
                     <span style={styles.infoValue}>{fullUser.city}</span>
+                  </div>
+                )}
+                {'birthDate' in fullUser && fullUser.birthDate && (
+                  <div style={styles.infoRow}>
+                    <span style={styles.infoLabel}>Дата рождения</span>
+                    <span style={styles.infoValue}>{formatDate(fullUser.birthDate as string)}</span>
                   </div>
                 )}
                 {'email' in profileUser && (
@@ -393,6 +467,43 @@ export const ProfilePage = () => {
                       <span>{formatDate(post.createdAt)}</span>
                     </div>
                   </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'achievements' && (
+          <div style={styles.content}>
+            {achievements.length === 0 ? (
+              <div style={styles.emptyState}>
+                <div style={styles.emptyIcon}>🏆</div>
+                <div>Пока нет достижений</div>
+                <div style={styles.emptyHint}>Помогайте людям, чтобы получить первые достижения!</div>
+              </div>
+            ) : (
+              <div style={styles.achievementsGrid}>
+                {achievements.map(achievement => (
+                  <div 
+                    key={achievement.type} 
+                    style={{
+                      ...styles.achievementCard,
+                      borderColor: getRarityColor(achievement.rarity),
+                    }}
+                  >
+                    <div style={styles.achievementEmoji}>{achievement.emoji}</div>
+                    <div style={styles.achievementName}>{achievement.name}</div>
+                    <div style={styles.achievementDesc}>{achievement.description}</div>
+                    <div style={{
+                      ...styles.achievementRarity,
+                      color: getRarityColor(achievement.rarity),
+                    }}>
+                      {achievement.rarity}
+                    </div>
+                    <div style={styles.achievementDate}>
+                      {achievement.earnedAt && formatDate(achievement.earnedAt)}
+                    </div>
+                  </div>
                 ))}
               </div>
             )}
@@ -681,5 +792,61 @@ const styles: Record<string, React.CSSProperties> = {
     gap: '8px',
     color: theme.colors.textMuted,
     fontSize: '13px',
+  },
+  achievementsGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+    gap: '16px',
+  },
+  achievementCard: {
+    padding: '20px',
+    background: 'rgba(255,255,255,0.04)',
+    borderRadius: theme.borderRadius.md,
+    border: '2px solid',
+    textAlign: 'center',
+    transition: 'all 0.3s ease',
+    cursor: 'default',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  achievementEmoji: {
+    fontSize: '48px',
+    marginBottom: '12px',
+    display: 'block',
+    filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))',
+    transition: 'transform 0.3s ease',
+  },
+  achievementName: {
+    color: theme.colors.text,
+    fontSize: '16px',
+    fontWeight: 600,
+    marginBottom: '4px',
+  },
+  achievementDesc: {
+    color: theme.colors.textMuted,
+    fontSize: '13px',
+    marginBottom: '8px',
+    lineHeight: 1.4,
+  },
+  achievementRarity: {
+    fontSize: '11px',
+    fontWeight: 700,
+    textTransform: 'uppercase',
+    marginBottom: '8px',
+    letterSpacing: '0.5px',
+  },
+  achievementDate: {
+    color: theme.colors.textMuted,
+    fontSize: '11px',
+  },
+  emptyIcon: {
+    fontSize: '64px',
+    marginBottom: '16px',
+    opacity: 0.8,
+  },
+  emptyHint: {
+    color: theme.colors.textMuted,
+    fontSize: '14px',
+    marginTop: '8px',
   },
 };

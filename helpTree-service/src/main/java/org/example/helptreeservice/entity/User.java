@@ -55,6 +55,9 @@ public class User {
 
     private Double rating = 0.0;
 
+    @Column(name = "birth_date")
+    private LocalDateTime birthDate;
+
     @Enumerated(EnumType.STRING)
     private UserStatus status = UserStatus.NEWBIE;
 

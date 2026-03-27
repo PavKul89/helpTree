@@ -34,6 +34,9 @@ public class RoleBasedAuthFilter implements GlobalFilter {
             "/api/posts/*/comments",
             "/api/posts/*/comments/",
             "/api/helps/graph",
+            "/api/helps/stats",
+            "/api/achievements",
+            "/api/activities",
             "/actuator/health"
     );
 
@@ -135,12 +138,21 @@ public class RoleBasedAuthFilter implements GlobalFilter {
         if (path.startsWith("/actuator/")) {
             return ACTUATOR_PATHS.stream().anyMatch(path::startsWith);
         }
+        if (path.startsWith("/api/achievements")) {
+            return true;
+        }
+        if (path.startsWith("/api/activities")) {
+            return true;
+        }
         return false;
     }
 
     private boolean isAdminOnlyPath(String path) {
         if ("/api/users".equals(path)) {
             return true;
+        }
+        if (path.startsWith("/api/achievements")) {
+            return false;
         }
         if (USER_PATH_EXCEPTIONS.stream().anyMatch(path::startsWith)) {
             return false;

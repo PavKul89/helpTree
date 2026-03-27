@@ -90,4 +90,9 @@ public class HelpController {
             @RequestParam(required = false) Long userId) {
         return ResponseEntity.ok(helpService.getHelpGraph(userId));
     }
+
+    @GetMapping("/stats")
+    public ResponseEntity<org.example.helptreeservice.dto.graph.HelpStatsDto> getHelpStats() {
+        return ResponseEntity.ok(helpService.getHelpStats());
+    }
 }

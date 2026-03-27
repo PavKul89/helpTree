@@ -63,7 +63,10 @@ public class GatewayServiceApplication {
                                 "/api/test/**",
                                 "/api/reviews/**",
                                 "/api/chats/**",
-                                "/api/comments/**"
+                                "/api/comments/**",
+                                "/api/achievements/**",
+                                "/api/helps/stats",
+                                "/api/activities/**"
                         )
                         .filters(f -> f
                                 .addRequestHeader("X-Forwarded-For", "gateway")

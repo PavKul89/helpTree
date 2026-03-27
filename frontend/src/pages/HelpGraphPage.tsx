@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { helpApi } from '../api/helpApi';
+import { helpApi, HelpStats } from '../api/helpApi';
 import { authApi } from '../api/authApi';
 import { Spinner, Avatar } from '../components';
 import { theme } from '../theme';
@@ -13,6 +13,11 @@ interface TreeNode {
   helpedCount: number;
   children: TreeNode[];
   depth: number;
+  postTitle?: string;
+  helpDate?: string;
+}
+
+interface EdgeData {
   postTitle?: string;
   helpDate?: string;
 }
@@ -35,7 +40,9 @@ const DEPTH_BORDER = [
 
 export const HelpGraphPage = () => {
   const [graph, setGraph] = useState<any>(null);
+  const [stats, setStats] = useState<HelpStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showStats, setShowStats] = useState(false);
   const [selectedNode, setSelectedNode] = useState<any>(null);
   const [hoveredNode, setHoveredNode] = useState<any>(null);
   const [currentUser, setCurrentUser] = useState<any>(null);
@@ -52,6 +59,10 @@ export const HelpGraphPage = () => {
       .then(setGraph)
       .catch(console.error)
       .finally(() => setLoading(false));
+    
+    helpApi.getHelpStats()
+      .then(setStats)
+      .catch(console.error);
   }, []);
 
   useEffect(() => {
@@ -142,6 +153,14 @@ export const HelpGraphPage = () => {
     const rootId = currentUser?.id;
     if (!rootId || !nodeMap.has(rootId)) return null;
 
+    const edgeDataMap = new Map<string, EdgeData>();
+    graph.edges.forEach((e: any) => {
+      edgeDataMap.set(`${e.fromUserId}-${e.toUserId}`, {
+        postTitle: e.postTitle,
+        helpDate: e.confirmedAt,
+      });
+    });
+
     const buildChildren = (parentId: number, depth: number, visited: Set<number>): TreeNode[] => {
       const edges = edgesByFrom.get(parentId) || [];
       return edges.map(edge => {
@@ -152,14 +171,16 @@ export const HelpGraphPage = () => {
         const childVisited = new Set(visited);
         childVisited.add(edge.toUserId);
         
+        const edgeData = edgeDataMap.get(`${parentId}-${edge.toUserId}`);
+        
         return {
           id: child.id,
           name: child.name,
           avatarUrl: child.avatarUrl,
           helpedCount: child.helpedCount,
           depth,
-          postTitle: edge.postTitle,
-          helpDate: edge.confirmedAt,
+          postTitle: edgeData?.postTitle,
+          helpDate: edgeData?.helpDate,
           children: buildChildren(child.id, depth + 1, childVisited),
         };
       }).filter(Boolean) as TreeNode[];
@@ -239,10 +260,13 @@ export const HelpGraphPage = () => {
           
           const isPath = highlightedPath.some(p => p.id === n.id) && highlightedPath.some(p => p.id === child.id);
           const isDimmed = highlightedPath.length > 0 && !isPath;
-          const strokeColor = isPath ? '#fbbf24' : 'rgba(34, 211, 238, 0.3)';
-          const strokeWidth = isPath ? 3 : 2;
+          const isHovered = hoveredNode?.id === child.id;
+          const strokeColor = isPath ? '#fbbf24' : isHovered ? 'rgba(34, 211, 238, 0.8)' : 'rgba(34, 211, 238, 0.3)';
+          const strokeWidth = isPath ? 3 : isHovered ? 2.5 : 2;
           
+          const midX = (from.x + to.x) / 2;
           const midY = (from.y + to.y) / 2;
+          
           edges.push(
             <g 
               key={`edge-${n.id}-${child.id}`} 
@@ -262,6 +286,41 @@ export const HelpGraphPage = () => {
                 points={`${to.x},${to.y - 24} ${to.x - 5},${to.y - 34} ${to.x + 5},${to.y - 34}`}
                 fill={strokeColor}
               />
+              {(isHovered || isPath) && child.postTitle && (
+                <g>
+                  <rect
+                    x={midX - 60}
+                    y={midY - 8}
+                    width={120}
+                    height={36}
+                    rx={6}
+                    fill="rgba(0,0,0,0.85)"
+                    stroke="rgba(34, 211, 238, 0.5)"
+                    strokeWidth={1}
+                  />
+                  <text
+                    x={midX}
+                    y={midY + 4}
+                    textAnchor="middle"
+                    fill="#fff"
+                    fontSize={10}
+                    fontWeight={500}
+                  >
+                    {child.postTitle.length > 20 ? child.postTitle.substring(0, 20) + '...' : child.postTitle}
+                  </text>
+                  {child.helpDate && (
+                    <text
+                      x={midX}
+                      y={midY + 16}
+                      textAnchor="middle"
+                      fill="rgba(255,255,255,0.6)"
+                      fontSize={9}
+                    >
+                      {new Date(child.helpDate).toLocaleDateString('ru-RU')}
+                    </text>
+                  )}
+                </g>
+              )}
             </g>
           );
           traverse(child);
@@ -403,7 +462,55 @@ export const HelpGraphPage = () => {
           <div style={styles.statValue}>{graph.totalHelps}</div>
           <div style={styles.statLabel}>Актов помощи</div>
         </div>
+        <button 
+          style={showStats ? {...styles.statsToggle, ...styles.statsToggleActive} : styles.statsToggle}
+          onClick={() => setShowStats(!showStats)}
+        >
+          📊 Статистика
+        </button>
       </div>
+
+      {showStats && stats && (
+        <div style={styles.statsPanel}>
+          <div style={styles.statsSection}>
+            <h3 style={styles.statsTitle}>По месяцам</h3>
+            <div style={styles.chartContainer}>
+              {Object.entries(stats.byMonth).map(([month, count]) => (
+                <div key={month} style={styles.chartBar}>
+                  <div style={{...styles.bar, height: `${Math.max(5, (count / (stats.totalHelps || 1)) * 100)}%`}} />
+                  <span style={styles.barLabel}>{month}</span>
+                  <span style={styles.barValue}>{count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          <div style={styles.statsSection}>
+            <h3 style={styles.statsTitle}>По категориям</h3>
+            <div style={styles.categoryList}>
+              {Object.entries(stats.byCategory).sort((a, b) => b[1] - a[1]).map(([category, count]) => (
+                <div key={category} style={styles.categoryItem}>
+                  <span style={styles.categoryName}>{category}</span>
+                  <span style={styles.categoryCount}>{count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div style={styles.statsSection}>
+            <h3 style={styles.statsTitle}>Топ помогающих</h3>
+            <div style={styles.topList}>
+              {stats.topHelpers.slice(0, 5).map((helper, idx) => (
+                <div key={helper.userId} style={styles.topItem}>
+                  <span style={styles.topRank}>#{idx + 1}</span>
+                  <span style={styles.topName}>{helper.name}</span>
+                  <span style={styles.topCount}>★ {helper.helpCount}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div style={styles.graphContainer} ref={containerRef}>
         {renderTree(graph ? buildTree() : null)}
@@ -751,5 +858,123 @@ const styles: Record<string, React.CSSProperties> = {
     color: theme.colors.textMuted,
     fontSize: '11px',
     marginTop: '10px',
+  },
+  statsToggle: {
+    padding: '10px 16px',
+    background: 'rgba(255,255,255,0.1)',
+    border: '1px solid rgba(34, 211, 238, 0.3)',
+    borderRadius: '8px',
+    color: theme.colors.text,
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: 500,
+  },
+  statsToggleActive: {
+    background: 'rgba(34, 211, 238, 0.2)',
+    borderColor: '#22d3ee',
+  },
+  statsPanel: {
+    background: 'rgba(0,0,0,0.3)',
+    borderRadius: '16px',
+    padding: '20px',
+    marginBottom: '16px',
+    border: '1px solid rgba(34, 211, 238, 0.2)',
+  },
+  statsSection: {
+    marginBottom: '24px',
+  },
+  statsTitle: {
+    color: theme.colors.text,
+    fontSize: '16px',
+    margin: '0 0 12px 0',
+    fontWeight: 600,
+  },
+  chartContainer: {
+    display: 'flex',
+    alignItems: 'flex-end',
+    gap: '4px',
+    height: '120px',
+    padding: '10px 0',
+  },
+  chartBar: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    height: '100%',
+    position: 'relative',
+  },
+  bar: {
+    width: '100%',
+    background: 'linear-gradient(180deg, #22d3ee 0%, #0891b2 100%)',
+    borderRadius: '4px 4px 0 0',
+    marginTop: 'auto',
+    minHeight: '4px',
+    transition: 'height 0.3s ease',
+  },
+  barLabel: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: '9px',
+    marginTop: '4px',
+  },
+  barValue: {
+    color: '#22d3ee',
+    fontSize: '10px',
+    fontWeight: 600,
+    position: 'absolute',
+    top: 0,
+  },
+  categoryList: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '8px',
+  },
+  categoryItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    background: 'rgba(255,255,255,0.05)',
+    padding: '8px 12px',
+    borderRadius: '8px',
+    border: '1px solid rgba(34, 211, 238, 0.2)',
+  },
+  categoryName: {
+    color: theme.colors.text,
+    fontSize: '13px',
+  },
+  categoryCount: {
+    color: '#22d3ee',
+    fontSize: '13px',
+    fontWeight: 600,
+  },
+  topList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+  },
+  topItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    padding: '10px 14px',
+    background: 'rgba(255,255,255,0.05)',
+    borderRadius: '10px',
+    border: '1px solid rgba(251, 191, 36, 0.3)',
+  },
+  topRank: {
+    color: '#fbbf24',
+    fontWeight: 700,
+    fontSize: '14px',
+    width: '24px',
+  },
+  topName: {
+    color: theme.colors.text,
+    fontSize: '14px',
+    flex: 1,
+  },
+  topCount: {
+    color: '#fbbf24',
+    fontSize: '14px',
+    fontWeight: 600,
   },
 };

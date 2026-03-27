@@ -12,6 +12,8 @@ import { UsersPage } from './pages/UsersPage';
 import { MyOrdersPage } from './pages/MyOrdersPage';
 import { FavoritesPage } from './pages/FavoritesPage';
 import { HelpGraphPage } from './pages/HelpGraphPage';
+import { AchievementsPage } from './pages/AchievementsPage';
+import { ActivityPage } from './pages/ActivityPage';
 import { Navbar } from './components/Navbar';
 import { Layout } from './components/Layout';
 import { ToastProvider } from './components/Toast';
@@ -52,6 +54,13 @@ const AppLayout = () => {
             </ProtectedRoute>
           } />
           <Route path="/graph" element={<HelpGraphPage />} />
+          <Route path="/achievements" element={<AchievementsPage />} />
+          <Route path="/activity" element={
+            <ProtectedRoute>
+              <ActivityPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/activity/:userId" element={<ActivityPage />} />
           <Route path="/profile" element={
             <ProtectedRoute>
               <ProfilePage />

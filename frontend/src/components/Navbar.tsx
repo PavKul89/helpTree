@@ -79,6 +79,8 @@ export const Navbar: React.FC = () => {
         <div style={styles.links}>
           <div onClick={handleLogoClick} style={styles.link}>Главная</div>
           <Link to="/graph" style={styles.link}>Граф 🌳</Link>
+          <Link to="/achievements" style={styles.link}>🏆 Достижения</Link>
+          <Link to="/activity" style={styles.link}>📋 Активность</Link>
           {user && (
             <>
               <Link to="/favorites" style={styles.link}>Избранное ⭐</Link>

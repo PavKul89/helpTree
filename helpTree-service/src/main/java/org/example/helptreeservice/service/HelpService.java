@@ -23,12 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -43,6 +38,7 @@ public class HelpService {
     private final UserService userService;
     private final HelpMapper helpMapper;
     private final KafkaProducerService kafkaProducerService;
+    private final AchievementService achievementService;
 
     /**
      * 1. Помощник откликается на пост
@@ -281,6 +277,8 @@ public class HelpService {
 
             userService.incrementHelpedCount(help.getReceiver().getId());
             userService.userHelpedSomeone(help.getHelper().getId());
+
+            achievementService.checkAndAwardAchievements(help.getHelper(), help);
 
             Help updatedHelp = helpRepository.save(help);
 
@@ -582,6 +580,74 @@ public class HelpService {
                 .edges(edges)
                 .totalHelps(edges.size())
                 .totalUsers(nodesMap.size())
+                .build();
+    }
+
+    public org.example.helptreeservice.dto.graph.HelpStatsDto getHelpStats() {
+        List<Help> allHelps = helpRepository.findAll();
+        
+        // По месяцам
+        Map<String, Long> byMonth = new LinkedHashMap<>();
+        Calendar cal = Calendar.getInstance();
+        cal.add(Calendar.MONTH, -11);
+        for (int i = 0; i < 12; i++) {
+            String monthKey = String.format("%02d/%d", cal.get(Calendar.MONTH) + 1, cal.get(Calendar.YEAR));
+            byMonth.put(monthKey, 0L);
+            cal.add(Calendar.MONTH, 1);
+        }
+        
+        for (Help help : allHelps) {
+            if (help.getConfirmedAt() != null) {
+                String monthKey = String.format("%02d/%d", 
+                    help.getConfirmedAt().getMonthValue(), 
+                    help.getConfirmedAt().getYear());
+                if (byMonth.containsKey(monthKey)) {
+                    byMonth.put(monthKey, byMonth.get(monthKey) + 1);
+                }
+            }
+        }
+        
+        // По категориям
+        Map<String, Long> byCategory = new HashMap<>();
+        for (Help help : allHelps) {
+            if (help.getPost() != null && help.getPost().getCategory() != null) {
+                String category = help.getPost().getCategory();
+                byCategory.put(category, byCategory.getOrDefault(category, 0L) + 1);
+            }
+        }
+        
+        // Топ помогающих
+        Map<Long, Long> helpCountByUser = new HashMap<>();
+        for (Help help : allHelps) {
+            Long helperId = help.getHelper().getId();
+            helpCountByUser.put(helperId, helpCountByUser.getOrDefault(helperId, 0L) + 1);
+        }
+        
+        List<Long> topHelpers = helpCountByUser.entrySet().stream()
+            .sorted(Map.Entry.<Long, Long>comparingByValue().reversed())
+            .limit(10)
+            .map(Map.Entry::getKey)
+            .collect(Collectors.toList());
+        
+        Map<Long, String> userNames = new HashMap<>();
+        for (Long userId : topHelpers) {
+            userRepository.findById(userId).ifPresent(u -> userNames.put(userId, u.getName()));
+        }
+        
+        final Map<Long, Long> finalHelpCountByUser = helpCountByUser;
+        List<org.example.helptreeservice.dto.graph.HelpStatsDto.TopHelper> topHelpersList = topHelpers.stream()
+            .map(id -> org.example.helptreeservice.dto.graph.HelpStatsDto.TopHelper.builder()
+                .userId(id)
+                .name(userNames.get(id))
+                .helpCount(finalHelpCountByUser.get(id))
+                .build())
+            .collect(Collectors.toList());
+        
+        return org.example.helptreeservice.dto.graph.HelpStatsDto.builder()
+                .totalHelps(allHelps.size())
+                .byMonth(byMonth)
+                .byCategory(byCategory)
+                .topHelpers(topHelpersList)
                 .build();
     }
     
