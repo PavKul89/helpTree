@@ -84,4 +84,10 @@ public class HelpController {
         }
         return ResponseEntity.ok(helpService.getHelpsByReceiver(receiverId));
     }
+
+    @GetMapping("/graph")
+    public ResponseEntity<org.example.helptreeservice.dto.graph.HelpGraphDto> getHelpGraph(
+            @RequestParam(required = false) Long userId) {
+        return ResponseEntity.ok(helpService.getHelpGraph(userId));
+    }
 }

@@ -4,6 +4,7 @@ import { postsApi } from '../api/postsApi';
 import { authApi } from '../api/authApi';
 import type { Post } from '../types';
 import { Card, Button, Spinner, EmptyState, Avatar } from '../components';
+import { useToast } from '../components/Toast';
 import { theme } from '../theme';
 import { getRelativeTime } from '../utils/dateUtils';
 
@@ -61,6 +62,7 @@ export const PostsPage = () => {
   const [favorites, setFavorites] = useState<number[]>([]);
   const location = useLocation();
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
+  const { showToast } = useToast();
 
   const loadPosts = useCallback(async (pageNum = 0, searchTerm?: string) => {
     try {
@@ -117,10 +119,15 @@ export const PostsPage = () => {
     }
   };
 
-  const toggleFavorite = async (postId: number, e: React.MouseEvent) => {
+  const toggleFavorite = async (postId: number, e: React.MouseEvent, status: string) => {
     e.preventDefault();
     e.stopPropagation();
     if (!currentUserId) return;
+    
+    if (status !== 'OPEN') {
+      showToast('Нельзя добавить в избранное пост, который уже в работе или завершён', 'info');
+      return;
+    }
     
     try {
       if (favorites.includes(postId)) {
@@ -232,7 +239,7 @@ export const PostsPage = () => {
                   <span style={styles.category}>{post.category}</span>
                 </div>
                 <button 
-                  onClick={(e) => toggleFavorite(post.id, e)}
+                  onClick={(e) => toggleFavorite(post.id, e, post.status)}
                   style={{
                     ...styles.favoriteBtn,
                     color: favorites.includes(post.id) ? '#fbbf24' : 'rgba(255,255,255,0.5)',

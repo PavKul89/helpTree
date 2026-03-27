@@ -1,5 +1,5 @@
 import api from './axios';
-import type { Help, HelpRequest } from '../types';
+import type { Help, HelpRequest, HelpGraph } from '../types';
 
 export const helpApi = {
   acceptHelp: async (data: HelpRequest): Promise<Help> => {
@@ -34,6 +34,12 @@ export const helpApi = {
 
   getHelpsByPost: async (postId: number): Promise<Help[]> => {
     const response = await api.get<Help[]>(`/api/helps/post/${postId}`);
+    return response.data;
+  },
+
+  getHelpGraph: async (userId?: number): Promise<HelpGraph> => {
+    const params = userId ? `?userId=${userId}` : '';
+    const response = await api.get<HelpGraph>(`/api/helps/graph${params}`);
     return response.data;
   },
 };

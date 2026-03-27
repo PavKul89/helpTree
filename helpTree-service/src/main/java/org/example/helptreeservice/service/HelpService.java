@@ -23,7 +23,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -473,5 +478,162 @@ public class HelpService {
 
         log.debug("Помощь с ID {} успешно найдена", id);
         return help;
+    }
+
+    /**
+     * Получить граф помощи для пользователя
+     * Показывает: кто помог мне → я → кому я помог → кому помогли они → ...
+     */
+    public org.example.helptreeservice.dto.graph.HelpGraphDto getHelpGraph(Long userId) {
+        log.info("Построение графа помощи для userId: {}", userId);
+        
+        List<Help> confirmedHelps = helpRepository.findByStatusAndDeletedFalse(org.example.helptreeservice.enums.HelpStatus.CONFIRMED);
+        
+        if (userId == null) {
+            return buildFullGraph(confirmedHelps);
+        }
+        
+        // Строим карту: кто помог → список кому помогли
+        Map<Long, List<Long>> helperToReceivers = new HashMap<>();
+        // Строим карту: кому помогли → список кто помог (обратная)
+        Map<Long, List<Long>> receiverToHelpers = new HashMap<>();
+        
+        for (Help help : confirmedHelps) {
+            Long helperId = help.getHelper().getId();
+            Long receiverId = help.getReceiver().getId();
+            helperToReceivers.computeIfAbsent(helperId, k -> new ArrayList<>()).add(receiverId);
+            receiverToHelpers.computeIfAbsent(receiverId, k -> new ArrayList<>()).add(helperId);
+        }
+        
+        // Собираем всех в цепочке: и тех кто помог мне, и тех кому я помог
+        Set<Long> visitedUserIds = new HashSet<>();
+        visitedUserIds.add(userId);
+        
+        List<Long> toProcess = new ArrayList<>();
+        toProcess.add(userId);
+        
+        while (!toProcess.isEmpty()) {
+            Long currentId = toProcess.remove(0);
+            
+            // Кому я помог (я был helper)
+            List<Long> iHelped = helperToReceivers.get(currentId);
+            if (iHelped != null) {
+                for (Long helpedId : iHelped) {
+                    if (!visitedUserIds.contains(helpedId)) {
+                        visitedUserIds.add(helpedId);
+                        toProcess.add(helpedId);
+                    }
+                }
+            }
+            
+            // Кто помог мне (я был receiver)
+            List<Long> helpedMe = receiverToHelpers.get(currentId);
+            if (helpedMe != null) {
+                for (Long helperId : helpedMe) {
+                    if (!visitedUserIds.contains(helperId)) {
+                        visitedUserIds.add(helperId);
+                        toProcess.add(helperId);
+                    }
+                }
+            }
+        }
+        
+        // Создаем узлы
+        Map<Long, org.example.helptreeservice.dto.graph.HelpGraphDto.Node> nodesMap = new HashMap<>();
+        
+        for (Long id : visitedUserIds) {
+            User user = userRepository.findById(id).orElse(null);
+            if (user != null) {
+                nodesMap.put(id, org.example.helptreeservice.dto.graph.HelpGraphDto.Node.builder()
+                        .id(id)
+                        .name(user.getName())
+                        .avatarUrl(user.getAvatarUrl())
+                        .helpedCount(user.getHelpedCount())
+                        .debtCount(user.getDebtCount())
+                        .rating(user.getRating())
+                        .build());
+            }
+        }
+        
+        // Создаем рёбра
+        List<org.example.helptreeservice.dto.graph.HelpGraphDto.Edge> edges = new ArrayList<>();
+        for (Help help : confirmedHelps) {
+            Long fromId = help.getHelper().getId();
+            Long toId = help.getReceiver().getId();
+            
+            if (visitedUserIds.contains(fromId) && visitedUserIds.contains(toId)) {
+                edges.add(org.example.helptreeservice.dto.graph.HelpGraphDto.Edge.builder()
+                        .id(help.getId())
+                        .fromUserId(fromId)
+                        .fromUserName(help.getHelper().getName())
+                        .toUserId(toId)
+                        .toUserName(help.getReceiver().getName())
+                        .postTitle(help.getPost().getTitle())
+                        .status(help.getStatus().name())
+                        .confirmedAt(help.getConfirmedAt())
+                        .build());
+            }
+        }
+        
+        return org.example.helptreeservice.dto.graph.HelpGraphDto.builder()
+                .nodes(new ArrayList<>(nodesMap.values()))
+                .edges(edges)
+                .totalHelps(edges.size())
+                .totalUsers(nodesMap.size())
+                .build();
+    }
+    
+    /**
+     * Построить полный граф всех пользователей (без фильтрации)
+     */
+    private org.example.helptreeservice.dto.graph.HelpGraphDto buildFullGraph(List<Help> confirmedHelps) {
+        Map<Long, org.example.helptreeservice.dto.graph.HelpGraphDto.Node> nodesMap = new HashMap<>();
+        
+        for (Help help : confirmedHelps) {
+            Long helperId = help.getHelper().getId();
+            if (!nodesMap.containsKey(helperId)) {
+                nodesMap.put(helperId, org.example.helptreeservice.dto.graph.HelpGraphDto.Node.builder()
+                        .id(helperId)
+                        .name(help.getHelper().getName())
+                        .avatarUrl(help.getHelper().getAvatarUrl())
+                        .helpedCount(help.getHelper().getHelpedCount())
+                        .debtCount(help.getHelper().getDebtCount())
+                        .rating(help.getHelper().getRating())
+                        .build());
+            }
+            
+            Long receiverId = help.getReceiver().getId();
+            if (!nodesMap.containsKey(receiverId)) {
+                nodesMap.put(receiverId, org.example.helptreeservice.dto.graph.HelpGraphDto.Node.builder()
+                        .id(receiverId)
+                        .name(help.getReceiver().getName())
+                        .avatarUrl(help.getReceiver().getAvatarUrl())
+                        .helpedCount(help.getReceiver().getHelpedCount())
+                        .debtCount(help.getReceiver().getDebtCount())
+                        .rating(help.getReceiver().getRating())
+                        .build());
+            }
+        }
+        
+        List<org.example.helptreeservice.dto.graph.HelpGraphDto.Edge> edges = new ArrayList<>();
+        for (Help help : confirmedHelps) {
+            edges.add(org.example.helptreeservice.dto.graph.HelpGraphDto.Edge.builder()
+                    .id(help.getId())
+                    .fromUserId(help.getHelper().getId())
+                    .fromUserName(help.getHelper().getName())
+                    .toUserId(help.getReceiver().getId())
+                    .toUserName(help.getReceiver().getName())
+                    .postTitle(help.getPost().getTitle())
+                    .status(help.getStatus().name())
+                    .confirmedAt(help.getConfirmedAt())
+                    .build());
+        }
+        
+        return org.example.helptreeservice.dto.graph.HelpGraphDto.builder()
+                .nodes(new ArrayList<>(nodesMap.values()))
+                .edges(edges)
+                .totalHelps(confirmedHelps.size())
+                .totalUsers(nodesMap.size())
+                .build();
     }
 }

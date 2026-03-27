@@ -143,3 +143,30 @@ export interface HelpRequest {
   postId: number;
   helperId: number;
 }
+
+export interface HelpGraph {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  totalHelps: number;
+  totalUsers: number;
+}
+
+export interface GraphNode {
+  id: number;
+  name: string;
+  avatarUrl?: string;
+  helpedCount: number;
+  debtCount: number;
+  rating: number;
+}
+
+export interface GraphEdge {
+  id: number;
+  fromUserId: number;
+  fromUserName: string;
+  toUserId: number;
+  toUserName: string;
+  postTitle: string;
+  status: string;
+  confirmedAt: string;
+}

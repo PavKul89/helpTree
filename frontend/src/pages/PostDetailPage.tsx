@@ -34,6 +34,7 @@ export const PostDetailPage = () => {
   const [editForm, setEditForm] = useState({ title: '', description: '' });
   const [showDeletePostModal, setShowDeletePostModal] = useState(false);
   const [showDeleteImageModal, setShowDeleteImageModal] = useState<string | null>(null);
+  const [showFavoriteModal, setShowFavoriteModal] = useState(false);
   const { user } = useAuth();
 
   useEffect(() => {
@@ -332,6 +333,12 @@ export const PostDetailPage = () => {
             <button 
               onClick={async () => {
                 if (!currentUserId) return;
+                
+                if (!isFavorite && (post.status === 'IN_PROGRESS' || post.status === 'COMPLETED')) {
+                  setShowFavoriteModal(true);
+                  return;
+                }
+                
                 try {
                   if (isFavorite) {
                     await authApi.removeFavorite(currentUserId, post.id);
@@ -381,6 +388,16 @@ export const PostDetailPage = () => {
         message="Вы уверены, что хотите удалить это изображение?"
         confirmText="Удалить"
         cancelText="Отмена"
+      />
+
+      <Modal
+        isOpen={showFavoriteModal}
+        onClose={() => setShowFavoriteModal(false)}
+        onConfirm={() => setShowFavoriteModal(false)}
+        title="Нельзя добавить в избранное"
+        message="Вы не можете добавить в избранное пост, который уже в работе или завершён. Вы можете добавлять в избранное только открытые посты."
+        confirmText="Понятно"
+        cancelText=""
       />
 
       {canOfferHelp && (
