@@ -9,6 +9,8 @@ export interface User {
   city?: string;
   avatarUrl?: string;
   createdAt: string;
+  helpedCount?: number;
+  debtCount?: number;
 }
 
 export interface UserPublic {

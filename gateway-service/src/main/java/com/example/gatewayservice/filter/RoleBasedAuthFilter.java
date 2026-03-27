@@ -44,6 +44,11 @@ public class RoleBasedAuthFilter implements GlobalFilter {
             "/api/users"
     );
 
+    private static final Set<String> BYPASS_ADMIN_CHECK = Set.of(
+            "/favorites",
+            "/avatar"
+    );
+
     private static final Set<String> USER_PATH_EXCEPTIONS = Set.of(
             "/api/users/me",
             "/api/users/telegram",
@@ -60,6 +65,10 @@ public class RoleBasedAuthFilter implements GlobalFilter {
             HttpMethod.POST,
             HttpMethod.DELETE
     );
+
+    private boolean shouldBypassAdminCheck(String path) {
+        return BYPASS_ADMIN_CHECK.stream().anyMatch(path::contains);
+    }
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
@@ -96,7 +105,7 @@ public class RoleBasedAuthFilter implements GlobalFilter {
             String email = jwtUtils.extractEmail(token);
 
             if (isAdminOnlyPath(path) && ADMIN_ONLY_METHODS.contains(method)) {
-                if (!"ADMIN".equals(role)) {
+                if (!"ADMIN".equals(role) && !shouldBypassAdminCheck(path)) {
                     log.warn("RBAC: Non-admin {} tried {} on admin path: {}", userId, method, path);
                     return forbidden(exchange, "Только администратор имеет доступ");
                 }

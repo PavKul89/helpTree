@@ -2,12 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { chatApi } from '../api/chatApi';
+import { authApi } from '../api/authApi';
 import { theme } from '../theme';
 
 export const Navbar: React.FC = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [unreadChats, setUnreadChats] = useState(0);
+  const [debtWarning, setDebtWarning] = useState<number | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -34,6 +36,14 @@ export const Navbar: React.FC = () => {
       
       document.addEventListener('visibilitychange', handleVisibility);
       document.addEventListener('chatsUpdated', handleChatsUpdated);
+
+      authApi.getCurrentUser()
+        .then(userData => {
+          if ('debtCount' in userData && userData.debtCount !== undefined && userData.debtCount > 2) {
+            setDebtWarning(userData.debtCount);
+          }
+        })
+        .catch(console.error);
       
       return () => {
         clearInterval(interval);
@@ -70,6 +80,7 @@ export const Navbar: React.FC = () => {
           <div onClick={handleLogoClick} style={styles.link}>Главная</div>
           {user && (
             <>
+              <Link to="/favorites" style={styles.link}>Избранное ⭐</Link>
               <Link to="/my-orders" style={styles.link}>Мои заказы</Link>
               <Link to="/chats" style={styles.linkContainer}>
                 <span style={styles.link}>Чаты</span>
@@ -90,6 +101,11 @@ export const Navbar: React.FC = () => {
           )}
         </div>
       </div>
+      {debtWarning && debtWarning > 2 && (
+        <div style={styles.warningBanner}>
+          ⚠️ Внимание! Ваш долг: {debtWarning}. Помогите {debtWarning - 2} людям, чтобы избежать блокировки.
+        </div>
+      )}
     </nav>
   );
 };
@@ -178,5 +194,13 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 500,
     cursor: 'pointer',
     transition: 'all 0.2s',
+  },
+  warningBanner: {
+    background: 'linear-gradient(90deg, #dc2626 0%, #f59e0b 100%)',
+    color: '#fff',
+    padding: '10px 24px',
+    textAlign: 'center',
+    fontSize: '14px',
+    fontWeight: 500,
   },
 };

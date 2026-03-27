@@ -23,4 +23,10 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Modifying
     @Query("UPDATE User u SET u.debtCount = u.debtCount + :delta, u.updatedAt = CURRENT_TIMESTAMP WHERE u.id = :userId")
     void updateDebtCount(@Param("userId") Long userId, @Param("delta") int delta);
+
+    @Query("SELECT u.id FROM User u WHERE u.id = :userId")
+    Long findUserIdOnly(@Param("userId") Long userId);
+
+    @Query(value = "SELECT post_id FROM user_favorites WHERE user_id = :userId", nativeQuery = true)
+    List<Long> findFavoritePostIds(@Param("userId") Long userId);
 }

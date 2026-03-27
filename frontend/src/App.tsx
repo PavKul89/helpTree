@@ -10,6 +10,7 @@ import { ChatListPage } from './pages/ChatListPage';
 import { ChatPage } from './pages/ChatPage';
 import { UsersPage } from './pages/UsersPage';
 import { MyOrdersPage } from './pages/MyOrdersPage';
+import { FavoritesPage } from './pages/FavoritesPage';
 import { Navbar } from './components/Navbar';
 import { Layout } from './components/Layout';
 import { ToastProvider } from './components/Toast';
@@ -42,6 +43,11 @@ const AppLayout = () => {
           <Route path="/my-orders" element={
             <ProtectedRoute>
               <MyOrdersPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/favorites" element={
+            <ProtectedRoute>
+              <FavoritesPage />
             </ProtectedRoute>
           } />
           <Route path="/profile" element={

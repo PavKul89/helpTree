@@ -51,4 +51,9 @@ export const postsApi = {
   deleteComment: async (postId: number, commentId: number): Promise<void> => {
     await api.delete(`/api/posts/${postId}/comments/${commentId}`);
   },
+
+  getByIds: async (ids: number[]): Promise<Post[]> => {
+    const response = await api.post<Post[]>('/api/posts/by-ids', ids);
+    return response.data;
+  },
 };

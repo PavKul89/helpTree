@@ -9,9 +9,9 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "app.rate-limit")
 public class RateLimitConfig {
     
-    private boolean enabled = true;
-    private int defaultLimit = 60;
-    private int authLimit = 10;
-    private int createLimit = 5;
+    private boolean enabled = false;
+    private int defaultLimit = 1000;
+    private int authLimit = 100;
+    private int createLimit = 50;
     private int windowSeconds = 60;
 }

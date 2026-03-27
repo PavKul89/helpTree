@@ -6,6 +6,7 @@ import org.example.helptreeservice.dto.posts.UpdatePostRequest;
 import org.example.helptreeservice.entity.Post;
 import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.enums.PostStatus;
+import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.ConflictException;
 import org.example.helptreeservice.exception.NotFoundException;
 import org.example.helptreeservice.mapper.PostMapper;
@@ -44,6 +45,11 @@ public class PostService {
         try {
             User user = userRepository.findById(authorId)
                     .orElseThrow(() -> new NotFoundException("Пользователь не найден с id: " + authorId));
+
+            boolean isInGoodStanding = user.getHelpedCount() >= user.getDebtCount();
+            if (user.getDebtCount() > 3 && !isInGoodStanding) {
+                throw new BadRequestException("Сначала помогите другим! Ваш долг: " + user.getDebtCount() + ", помогли: " + user.getHelpedCount());
+            }
 
             log.debug("Найден пользователь для создания поста: email={}", user.getEmail());
 
@@ -303,5 +309,14 @@ public class PostService {
 
         log.debug("Сущность поста с ID {} успешно найдена", id);
         return post;
+    }
+
+    @Transactional(readOnly = true)
+    public List<PostDto> getPostsByIds(List<Long> ids) {
+        log.info("Запрос постов по списку ID: {}", ids);
+        return postRepository.findAllById(ids).stream()
+                .filter(p -> p.getDeleted() == null || !p.getDeleted())
+                .map(postMapper::toDto)
+                .collect(Collectors.toList());
     }
 }

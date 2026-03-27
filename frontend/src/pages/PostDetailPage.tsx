@@ -5,6 +5,7 @@ import { helpApi } from '../api/helpApi';
 import { reviewApi } from '../api/reviewApi';
 import { imagesApi } from '../api/imagesApi';
 import { chatApi } from '../api/chatApi';
+import { authApi } from '../api/authApi';
 import type { Post, Comment, Help, Review } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { Card } from '../components/Card';
@@ -28,6 +29,8 @@ export const PostDetailPage = () => {
   const [replyContent, setReplyContent] = useState('');
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
+  const [isFavorite, setIsFavorite] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
   const [editForm, setEditForm] = useState({ title: '', description: '' });
   const [showDeletePostModal, setShowDeletePostModal] = useState(false);
   const [showDeleteImageModal, setShowDeleteImageModal] = useState<string | null>(null);
@@ -37,6 +40,14 @@ export const PostDetailPage = () => {
     loadData();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  useEffect(() => {
+    if (post && currentUserId) {
+      authApi.getFavorites(currentUserId)
+        .then(favs => setIsFavorite(favs.includes(post.id)))
+        .catch(console.error);
+    }
+  }, [post?.id, currentUserId]);
 
   const loadData = async () => {
     try {
@@ -51,6 +62,8 @@ export const PostDetailPage = () => {
         const reviewsData = await reviewApi.getByHelp(confirmedHelp.id);
         setReviews(reviewsData);
       }
+      const userData = await authApi.getCurrentUser();
+      setCurrentUserId(userData.id);
     } catch (err) {
       console.error(err);
     } finally {
@@ -314,6 +327,31 @@ export const PostDetailPage = () => {
             >
               💬 Написать
             </Button>
+          )}
+          {currentUserId && (
+            <button 
+              onClick={async () => {
+                if (!currentUserId) return;
+                try {
+                  if (isFavorite) {
+                    await authApi.removeFavorite(currentUserId, post.id);
+                    setIsFavorite(false);
+                  } else {
+                    await authApi.addFavorite(currentUserId, post.id);
+                    setIsFavorite(true);
+                  }
+                } catch (err) {
+                  console.error('Error toggling favorite:', err);
+                }
+              }}
+              style={{
+                ...styles.favoriteBtn,
+                color: isFavorite ? '#fbbf24' : 'rgba(255,255,255,0.5)',
+              }}
+              title={isFavorite ? "Убрать из избранного" : "В избранное"}
+            >
+              {isFavorite ? '⭐' : '☆'}
+            </button>
           )}
         </div>
 
@@ -591,6 +629,15 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     gap: '16px',
     flexWrap: 'wrap',
+  },
+  favoriteBtn: {
+    background: 'transparent',
+    border: 'none',
+    fontSize: '22px',
+    cursor: 'pointer',
+    padding: '4px 8px',
+    marginLeft: 'auto',
+    transition: 'transform 0.2s',
   },
   metaItem: {
     color: theme.colors.textSecondary,

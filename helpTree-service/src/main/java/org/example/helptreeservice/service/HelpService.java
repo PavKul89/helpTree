@@ -76,6 +76,15 @@ public class HelpService {
                 throw new BadRequestException("Нельзя помочь самому себе");
             }
 
+            if (receiver.getDebtCount() > 5) {
+                log.warn("Попытка откликнуться на пост пользователя с долгом: receiverId={}, debtCount={}",
+                        receiver.getId(), receiver.getDebtCount());
+                boolean isInGoodStanding = receiver.getHelpedCount() >= receiver.getDebtCount();
+                if (!isInGoodStanding) {
+                    throw new BadRequestException("Пользователь заблокирован из-за долга (" + receiver.getDebtCount() + "). Сначала погасите долг (помогите другим). Вы помогли: " + receiver.getHelpedCount());
+                }
+            }
+
             if (helpRepository.existsByPostAndHelper(post, helper)) {
                 log.warn("Повторный отклик на пост: helperId={}, postId={}",
                         helper.getId(), post.getId());

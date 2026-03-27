@@ -11,6 +11,8 @@ import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "users")
@@ -71,6 +73,11 @@ public class User {
 
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
+
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "user_favorites", joinColumns = @JoinColumn(name = "user_id"))
+    @Column(name = "post_id", nullable = false)
+    private List<Long> favoritePostIds = new ArrayList<>();
 
     @Column(name = "telegram_chat_id", length = 50)
     private String telegramChatId;

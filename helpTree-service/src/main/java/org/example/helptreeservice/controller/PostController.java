@@ -92,4 +92,9 @@ public class PostController {
         }
         return ResponseEntity.ok(postService.getPostsByUser(userId));
     }
+
+    @PostMapping("/by-ids")
+    public ResponseEntity<List<PostDto>> getPostsByIds(@RequestBody List<Long> ids) {
+        return ResponseEntity.ok(postService.getPostsByIds(ids));
+    }
 }

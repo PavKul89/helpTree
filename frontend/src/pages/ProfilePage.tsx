@@ -225,15 +225,26 @@ export const ProfilePage = () => {
 
         <div style={styles.statsRow}>
           {'helpedCount' in profileUser && (
-            <div style={styles.statBox}>
+            <div style={{ ...styles.statBox, background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}>
               <div style={styles.statValue}>{profileUser.helpedCount}</div>
-              <div style={styles.statLabel}>помог</div>
+              <div style={styles.statLabel}>помог людям</div>
             </div>
           )}
           {'debtCount' in profileUser && (
-            <div style={styles.statBox}>
+            <div style={{ 
+              ...styles.statBox, 
+              background: (profileUser.debtCount || 0) > 3 
+                ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)' 
+                : (profileUser.debtCount || 0) > 0 
+                  ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
+                  : 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)'
+            }}>
               <div style={styles.statValue}>{profileUser.debtCount}</div>
-              <div style={styles.statLabel}>попросил помощи</div>
+              <div style={styles.statLabel}>
+                {profileUser.debtCount === 0 ? 'долг = 0' : 
+                 (profileUser.debtCount || 0) > 5 ? 'ЗАБЛОКИРОВАН' : 
+                 (profileUser.debtCount || 0) > 3 ? 'риск блокировки' : 'долг помогать'}
+              </div>
             </div>
           )}
           <div style={styles.statBox}>
@@ -241,6 +252,21 @@ export const ProfilePage = () => {
             <div style={styles.statLabel}>публикаций</div>
           </div>
         </div>
+
+        {'helpedCount' in profileUser && 'debtCount' in profileUser && (
+          <div style={styles.balanceRow}>
+            <span style={styles.balanceLabel}>Баланс: </span>
+            <span style={{
+              ...styles.balanceValue,
+              color: (profileUser.helpedCount || 0) >= (profileUser.debtCount || 0) ? '#10b981' : '#f59e0b'
+            }}>
+              {(profileUser.helpedCount || 0) >= (profileUser.debtCount || 0) 
+                ? `+${profileUser.helpedCount! - profileUser.debtCount!} в плюсе`
+                : `${profileUser.debtCount! - profileUser.helpedCount!} в долгу`
+              }
+            </span>
+          </div>
+        )}
 
         <div style={styles.tabs}>
           <button 
@@ -507,6 +533,25 @@ const styles: Record<string, React.CSSProperties> = {
     color: theme.colors.textMuted,
     fontSize: '13px',
     marginTop: '4px',
+    fontWeight: 500,
+  },
+  balanceRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: '16px',
+    padding: '12px',
+    background: 'rgba(0,0,0,0.2)',
+    borderRadius: theme.borderRadius.md,
+    gap: '8px',
+  },
+  balanceLabel: {
+    color: theme.colors.textMuted,
+    fontSize: '14px',
+  },
+  balanceValue: {
+    fontSize: '16px',
+    fontWeight: 600,
   },
   tabs: {
     display: 'flex',

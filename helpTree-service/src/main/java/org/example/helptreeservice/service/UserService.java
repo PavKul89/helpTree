@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -289,6 +290,19 @@ public class UserService {
             throw e;
         }
     }
+
+    public boolean canReceiveHelp(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new NotFoundException("User not found"));
+        return user.getDebtCount() <= 5;
+    }
+
+    public boolean canCreatePost(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new NotFoundException("User not found"));
+        return user.getDebtCount() <= 3;
+    }
+
     @Transactional
     public void processHelp(Long helperId, Long receiverId) {
         log.info("Начало процесса помощи: helperId={}, receiverId={}", helperId, receiverId);
@@ -374,5 +388,52 @@ public class UserService {
         userRepository.save(user);
         log.info("Аватар для пользователя ID {} загружен: {}", userId, avatarUrl);
         return avatarUrl;
+    }
+
+    @Transactional
+    public void addFavorite(Long userId, Long postId) {
+        log.info("Добавление поста {} в избранное для пользователя {}", postId, userId);
+        User user = getUserEntityById(userId);
+        if (user.getFavoritePostIds() == null) {
+            user.setFavoritePostIds(new ArrayList<>());
+        }
+        if (!user.getFavoritePostIds().contains(postId)) {
+            user.getFavoritePostIds().add(postId);
+            userRepository.save(user);
+            log.info("Пост {} добавлен в избранное пользователя {}", postId, userId);
+        }
+    }
+
+    @Transactional
+    public void removeFavorite(Long userId, Long postId) {
+        log.info("Удаление поста {} из избранного для пользователя {}", postId, userId);
+        User user = getUserEntityById(userId);
+        if (user.getFavoritePostIds() != null && user.getFavoritePostIds().contains(postId)) {
+            user.getFavoritePostIds().remove(postId);
+            userRepository.save(user);
+            log.info("Пост {} удален из избранного пользователя {}", postId, userId);
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public List<Long> getFavorites(Long userId) {
+        log.debug("Получение избранных постов для пользователя {}", userId);
+        try {
+            Long userIdOnly = userRepository.findUserIdOnly(userId);
+            if (userIdOnly == null) {
+                return new ArrayList<>();
+            }
+            return userRepository.findFavoritePostIds(userId);
+        } catch (Exception e) {
+            log.error("Ошибка при получении избранного: {}", e.getMessage());
+            e.printStackTrace();
+            return new ArrayList<>();
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isFavorite(Long userId, Long postId) {
+        User user = userRepository.findById(userId).orElse(null);
+        return user != null && user.getFavoritePostIds() != null && user.getFavoritePostIds().contains(postId);
     }
 }

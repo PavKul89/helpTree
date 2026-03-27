@@ -21,6 +21,9 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
 import java.util.Map;
 
+import java.util.List;
+import java.util.Map;
+
 @Slf4j
 @RestController
 @RequestMapping("/api/users")
@@ -198,5 +201,40 @@ public class UserController {
         }
         String avatarUrl = userService.uploadAvatar(id, file);
         return ResponseEntity.ok(Map.of("url", avatarUrl));
+    }
+
+    @PostMapping("/{id}/favorites/{postId}")
+    public ResponseEntity<Void> addFavorite(@PathVariable Long id, @PathVariable Long postId) {
+        if (!authService.canManageUser(id)) {
+            throw new ForbiddenException("Вы можете добавлять в избранное только для своего профиля");
+        }
+        userService.addFavorite(id, postId);
+        return ResponseEntity.ok().build();
+    }
+
+    @DeleteMapping("/{id}/favorites/{postId}")
+    public ResponseEntity<Void> removeFavorite(@PathVariable Long id, @PathVariable Long postId) {
+        if (!authService.canManageUser(id)) {
+            throw new ForbiddenException("Вы можете удалять из избранного только для своего профиля");
+        }
+        userService.removeFavorite(id, postId);
+        return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/{id}/favorites")
+    public ResponseEntity<List<Long>> getFavorites(@PathVariable Long id) {
+        try {
+            List<Long> favorites = userService.getFavorites(id);
+            return ResponseEntity.ok(favorites != null ? favorites : java.util.Collections.emptyList());
+        } catch (Exception e) {
+            log.error("Error getting favorites for user {}: {}", id, e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.ok(java.util.Collections.emptyList());
+        }
+    }
+
+    @GetMapping("/{id}/favorites/{postId}")
+    public ResponseEntity<Map<String, Boolean>> isFavorite(@PathVariable Long id, @PathVariable Long postId) {
+        return ResponseEntity.ok(Map.of("isFavorite", userService.isFavorite(id, postId)));
     }
 }

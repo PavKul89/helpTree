@@ -1,13 +1,11 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { postsApi } from '../api/postsApi';
+import { authApi } from '../api/authApi';
 import type { Post } from '../types';
-import { Card } from '../components/Card';
-import { Button } from '../components/Button';
-import { Spinner } from '../components/Spinner';
-import { EmptyState } from '../components/EmptyState';
-import { Avatar } from '../components/Avatar';
+import { Card, Button, Spinner, EmptyState, Avatar } from '../components';
 import { theme } from '../theme';
+import { getRelativeTime } from '../utils/dateUtils';
 
 const CATEGORIES = [
   'Все',
@@ -49,7 +47,7 @@ const CATEGORIES = [
   'Недвижимость',
   'Другое',
 ];
-const STATUSES = ['Все', 'OPEN', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'];
+const STATUSES = ['Все', 'OPEN', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'Избранное'];
 
 export const PostsPage = () => {
   const [posts, setPosts] = useState<Post[]>([]);
@@ -60,7 +58,9 @@ export const PostsPage = () => {
   const [status, setStatus] = useState('Все');
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
+  const [favorites, setFavorites] = useState<number[]>([]);
   const location = useLocation();
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
 
   const loadPosts = useCallback(async (pageNum = 0, searchTerm?: string) => {
     try {
@@ -87,7 +87,53 @@ export const PostsPage = () => {
     setStatus('Все');
     setPage(0);
     loadPosts(0, '');
+    
+    authApi.getCurrentUser()
+      .then(user => {
+        setCurrentUserId(user.id);
+        return authApi.getFavorites(user.id);
+      })
+      .then(favs => setFavorites(favs))
+      .catch(console.error);
   }, [location.key]);
+
+  useEffect(() => {
+    if (status === 'Избранное' && favorites.length > 0) {
+      setLoading(true);
+      postsApi.getByIds(favorites)
+        .then(data => setPosts(data))
+        .catch(console.error)
+        .finally(() => setLoading(false));
+    } else if (status !== 'Избранное') {
+      loadPosts(page);
+    }
+  }, [status, page]);
+
+  const handleStatusChange = (value: string) => {
+    setStatus(value);
+    if (value !== 'Избранное') {
+      setLoading(true);
+      loadPosts(0);
+    }
+  };
+
+  const toggleFavorite = async (postId: number, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!currentUserId) return;
+    
+    try {
+      if (favorites.includes(postId)) {
+        await authApi.removeFavorite(currentUserId, postId);
+        setFavorites(favorites.filter(id => id !== postId));
+      } else {
+        await authApi.addFavorite(currentUserId, postId);
+        setFavorites([...favorites, postId]);
+      }
+    } catch (err) {
+      console.error('Error toggling favorite:', err);
+    }
+  };
 
   const handleSearch = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -98,12 +144,6 @@ export const PostsPage = () => {
 
   const handleCategoryChange = (value: string) => {
     setCategory(value);
-    setLoading(true);
-    loadPosts(0);
-  };
-
-  const handleStatusChange = (value: string) => {
-    setStatus(value);
     setLoading(true);
     loadPosts(0);
   };
@@ -183,12 +223,24 @@ export const PostsPage = () => {
           <Link key={post.id} to={`/posts/${post.id}`} style={styles.cardLink}>
             <Card hoverable style={styles.postCard}>
               <div style={styles.postHeader}>
-                <span style={{
-                  ...styles.statusDot,
-                  backgroundColor: getStatusColor(post.status)
-                }} />
-                <span style={styles.statusText}>{getStatusLabel(post.status)}</span>
-                <span style={styles.category}>{post.category}</span>
+                <div style={styles.postHeaderLeft}>
+                  <span style={{
+                    ...styles.statusDot,
+                    backgroundColor: getStatusColor(post.status)
+                  }} />
+                  <span style={styles.statusText}>{getStatusLabel(post.status)}</span>
+                  <span style={styles.category}>{post.category}</span>
+                </div>
+                <button 
+                  onClick={(e) => toggleFavorite(post.id, e)}
+                  style={{
+                    ...styles.favoriteBtn,
+                    color: favorites.includes(post.id) ? '#fbbf24' : 'rgba(255,255,255,0.5)',
+                  }}
+                  title={favorites.includes(post.id) ? "Убрать из избранного" : "В избранное"}
+                >
+                  {favorites.includes(post.id) ? '⭐' : '☆'}
+                </button>
               </div>
               <h3 style={styles.postTitle}>{post.title}</h3>
               <p style={styles.postDescription}>
@@ -201,7 +253,7 @@ export const PostsPage = () => {
                   <Avatar name={post.authorName} avatarUrl={post.authorAvatarUrl} size="small" showName withRating={post.authorRating} clickable userId={post.userId} />
                 </div>
                 <span style={styles.date}>
-                  {new Date(post.createdAt).toLocaleDateString('ru-RU')}
+                  {getRelativeTime(post.createdAt)}
                 </span>
               </div>
             </Card>
@@ -334,8 +386,15 @@ const styles: Record<string, React.CSSProperties> = {
   postHeader: {
     display: 'flex',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: '8px',
     marginBottom: '12px',
+    flexWrap: 'wrap',
+  },
+  postHeaderLeft: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
   },
   statusDot: {
     width: '8px',
@@ -349,12 +408,20 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 500,
   },
   category: {
-    marginLeft: 'auto',
     color: theme.colors.accent,
     fontSize: '13px',
     background: 'rgba(34, 211, 238, 0.15)',
     padding: '4px 10px',
     borderRadius: '4px',
+  },
+  favoriteBtn: {
+    background: 'transparent',
+    border: 'none',
+    fontSize: '18px',
+    cursor: 'pointer',
+    padding: '4px',
+    marginLeft: '8px',
+    transition: 'transform 0.2s',
   },
   postTitle: {
     color: theme.colors.text,

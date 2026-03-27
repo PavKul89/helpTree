@@ -3,11 +3,9 @@ import { Link, useNavigate } from 'react-router-dom';
 import { postsApi } from '../api/postsApi';
 import { helpApi } from '../api/helpApi';
 import { useAuth } from '../context/AuthContext';
-import { Card } from '../components/Card';
-import { Button } from '../components/Button';
-import { Spinner } from '../components/Spinner';
-import { Modal } from '../components/Modal';
+import { Card, Button, Spinner, EmptyState, Avatar, Modal } from '../components';
 import { theme } from '../theme';
+import { getRelativeTime } from '../utils/dateUtils';
 import type { Post, Help } from '../types';
 
 export const MyOrdersPage = () => {
@@ -168,7 +166,7 @@ export const MyOrdersPage = () => {
                     </div>
                     <div style={styles.itemSide}>
                       <span style={styles.itemCategory}>{post.category}</span>
-                      <span style={styles.itemDate}>{formatDate(post.createdAt)}</span>
+                      <span style={styles.itemDate}>{getRelativeTime(post.createdAt)}</span>
                       <Button 
                         variant="danger" 
                         onClick={(e) => { e.preventDefault(); confirmDeletePost(post.id); }}

@@ -1,13 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { chatApi } from '../api/chatApi';
-import { Card } from '../components/Card';
-import { Button } from '../components/Button';
-import { Spinner } from '../components/Spinner';
-import { EmptyState } from '../components/EmptyState';
-import { Modal } from '../components/Modal';
-import { Avatar } from '../components/Avatar';
+import { Card, Button, Spinner, EmptyState, Avatar, Modal } from '../components';
 import { theme } from '../theme';
+import { getRelativeTime } from '../utils/dateUtils';
 import type { Chat } from '../types';
 
 export const ChatListPage = () => {

@@ -67,4 +67,22 @@ export const authApi = {
     });
     return response.data.url;
   },
+
+  addFavorite: async (userId: number, postId: number): Promise<void> => {
+    await api.post(`/api/users/${userId}/favorites/${postId}`);
+  },
+
+  removeFavorite: async (userId: number, postId: number): Promise<void> => {
+    await api.delete(`/api/users/${userId}/favorites/${postId}`);
+  },
+
+  getFavorites: async (userId: number): Promise<number[]> => {
+    const response = await api.get<number[]>(`/api/users/${userId}/favorites`);
+    return response.data;
+  },
+
+  isFavorite: async (userId: number, postId: number): Promise<boolean> => {
+    const response = await api.get<{ isFavorite: boolean }>(`/api/users/${userId}/favorites/${postId}`);
+    return response.data.isFavorite;
+  },
 };

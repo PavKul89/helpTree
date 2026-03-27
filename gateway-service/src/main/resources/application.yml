@@ -90,24 +90,24 @@ app:
   jwtSecret: mySecretKeyForJWTGenerationWithAtLeast64CharactersLong12345678901234567890123456789012
   jwtExpirationMs: 86400000
   rate-limit:
-    enabled: true
-    default-limit: 60
-    auth-limit: 10
-    create-limit: 5
+    enabled: false
+    default-limit: 1000
+    auth-limit: 100
+    create-limit: 50
     window-seconds: 60
 
 resilience4j:
   ratelimiter:
     configs:
       default:
-        limitForPeriod: 60
+        limitForPeriod: 1000
         limitRefreshPeriod: 60s
-        timeoutDuration: 100ms
+        timeoutDuration: 1000ms
       auth:
-        limitForPeriod: 10
+        limitForPeriod: 100
         limitRefreshPeriod: 60s
-        timeoutDuration: 100ms
+        timeoutDuration: 1000ms
       create:
-        limitForPeriod: 5
+        limitForPeriod: 50
         limitRefreshPeriod: 60s
-        timeoutDuration: 100ms
+        timeoutDuration: 1000ms
