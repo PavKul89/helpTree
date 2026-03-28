@@ -11,6 +11,7 @@ export interface User {
   createdAt: string;
   helpedCount?: number;
   debtCount?: number;
+  birthDate?: string;
 }
 
 export interface UserPublic {
@@ -32,6 +33,7 @@ export interface Post {
   authorName: string;
   authorAvatarUrl?: string;
   authorRating: number;
+  userCity?: string;
   helperId?: number;
   helperName?: string;
   imageUrls?: string[];

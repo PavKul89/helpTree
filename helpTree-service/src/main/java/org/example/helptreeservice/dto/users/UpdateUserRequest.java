@@ -4,6 +4,8 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
+import java.time.LocalDateTime;
+
 @Data
 public class UpdateUserRequest {
 
@@ -17,4 +19,6 @@ public class UpdateUserRequest {
     private String phone;
 
     private String city;
+
+    private LocalDateTime birthDate;
 }

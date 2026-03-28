@@ -37,4 +37,6 @@ public interface HelpRepository extends JpaRepository<Help, Long> {
 
     @Query("SELECT h FROM Help h JOIN FETCH h.post JOIN FETCH h.helper JOIN FETCH h.receiver WHERE h.status = :status AND (h.deleted = false OR h.deleted IS NULL)")
     List<Help> findByStatusAndDeletedFalse(@Param("status") HelpStatus status);
+
+    List<Help> findByHelperAndStatus(User helper, HelpStatus status);
 }

@@ -148,12 +148,12 @@ public class PostService {
     }
 
     @Transactional(readOnly = true)
-    public Page<PostDto> getPosts(Long userId, PostStatus status, String title, String authorName, String category, Pageable pageable) {
-        log.info("Запрос постов с фильтрацией: userId={}, status={}, title={}, authorName={}, category={}, page={}, size={}",
-                userId, status, title, authorName, category, pageable.getPageNumber(), pageable.getPageSize());
+    public Page<PostDto> getPosts(Long userId, PostStatus status, String title, String authorName, String category, String city, Pageable pageable) {
+        log.info("Запрос постов с фильтрацией: userId={}, status={}, title={}, authorName={}, category={}, city={}, page={}, size={}",
+                userId, status, title, authorName, category, city, pageable.getPageNumber(), pageable.getPageSize());
 
         try {
-            Specification<Post> spec = PostSpecification.filter(userId, status, title, authorName, category);
+            Specification<Post> spec = PostSpecification.filter(userId, status, title, authorName, category, city);
             Page<PostDto> postsPage = postRepository.findAll(spec, pageable).map(postMapper::toDto);
 
             log.info("Найдено постов с фильтрацией: {}, всего страниц: {}",

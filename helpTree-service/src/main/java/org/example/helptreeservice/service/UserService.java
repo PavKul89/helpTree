@@ -32,6 +32,7 @@ public class UserService {
     private final UserMapper userMapper;
     private final PasswordService passwordService;
     private final ImageService imageService;
+    private final AchievementService achievementService;
 
     public UserDto createUser(CreateUserRequest request) {
         return createUserWithRole(request, Role.USER);
@@ -61,6 +62,7 @@ public class UserService {
         user.setUpdatedAt(LocalDateTime.now());
 
         User savedUser = userRepository.save(user);
+        achievementService.awardAchievementOnRegistration(savedUser);
         log.info("Пользователь успешно создан с ID: {}, email: {}", savedUser.getId(), savedUser.getEmail());
         return userMapper.toDto(savedUser);
     }
@@ -166,6 +168,12 @@ public class UserService {
                 user.setCity(request.getCity());
                 changed = true;
                 log.debug("Изменен город пользователя на: {}", request.getCity());
+            }
+
+            if (request.getBirthDate() != null && !request.getBirthDate().equals(user.getBirthDate())) {
+                user.setBirthDate(request.getBirthDate());
+                changed = true;
+                log.debug("Изменена дата рождения пользователя на: {}", request.getBirthDate());
             }
 
             if (changed) {

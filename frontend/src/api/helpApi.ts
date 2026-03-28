@@ -1,6 +1,17 @@
 import api from './axios';
 import type { Help, HelpRequest, HelpGraph } from '../types';
 
+export interface HelpStats {
+  totalHelps: number;
+  byMonth: Record<string, number>;
+  byCategory: Record<string, number>;
+  topHelpers: Array<{
+    userId: number;
+    name: string;
+    helpCount: number;
+  }>;
+}
+
 export const helpApi = {
   acceptHelp: async (data: HelpRequest): Promise<Help> => {
     const response = await api.post<Help>('/api/helps/accept', data);
@@ -40,6 +51,11 @@ export const helpApi = {
   getHelpGraph: async (userId?: number): Promise<HelpGraph> => {
     const params = userId ? `?userId=${userId}` : '';
     const response = await api.get<HelpGraph>(`/api/helps/graph${params}`);
+    return response.data;
+  },
+
+  getHelpStats: async (): Promise<HelpStats> => {
+    const response = await api.get<HelpStats>('/api/helps/stats');
     return response.data;
   },
 };

@@ -44,9 +44,10 @@ public class PostController {
             @RequestParam(required = false) String title,
             @RequestParam(required = false) String authorName,
             @RequestParam(required = false) String category,
+            @RequestParam(required = false) String city,
             @PageableDefault(page = 0, size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
     ) {
-        Page<PostDto> result = postService.getPosts(userId, status, title, authorName, category, pageable);
+        Page<PostDto> result = postService.getPosts(userId, status, title, authorName, category, city, pageable);
         return ResponseEntity.ok(result);
     }
 

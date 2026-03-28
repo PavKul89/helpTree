@@ -25,4 +25,5 @@ public class UserDto {
     private UserStatus status;
     private LocalDateTime createdAt;
     private String avatarUrl;
+    private LocalDateTime birthDate;
 }

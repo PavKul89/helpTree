@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { theme } from '../theme';
 
 interface AvatarProps {
@@ -52,9 +52,16 @@ export const Avatar: React.FC<AvatarProps> = ({
   clickable = false,
   userId
 }) => {
+  const navigate = useNavigate();
   const sizeConfig = SIZES[size];
   const backgroundColor = getColorFromName(name);
   const initials = getInitials(name);
+
+  const handleClick = () => {
+    if (clickable && userId) {
+      navigate(`/profile/${userId}`);
+    }
+  };
 
   const containerStyle: React.CSSProperties = {
     display: 'inline-flex',
@@ -146,11 +153,14 @@ export const Avatar: React.FC<AvatarProps> = ({
 
   if (clickable && userId) {
     return (
-      <Link to={`/profile/${userId}`} style={{ textDecoration: 'none' }}>
+      <span 
+        onClick={handleClick} 
+        style={{ cursor: 'pointer', textDecoration: 'none' }}
+      >
         <div style={containerStyle}>
           {avatarContent}
         </div>
-      </Link>
+      </span>
     );
   }
 

@@ -20,6 +20,7 @@ public class PostDto {
     private Long userId;
     private String userEmail;
     private Double userRating;
+    private String userCity;
     private Long helperId;
     private String helperName;
     private PostStatus status;

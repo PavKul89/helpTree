@@ -17,7 +17,8 @@ public final class PostSpecification {
                                              final PostStatus status,
                                              final String title,
                                              final String authorName,
-                                             final String category) {
+                                             final String category,
+                                             final String city) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 
@@ -46,6 +47,10 @@ public final class PostSpecification {
 
             if (StringUtils.hasText(category)) {
                 predicates.add(cb.equal(root.get("category"), category));
+            }
+
+            if (StringUtils.hasText(city)) {
+                predicates.add(cb.like(cb.lower(root.get("user").get("city")), "%" + city.toLowerCase() + "%"));
             }
 
             return cb.and(predicates.toArray(new Predicate[0]));
