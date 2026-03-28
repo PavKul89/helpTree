@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { chatApi } from '../api/chatApi';
@@ -10,6 +10,18 @@ export const Navbar: React.FC = () => {
   const navigate = useNavigate();
   const [unreadChats, setUnreadChats] = useState(0);
   const [debtWarning, setDebtWarning] = useState<number | null>(null);
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setOpenDropdown(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     if (user) {
@@ -62,6 +74,14 @@ export const Navbar: React.FC = () => {
     navigate('/');
   };
 
+  const toggleDropdown = (name: string) => {
+    setOpenDropdown(openDropdown === name ? null : name);
+  };
+
+  const closeDropdown = () => {
+    setOpenDropdown(null);
+  };
+
   return (
     <nav style={styles.navbar}>
       <div style={styles.container}>
@@ -76,24 +96,63 @@ export const Navbar: React.FC = () => {
           <span style={styles.logoText}>Древо Помощи</span>
         </div>
 
-        <div style={styles.links}>
+        <div style={styles.links} ref={dropdownRef}>
           <div onClick={handleLogoClick} style={styles.link}>Главная</div>
-          <Link to="/graph" style={styles.link}>Граф 🌳</Link>
-          <Link to="/achievements" style={styles.link}>🏆 Достижения</Link>
-          <Link to="/activity" style={styles.link}>📋 Активность</Link>
+          
+          <div style={styles.dropdownWrapper}>
+            <button 
+              style={styles.dropdownTrigger}
+              onClick={() => toggleDropdown('community')}
+              onMouseEnter={() => user && setOpenDropdown('community')}
+            >
+              Сообщество ▾
+            </button>
+            {(openDropdown === 'community' || !user) && (
+              <div style={styles.dropdown}>
+                <Link to="/graph" style={styles.dropdownItem} onClick={closeDropdown}>
+                  🌳 Граф помощи
+                </Link>
+                <Link to="/achievements" style={styles.dropdownItem} onClick={closeDropdown}>
+                  🏆 Достижения
+                </Link>
+                {user && (
+                  <Link to="/activity" style={styles.dropdownItem} onClick={closeDropdown}>
+                    📋 Активность
+                  </Link>
+                )}
+              </div>
+            )}
+          </div>
+
           {user && (
             <>
-              <Link to="/favorites" style={styles.link}>Избранное ⭐</Link>
-              <Link to="/my-orders" style={styles.link}>Мои заказы</Link>
-              <Link to="/chats" style={styles.linkContainer}>
-                <span style={styles.link}>Чаты</span>
-                {unreadChats > 0 && (
-                  <span style={styles.badge}>{unreadChats}</span>
+              <div style={styles.dropdownWrapper}>
+                <button 
+                  style={styles.dropdownTrigger}
+                  onClick={() => toggleDropdown('profile')}
+                  onMouseEnter={() => setOpenDropdown('profile')}
+                >
+                  👤 Профиль ▾
+                </button>
+                {openDropdown === 'profile' && (
+                  <div style={styles.dropdown}>
+                    <Link to="/profile" style={styles.dropdownItem} onClick={closeDropdown}>
+                      👤 Мой профиль
+                    </Link>
+                    <Link to="/favorites" style={styles.dropdownItem} onClick={closeDropdown}>
+                      ⭐ Избранное
+                    </Link>
+                    <Link to="/my-orders" style={styles.dropdownItem} onClick={closeDropdown}>
+                      📦 Мои заказы
+                    </Link>
+                    <Link to="/chats" style={styles.dropdownItem} onClick={closeDropdown}>
+                      💬 Чаты
+                      {unreadChats > 0 && <span style={styles.dropdownBadge}>{unreadChats}</span>}
+                    </Link>
+                  </div>
                 )}
-              </Link>
-              <Link to="/profile" style={styles.link}>
-                {user.name || user.email}
-              </Link>
+              </div>
+
               <button onClick={handleLogout} style={styles.logoutBtn}>
                 Выйти
               </button>
@@ -146,7 +205,7 @@ const styles: Record<string, React.CSSProperties> = {
   links: {
     display: 'flex',
     alignItems: 'center',
-    gap: '24px',
+    gap: '16px',
   },
   link: {
     color: theme.colors.textSecondary,
@@ -156,24 +215,52 @@ const styles: Record<string, React.CSSProperties> = {
     transition: 'color 0.2s',
     cursor: 'pointer',
   } as React.CSSProperties,
-  linkContainer: {
+  dropdownWrapper: {
     position: 'relative',
+  },
+  dropdownTrigger: {
+    background: 'transparent',
+    border: 'none',
+    color: theme.colors.textSecondary,
+    fontSize: '15px',
+    fontWeight: 500,
+    cursor: 'pointer',
+    padding: '8px 12px',
+    borderRadius: theme.borderRadius.md,
+    transition: 'all 0.2s',
+    fontFamily: 'inherit',
+  },
+  dropdownWrapperHover: {
+    background: 'rgba(255,255,255,0.05)',
+  },
+  dropdown: {
+    position: 'absolute',
+    top: '100%',
+    right: 0,
+    marginTop: '8px',
+    background: 'rgba(6, 95, 70, 0.98)',
+    border: `1px solid ${theme.colors.border}`,
+    borderRadius: theme.borderRadius.md,
+    minWidth: '180px',
+    padding: '8px 0',
+    boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
+    zIndex: 1001,
+  },
+  dropdownItem: {
     display: 'flex',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '10px 16px',
+    color: theme.colors.textSecondary,
     textDecoration: 'none',
-  },
-  badge: {
-    position: 'absolute',
-    top: '-8px',
-    right: '-12px',
+    fontSize: '14px',
+    transition: 'all 0.2s',
+  } as React.CSSProperties,
+  dropdownBadge: {
     background: '#ef4444',
     color: '#fff',
-    borderRadius: '50%',
-    width: '18px',
-    height: '18px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderRadius: '10px',
+    padding: '2px 8px',
     fontSize: '11px',
     fontWeight: 600,
   },
