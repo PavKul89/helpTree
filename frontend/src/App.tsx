@@ -1,6 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { ThemeProvider, useTheme } from './theme';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { PostsPage } from './pages/PostsPage';
@@ -110,78 +109,62 @@ function AppContent() {
   );
 }
 
-const ThemedApp = () => {
-  const { theme } = useTheme();
-  const isDark = theme.mode === 'dark';
-  
-  return (
-    <>
-      <style>{`
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-        @keyframes sway {
-          from { transform: rotate(-2deg); }
-          to { transform: rotate(2deg); }
-        }
-        @keyframes swayLeft {
-          from { transform: rotate(2deg); }
-          to { transform: rotate(-2deg); }
-        }
-        @keyframes slideUp {
-          from { opacity: 0; transform: translateY(20px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        * {
-          box-sizing: border-box;
-        }
-        body {
-          margin: 0;
-          padding: 0;
-          background: ${isDark ? '#022c22' : '#f0fdfa'};
-          color: ${isDark ? '#ffffff' : '#134e4a'};
-          transition: background 0.3s ease, color 0.3s ease;
-        }
-        select {
-          background-color: ${isDark ? '#065F46' : '#ffffff'} !important;
-          color: ${isDark ? '#ffffff' : '#134e4a'} !important;
-          border: 1px solid ${isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)'} !important;
-        }
-        select option {
-          background-color: ${isDark ? '#065F46' : '#ffffff'} !important;
-          color: ${isDark ? '#ffffff' : '#134e4a'} !important;
-        }
-        select:hover {
-          border-color: ${isDark ? '#22d3ee' : '#06b6d4'} !important;
-          box-shadow: 0 0 10px ${isDark ? 'rgba(34, 211, 238, 0.3)' : 'rgba(6, 182, 212, 0.3)'};
-        }
-        input:hover, input:focus, textarea:hover, textarea:focus {
-          border-color: ${isDark ? '#22d3ee' : '#06b6d4'} !important;
-          box-shadow: 0 0 15px ${isDark ? 'rgba(34, 211, 238, 0.3)' : 'rgba(6, 182, 212, 0.3)'} !important;
-        }
-        .post-card:hover {
-          transform: translateY(-8px) scale(1.02);
-        }
-      `}</style>
-      <AppContent />
-    </>
-  );
-};
-
 function App() {
   return (
     <AuthProvider>
       <ToastProvider>
-        <ThemeProvider>
-          <BrowserRouter>
-            <ThemedApp />
-          </BrowserRouter>
-        </ThemeProvider>
+        <BrowserRouter>
+        <style>{`
+          @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+          @keyframes sway {
+            from { transform: rotate(-2deg); }
+            to { transform: rotate(2deg); }
+          }
+          @keyframes swayLeft {
+            from { transform: rotate(2deg); }
+            to { transform: rotate(-2deg); }
+          }
+          @keyframes slideUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+          }
+          @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+          }
+          * {
+            box-sizing: border-box;
+          }
+          body {
+            margin: 0;
+            padding: 0;
+          }
+          select {
+            background-color: #065F46 !important;
+            color: #ffffff !important;
+            border: 1px solid rgba(255, 255, 255, 0.2) !important;
+          }
+          select option {
+            background-color: #065F46 !important;
+            color: #ffffff !important;
+          }
+          select:hover {
+            border-color: #22d3ee !important;
+            box-shadow: 0 0 10px rgba(34, 211, 238, 0.3);
+          }
+          input:hover, input:focus, textarea:hover, textarea:focus {
+            border-color: #22d3ee !important;
+            box-shadow: 0 0 15px rgba(34, 211, 238, 0.3) !important;
+          }
+          .post-card:hover {
+            transform: translateY(-8px) scale(1.02);
+          }
+        `}</style>
+        <AppContent />
+      </BrowserRouter>
       </ToastProvider>
     </AuthProvider>
   );
