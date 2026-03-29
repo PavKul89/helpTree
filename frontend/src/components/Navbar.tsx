@@ -1,12 +1,13 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../theme';
 import { chatApi } from '../api/chatApi';
 import { authApi } from '../api/authApi';
-import { theme } from '../theme';
 
 export const Navbar: React.FC = () => {
   const { user, logout } = useAuth();
+  const { theme, isDark, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const [unreadChats, setUnreadChats] = useState(0);
   const [debtWarning, setDebtWarning] = useState<number | null>(null);
@@ -127,6 +128,14 @@ export const Navbar: React.FC = () => {
             )}
           </div>
 
+          <button 
+            onClick={toggleTheme}
+            style={styles.themeToggle}
+            title={isDark ? 'Светлая тема' : 'Тёмная тема'}
+          >
+            {isDark ? '☀️' : '🌙'}
+          </button>
+
           {user && (
             <>
               <div style={styles.dropdownWrapper}>
@@ -177,7 +186,7 @@ export const Navbar: React.FC = () => {
 
 const styles: Record<string, React.CSSProperties> = {
   navbar: {
-    background: 'rgba(2, 44, 34, 0.95)',
+    background: isDark ? 'rgba(2, 44, 34, 0.95)' : 'rgba(240, 253, 250, 0.95)',
     backdropFilter: 'blur(10px)',
     borderBottom: `1px solid ${theme.colors.border}`,
     position: 'sticky',
@@ -241,7 +250,7 @@ const styles: Record<string, React.CSSProperties> = {
     top: '100%',
     right: 0,
     marginTop: '8px',
-    background: 'rgba(6, 95, 70, 0.98)',
+    background: isDark ? 'rgba(6, 95, 70, 0.98)' : 'rgba(255, 255, 255, 0.98)',
     border: `1px solid ${theme.colors.border}`,
     borderRadius: theme.borderRadius.md,
     minWidth: '180px',
@@ -295,5 +304,18 @@ const styles: Record<string, React.CSSProperties> = {
     textAlign: 'center',
     fontSize: '14px',
     fontWeight: 500,
+  },
+  themeToggle: {
+    background: 'transparent',
+    border: `1px solid ${theme.colors.border}`,
+    color: theme.colors.text,
+    padding: '8px 12px',
+    borderRadius: theme.borderRadius.md,
+    fontSize: '18px',
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 };
