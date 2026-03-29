@@ -180,3 +180,34 @@ a:hover {
   font-size: 12px;
   margin-top: 8px;
 }
+
+.custom-marker {
+  background: transparent !important;
+  border: none !important;
+}
+
+.leaflet-popup-content-wrapper {
+  background: #065F46 !important;
+  color: #fff !important;
+  border-radius: 12px !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4) !important;
+}
+
+.leaflet-popup-content {
+  margin: 0 !important;
+  color: #fff !important;
+}
+
+.leaflet-popup-tip {
+  background: #065F46 !important;
+}
+
+.leaflet-popup-close-button {
+  color: #fff !important;
+  top: 8px !important;
+  right: 8px !important;
+}
+
+.leaflet-container a.leaflet-popup-close-button:hover {
+  color: #22d3ee !important;
+}

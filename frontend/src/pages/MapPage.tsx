@@ -19,6 +19,60 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
+const CATEGORY_ICONS: Record<string, string> = {
+  'Дрова': '🪓', 'Уборка': '🧹', 'Ремонт': '🔧', 'Доставка': '📦',
+  'Покупки': '🛒', 'Готовка': '🍳', 'Садоводство': '🌱', 'Перевозка': '🚚',
+  'Уход за животными': '🐕', 'Помощь с детьми': '👶', 'Компьютерная помощь': '💻',
+  'Стрижка': '✂️', 'Медицинская помощь': '🏥', 'Юридическая консультация': '⚖️',
+  'Обучение': '📚', 'Репетитор': '🎓', 'Транспорт': '🚗', 'Строительство': '🏠',
+  'Электрика': '⚡', 'Сантехника': '🔩', 'Погрузка/Разгрузка': '📤',
+};
+
+const getCategoryIcon = (category: string): string => CATEGORY_ICONS[category] || '📌';
+
+const getStatusColor = (status: string): string => {
+  const colors: Record<string, string> = {
+    OPEN: '#10B981',
+    IN_PROGRESS: '#38bdf8',
+    COMPLETED: '#F59E0B',
+    CANCELLED: '#EF4444',
+  };
+  return colors[status] || '#6B7280';
+};
+
+const createCustomIcon = (category: string, status: string, isSelected: boolean) => {
+  const icon = getCategoryIcon(category);
+  const statusColor = getStatusColor(status);
+  const size = isSelected ? 44 : 38;
+  const borderColor = isSelected ? '#22d3ee' : statusColor;
+  
+  return L.divIcon({
+    className: 'custom-marker',
+    html: `
+      <div style="
+        width: ${size}px;
+        height: ${size}px;
+        background: linear-gradient(135deg, ${statusColor}40 0%, ${statusColor}80 100%);
+        border: 3px solid ${borderColor};
+        border-radius: 50% 50% 50% 0;
+        transform: rotate(-45deg);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 3px 8px rgba(0,0,0,0.3);
+      ">
+        <span style="
+          transform: rotate(45deg);
+          font-size: ${isSelected ? '18px' : '14px'};
+        ">${icon}</span>
+      </div>
+    `,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size],
+    popupAnchor: [0, -size],
+  });
+};
+
 const RADIUS_OPTIONS = [5, 10, 25, 50];
 
 const BELARUS_CITIES: Record<string, { lat: number; lng: number }> = {
@@ -202,10 +256,6 @@ export const MapPage = () => {
     );
   };
 
-  const defaultCenter: [number, number] = userLocation 
-    ? [userLocation.lat, userLocation.lng] 
-    : userCity ? [55.7558, 37.6173] : [55.7558, 37.6173];
-
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
       OPEN: '#10B981',
@@ -302,35 +352,82 @@ export const MapPage = () => {
                 
                 let groupIndex = 0;
                 return Array.from(userGroups.entries()).map(([userId, userPosts]) => {
-                  const post = userPosts[0];
+                  const mainPost = userPosts[0];
                   const offset = (groupIndex % 6) * 0.003;
                   const offsetY = Math.floor(groupIndex / 6) * 0.003;
                   groupIndex++;
                   
+                  const openCount = userPosts.filter(p => p.status === 'OPEN').length;
+                  const inProgressCount = userPosts.filter(p => p.status === 'IN_PROGRESS').length;
+                  
                   return (
                     <Marker 
                       key={userId}
-                      position={[post.latitude! + offsetY, post.longitude! + offset]}
+                      position={[mainPost.latitude! + offsetY, mainPost.longitude! + offset]}
+                      icon={createCustomIcon(mainPost.category, mainPost.status, selectedPost?.userId === userId)}
+                      eventHandlers={{
+                        click: () => setSelectedPost(mainPost),
+                      }}
                     >
                       <Popup>
-                        <div style={{minWidth: '200px'}}>
-                          <div style={{display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px'}}>
-                            <span style={{fontSize: '24px'}}>👤</span>
+                        <div style={{
+                          minWidth: '240px',
+                          background: '#065F46',
+                          borderRadius: '12px',
+                          padding: '12px',
+                        }}>
+                          <div style={{display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px'}}>
+                            <span style={{fontSize: '28px'}}>👤</span>
                             <div>
-                              <strong style={{color: '#fff', fontSize: '16px'}}>{post.authorName}</strong>
-                              <span style={{color: '#22d3ee', fontSize: '12px'}}>📍 {post.userCity}</span>
+                              <strong style={{color: '#fff', fontSize: '16px', display: 'block'}}>{mainPost.authorName}</strong>
+                              <span style={{color: '#22d3ee', fontSize: '12px'}}>📍 {mainPost.userCity}</span>
                             </div>
                           </div>
-                          <div style={{color: '#22d3ee', fontSize: '12px', marginBottom: '8px'}}>
-                            {userPosts.length} запрос{userPosts.length === 1 ? '' : userPosts.length < 5 ? 'а' : 'ов'} о помощи
-                          </div>
-                          <div style={{borderTop: '1px solid rgba(255,255,255,0.2)', paddingTop: '8px'}}>
+                          
+                          {(openCount > 0 || inProgressCount > 0) && (
+                            <div style={{display: 'flex', gap: '6px', marginBottom: '10px'}}>
+                              {openCount > 0 && (
+                                <span style={{
+                                  background: 'rgba(16, 185, 129, 0.2)',
+                                  border: '1px solid rgba(16, 185, 129, 0.5)',
+                                  color: '#34d399',
+                                  fontSize: '10px',
+                                  padding: '3px 8px',
+                                  borderRadius: '10px',
+                                  fontWeight: 600,
+                                }}>● {openCount} Открыто</span>
+                              )}
+                              {inProgressCount > 0 && (
+                                <span style={{
+                                  background: 'rgba(56, 189, 248, 0.2)',
+                                  border: '1px solid rgba(56, 189, 248, 0.5)',
+                                  color: '#38bdf8',
+                                  fontSize: '10px',
+                                  padding: '3px 8px',
+                                  borderRadius: '10px',
+                                  fontWeight: 600,
+                                }}>● {inProgressCount} В работе</span>
+                              )}
+                            </div>
+                          )}
+                          
+                          <div style={{borderTop: '1px solid rgba(255,255,255,0.15)', paddingTop: '10px', maxHeight: '150px', overflowY: 'auto'}}>
                             {userPosts.map(p => (
-                              <div key={p.id} style={{marginBottom: '8px'}}>
-                                <Link to={`/posts/${p.id}`} style={{color: '#fff', textDecoration: 'none', fontSize: '13px'}}>
-                                  📝 {p.title.length > 30 ? p.title.substring(0, 30) + '...' : p.title}
+                              <div key={p.id} style={{marginBottom: '10px', padding: '8px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px'}}>
+                                <Link to={`/posts/${p.id}`} style={{color: '#fff', textDecoration: 'none', fontSize: '13px', display: 'block', marginBottom: '4px'}}>
+                                  {getCategoryIcon(p.category)} {p.title.length > 28 ? p.title.substring(0, 28) + '...' : p.title}
                                 </Link>
-                                <div style={{fontSize: '11px', color: '#22d3ee'}}>{p.category}</div>
+                                <div style={{display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px'}}>
+                                  <span style={{color: '#22d3ee'}}>{p.category}</span>
+                                  <span style={{
+                                    color: getStatusColor(p.status),
+                                    background: `${getStatusColor(p.status)}20`,
+                                    padding: '2px 6px',
+                                    borderRadius: '6px',
+                                    fontSize: '10px',
+                                    fontWeight: 500,
+                                  }}>{getStatusLabel(p.status)}</span>
+                                </div>
                               </div>
                             ))}
                           </div>

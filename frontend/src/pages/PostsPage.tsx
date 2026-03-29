@@ -8,6 +8,8 @@ import { useToast } from '../components/Toast';
 import { theme } from '../theme';
 import { getRelativeTime } from '../utils/dateUtils';
 
+type PostStatus = 'OPEN' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+
 const CATEGORIES = [
   'Все',
   'Дрова',
@@ -385,8 +387,8 @@ export const PostsPage = () => {
               )}
               <div style={styles.cardContent}>
                 <div style={styles.postHeader}>
-                  <div style={styles.statusBadge[post.status]}>
-                    <span style={styles.statusDot[post.status]}>●</span>
+                  <div style={statusBadgeStyles[post.status]}>
+                    <span style={statusDotStyles[post.status]}>●</span>
                     {getStatusLabel(post.status)}
                   </div>
                   <button 
@@ -463,6 +465,72 @@ export const PostsPage = () => {
       )}
     </div>
   );
+};
+
+const statusBadgeStyles: Record<PostStatus, React.CSSProperties> = {
+  OPEN: {
+    background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(5, 150, 105, 0.3) 100%)',
+    border: '1px solid rgba(16, 185, 129, 0.5)',
+    color: '#34d399',
+    fontSize: '11px',
+    fontWeight: 600,
+    padding: '4px 10px',
+    borderRadius: '20px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.5px',
+  },
+  IN_PROGRESS: {
+    background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.2) 0%, rgba(14, 165, 233, 0.3) 100%)',
+    border: '1px solid rgba(56, 189, 248, 0.5)',
+    color: '#38bdf8',
+    fontSize: '11px',
+    fontWeight: 600,
+    padding: '4px 10px',
+    borderRadius: '20px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.5px',
+  },
+  COMPLETED: {
+    background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, rgba(217, 119, 6, 0.3) 100%)',
+    border: '1px solid rgba(245, 158, 11, 0.5)',
+    color: '#fbbf24',
+    fontSize: '11px',
+    fontWeight: 600,
+    padding: '4px 10px',
+    borderRadius: '20px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.5px',
+  },
+  CANCELLED: {
+    background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(220, 38, 38, 0.3) 100%)',
+    border: '1px solid rgba(239, 68, 68, 0.5)',
+    color: '#f87171',
+    fontSize: '11px',
+    fontWeight: 600,
+    padding: '4px 10px',
+    borderRadius: '20px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.5px',
+  },
+};
+
+const statusDotStyles: Record<PostStatus, React.CSSProperties> = {
+  OPEN: { color: '#34d399', fontSize: '10px' },
+  IN_PROGRESS: { color: '#38bdf8', fontSize: '10px' },
+  COMPLETED: { color: '#fbbf24', fontSize: '10px' },
+  CANCELLED: { color: '#f87171', fontSize: '10px' },
 };
 
 const styles: Record<string, React.CSSProperties> = {
@@ -680,70 +748,6 @@ const styles: Record<string, React.CSSProperties> = {
     gap: '8px',
     marginBottom: '10px',
   },
-  statusBadge: {
-    OPEN: {
-      background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(5, 150, 105, 0.3) 100%)',
-      border: '1px solid rgba(16, 185, 129, 0.5)',
-      color: '#34d399',
-      fontSize: '11px',
-      fontWeight: 600,
-      padding: '4px 10px',
-      borderRadius: '20px',
-      display: 'flex',
-      alignItems: 'center',
-      gap: '6px',
-      textTransform: 'uppercase' as const,
-      letterSpacing: '0.5px',
-    },
-    IN_PROGRESS: {
-      background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.2) 0%, rgba(14, 165, 233, 0.3) 100%)',
-      border: '1px solid rgba(56, 189, 248, 0.5)',
-      color: '#38bdf8',
-      fontSize: '11px',
-      fontWeight: 600,
-      padding: '4px 10px',
-      borderRadius: '20px',
-      display: 'flex',
-      alignItems: 'center',
-      gap: '6px',
-      textTransform: 'uppercase' as const,
-      letterSpacing: '0.5px',
-    },
-    COMPLETED: {
-      background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, rgba(217, 119, 6, 0.3) 100%)',
-      border: '1px solid rgba(245, 158, 11, 0.5)',
-      color: '#fbbf24',
-      fontSize: '11px',
-      fontWeight: 600,
-      padding: '4px 10px',
-      borderRadius: '20px',
-      display: 'flex',
-      alignItems: 'center',
-      gap: '6px',
-      textTransform: 'uppercase' as const,
-      letterSpacing: '0.5px',
-    },
-    CANCELLED: {
-      background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(220, 38, 38, 0.3) 100%)',
-      border: '1px solid rgba(239, 68, 68, 0.5)',
-      color: '#f87171',
-      fontSize: '11px',
-      fontWeight: 600,
-      padding: '4px 10px',
-      borderRadius: '20px',
-      display: 'flex',
-      alignItems: 'center',
-      gap: '6px',
-      textTransform: 'uppercase' as const,
-      letterSpacing: '0.5px',
-    },
-  } as Record<string, React.CSSProperties>,
-  statusDot: {
-    OPEN: { color: '#34d399', fontSize: '10px' },
-    IN_PROGRESS: { color: '#38bdf8', fontSize: '10px' },
-    COMPLETED: { color: '#fbbf24', fontSize: '10px' },
-    CANCELLED: { color: '#f87171', fontSize: '10px' },
-  } as Record<string, React.CSSProperties>,
   categoryRow: {
     display: 'flex',
     alignItems: 'center',
