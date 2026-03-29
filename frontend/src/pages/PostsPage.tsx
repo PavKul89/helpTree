@@ -48,6 +48,46 @@ const CATEGORIES = [
   'Недвижимость',
   'Другое',
 ];
+
+const CATEGORY_ICONS: Record<string, string> = {
+  'Дрова': '🪓',
+  'Уборка': '🧹',
+  'Ремонт': '🔧',
+  'Доставка': '📦',
+  'Покупки': '🛒',
+  'Готовка': '🍳',
+  'Садоводство': '🌱',
+  'Перевозка': '🚚',
+  'Уход за животными': '🐾',
+  'Помощь с детьми': '👶',
+  'Компьютерная помощь': '💻',
+  'Стрижка': '✂️',
+  'Медицинская помощь': '🏥',
+  'Юридическая консультация': '⚖️',
+  'Обучение': '📚',
+  'Репетитор': '🎓',
+  'Транспорт': '🚗',
+  'Строительство': '🏠',
+  'Клининг': '🧽',
+  'Курьер': '🏃',
+  'Волонтёрство': '❤️',
+  'Психологическая помощь': '🧠',
+  'Интернет и связь': '📡',
+  'Фото и видео': '📷',
+  'Музыка': '🎵',
+  'Искусство': '🎨',
+  'Спорт': '⚽',
+  'Путешествия': '✈️',
+  'Питомцы': '🐕',
+  'Бытовая техника': '🔌',
+  'Одежда и обувь': '👕',
+  'Продукты': '🥬',
+  'Аптека': '💊',
+  'Банковские услуги': '🏦',
+  'Страхование': '📋',
+  'Недвижимость': '🏘️',
+  'Другое': '📌',
+};
 const STATUSES = ['Все', 'OPEN', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'Избранное'];
 
 export const PostsPage = () => {
@@ -193,16 +233,6 @@ export const PostsPage = () => {
     loadPosts(newPage);
   };
 
-  const getStatusColor = (status: string) => {
-    const colors: Record<string, string> = {
-      OPEN: '#10B981',
-      IN_PROGRESS: '#38bdf8',
-      COMPLETED: '#F59E0B',
-      CANCELLED: '#EF4444',
-    };
-    return colors[status] || '#6B7280';
-  };
-
   const getStatusLabel = (status: string) => {
     const labels: Record<string, string> = {
       OPEN: 'Открыт',
@@ -265,7 +295,9 @@ export const PostsPage = () => {
                 style={styles.filterSelect}
               >
                 {CATEGORIES.map((cat) => (
-                  <option key={cat} value={cat}>{cat}</option>
+                  <option key={cat} value={cat}>
+                    {cat === 'Все' ? cat : `${CATEGORY_ICONS[cat] || '📌'} ${cat}`}
+                  </option>
                 ))}
               </select>
             </div>
@@ -318,7 +350,7 @@ export const PostsPage = () => {
         {(category !== 'Все' || status !== 'Все' || city) && !showFilters && (
           <div style={styles.activeFilters}>
             {category !== 'Все' && (
-              <span style={styles.filterChip}>📁 {category}</span>
+              <span style={styles.filterChip}>{CATEGORY_ICONS[category] || '📁'} {category}</span>
             )}
             {status !== 'Все' && (
               <span style={styles.filterChip}>● {getStatusLabel(status)}</span>
@@ -330,44 +362,65 @@ export const PostsPage = () => {
         )}
       </div>
 
-      <div style={styles.grid}>
+      <div style={styles.masonry}>
         {posts.map((post) => (
           <Link key={post.id} to={`/posts/${post.id}`} style={styles.cardLink}>
             <Card hoverable style={styles.postCard}>
-              <div style={styles.postHeader}>
-                <div style={styles.postHeaderLeft}>
-                  <span style={{
-                    ...styles.statusDot,
-                    backgroundColor: getStatusColor(post.status)
-                  }} />
-                  <span style={styles.statusText}>{getStatusLabel(post.status)}</span>
+              {post.imageUrls && post.imageUrls.length > 0 && (
+                <div style={styles.imageContainer}>
+                  <img 
+                    src={post.imageUrls[0]} 
+                    alt={post.title}
+                    style={styles.postImage}
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                  <div style={styles.imageOverlay}>
+                    {post.imageUrls.length > 1 && (
+                      <span style={styles.imageCount}>+{post.imageUrls.length - 1}</span>
+                    )}
+                  </div>
+                </div>
+              )}
+              <div style={styles.cardContent}>
+                <div style={styles.postHeader}>
+                  <div style={styles.statusBadge[post.status]}>
+                    <span style={styles.statusDot[post.status]}>●</span>
+                    {getStatusLabel(post.status)}
+                  </div>
+                  <button 
+                    onClick={(e) => toggleFavorite(post.id, e, post.status)}
+                    style={{
+                      ...styles.favoriteBtn,
+                      color: favorites.includes(post.id) ? '#fbbf24' : 'rgba(255,255,255,0.5)',
+                    }}
+                    title={favorites.includes(post.id) ? "Убрать из избранного" : "В избранное"}
+                  >
+                    {favorites.includes(post.id) ? '★' : '☆'}
+                  </button>
+                </div>
+                <div style={styles.categoryRow}>
+                  <span style={styles.categoryIcon}>{CATEGORY_ICONS[post.category] || '📌'}</span>
                   <span style={styles.category}>{post.category}</span>
-                  {post.userCity && <span style={styles.city}>📍 {post.userCity}</span>}
                 </div>
-                <button 
-                  onClick={(e) => toggleFavorite(post.id, e, post.status)}
-                  style={{
-                    ...styles.favoriteBtn,
-                    color: favorites.includes(post.id) ? '#fbbf24' : 'rgba(255,255,255,0.5)',
-                  }}
-                  title={favorites.includes(post.id) ? "Убрать из избранного" : "В избранное"}
-                >
-                  {favorites.includes(post.id) ? '⭐' : '☆'}
-                </button>
-              </div>
-              <h3 style={styles.postTitle}>{post.title}</h3>
-              <p style={styles.postDescription}>
-                {post.description.length > 100 
-                  ? post.description.substring(0, 100) + '...' 
-                  : post.description}
-              </p>
-              <div style={styles.postFooter}>
-                <div style={styles.author}>
-                  <Avatar name={post.authorName} avatarUrl={post.authorAvatarUrl} size="small" showName withRating={post.authorRating} clickable userId={post.userId} />
+                <h3 style={styles.postTitle}>{post.title}</h3>
+                <p style={styles.postDescription}>
+                  {post.description.length > 120 
+                    ? post.description.substring(0, 120) + '...' 
+                    : post.description}
+                </p>
+                <div style={styles.postFooter}>
+                  <div style={styles.author}>
+                    <Avatar name={post.authorName} avatarUrl={post.authorAvatarUrl} size="small" showName withRating={post.authorRating} clickable userId={post.userId} />
+                  </div>
+                  <div style={styles.metaRight}>
+                    {post.userCity && <span style={styles.city}>📍 {post.userCity}</span>}
+                    <span style={styles.date}>
+                      {getRelativeTime(post.createdAt)}
+                    </span>
+                  </div>
                 </div>
-                <span style={styles.date}>
-                  {getRelativeTime(post.createdAt)}
-                </span>
               </div>
             </Card>
           </Link>
@@ -571,67 +624,154 @@ const styles: Record<string, React.CSSProperties> = {
     background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(5, 150, 105, 0.2) 100%)',
     border: '1px solid rgba(16, 185, 129, 0.4)',
   },
-  grid: {
+  masonry: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
     gap: '20px',
+    gridAutoRows: 'auto',
   },
   cardLink: {
     textDecoration: 'none',
+    display: 'block',
   },
   postCard: {
     height: '100%',
     display: 'flex',
     flexDirection: 'column',
+    overflow: 'hidden',
+    padding: 0,
+  },
+  imageContainer: {
+    position: 'relative',
+    width: '100%',
+    height: '180px',
+    overflow: 'hidden',
+    borderRadius: '16px 16px 0 0',
+  },
+  postImage: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+    transition: 'transform 0.3s ease',
+  },
+  imageOverlay: {
+    position: 'absolute',
+    bottom: '8px',
+    right: '8px',
+    background: 'rgba(0,0,0,0.7)',
+    borderRadius: '8px',
+    padding: '4px 8px',
+  },
+  imageCount: {
+    color: '#fff',
+    fontSize: '12px',
+    fontWeight: 600,
+  },
+  cardContent: {
+    padding: '16px',
+    display: 'flex',
+    flexDirection: 'column',
+    flex: 1,
   },
   postHeader: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: '8px',
-    marginBottom: '12px',
-    flexWrap: 'wrap',
+    marginBottom: '10px',
   },
-  postHeaderLeft: {
+  statusBadge: {
+    OPEN: {
+      background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(5, 150, 105, 0.3) 100%)',
+      border: '1px solid rgba(16, 185, 129, 0.5)',
+      color: '#34d399',
+      fontSize: '11px',
+      fontWeight: 600,
+      padding: '4px 10px',
+      borderRadius: '20px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '6px',
+      textTransform: 'uppercase' as const,
+      letterSpacing: '0.5px',
+    },
+    IN_PROGRESS: {
+      background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.2) 0%, rgba(14, 165, 233, 0.3) 100%)',
+      border: '1px solid rgba(56, 189, 248, 0.5)',
+      color: '#38bdf8',
+      fontSize: '11px',
+      fontWeight: 600,
+      padding: '4px 10px',
+      borderRadius: '20px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '6px',
+      textTransform: 'uppercase' as const,
+      letterSpacing: '0.5px',
+    },
+    COMPLETED: {
+      background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, rgba(217, 119, 6, 0.3) 100%)',
+      border: '1px solid rgba(245, 158, 11, 0.5)',
+      color: '#fbbf24',
+      fontSize: '11px',
+      fontWeight: 600,
+      padding: '4px 10px',
+      borderRadius: '20px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '6px',
+      textTransform: 'uppercase' as const,
+      letterSpacing: '0.5px',
+    },
+    CANCELLED: {
+      background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(220, 38, 38, 0.3) 100%)',
+      border: '1px solid rgba(239, 68, 68, 0.5)',
+      color: '#f87171',
+      fontSize: '11px',
+      fontWeight: 600,
+      padding: '4px 10px',
+      borderRadius: '20px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '6px',
+      textTransform: 'uppercase' as const,
+      letterSpacing: '0.5px',
+    },
+  } as Record<string, React.CSSProperties>,
+  statusDot: {
+    OPEN: { color: '#34d399', fontSize: '10px' },
+    IN_PROGRESS: { color: '#38bdf8', fontSize: '10px' },
+    COMPLETED: { color: '#fbbf24', fontSize: '10px' },
+    CANCELLED: { color: '#f87171', fontSize: '10px' },
+  } as Record<string, React.CSSProperties>,
+  categoryRow: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
+    gap: '6px',
+    marginBottom: '10px',
   },
-  statusDot: {
-    width: '8px',
-    height: '8px',
-    borderRadius: '50%',
-  },
-  statusText: {
-    color: theme.colors.textMuted,
-    fontSize: '12px',
-  },
-  city: {
-    color: theme.colors.accentLight,
-    fontSize: '12px',
-    fontWeight: 500,
+  categoryIcon: {
+    fontSize: '16px',
   },
   category: {
-    color: theme.colors.accent,
+    color: theme.colors.accentLight,
     fontSize: '13px',
-    background: 'rgba(34, 211, 238, 0.15)',
-    padding: '4px 10px',
-    borderRadius: '4px',
+    fontWeight: 500,
   },
   favoriteBtn: {
     background: 'transparent',
     border: 'none',
-    fontSize: '18px',
+    fontSize: '20px',
     cursor: 'pointer',
     padding: '4px',
-    marginLeft: '8px',
     transition: 'transform 0.2s',
   },
   postTitle: {
     color: theme.colors.text,
-    fontSize: '18px',
+    fontSize: '17px',
     fontWeight: 600,
     margin: '0 0 10px 0',
+    lineHeight: 1.3,
   },
   postDescription: {
     color: theme.colors.textSecondary,
@@ -644,17 +784,29 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: '16px',
-    paddingTop: '16px',
+    marginTop: '14px',
+    paddingTop: '14px',
     borderTop: `1px solid ${theme.colors.border}`,
+    flexWrap: 'wrap',
+    gap: '8px',
   },
   author: {
     display: 'flex',
     alignItems: 'center',
   },
+  metaRight: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+  },
+  city: {
+    color: theme.colors.accentLight,
+    fontSize: '12px',
+    fontWeight: 500,
+  },
   date: {
     color: theme.colors.textMuted,
-    fontSize: '13px',
+    fontSize: '12px',
   },
   pagination: {
     display: 'flex',
