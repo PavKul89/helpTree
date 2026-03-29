@@ -282,26 +282,15 @@ export const MapPage = () => {
               />
 
               {userLocation && (
-                <>
-                  <Circle
-                    center={[userLocation.lat, userLocation.lng]}
-                    radius={radius * 1000}
-                    pathOptions={{
-                      color: '#06b6d4',
-                      fillColor: '#06b6d4',
-                      fillOpacity: 0.1
-                    }}
-                  />
-                  <Marker position={[userLocation.lat, userLocation.lng]}>
-                    <Popup>
-                      <div style={{textAlign: 'center'}}>
-                        <div style={{fontSize: '24px', marginBottom: '4px'}}>📍</div>
-                        <strong style={{color: '#06b6d4'}}>Ваше местоположение</strong>
-                        <div style={{fontSize: '12px', color: '#fff', marginTop: '4px'}}>Радиус: {radius} км</div>
-                      </div>
-                    </Popup>
-                  </Marker>
-                </>
+                <Circle
+                  center={[userLocation.lat, userLocation.lng]}
+                  radius={radius * 1000}
+                  pathOptions={{
+                    color: '#06b6d4',
+                    fillColor: '#06b6d4',
+                    fillOpacity: 0.1
+                  }}
+                />
               )}
 
               {(() => {
