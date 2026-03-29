@@ -98,4 +98,14 @@ public class PostController {
     public ResponseEntity<List<PostDto>> getPostsByIds(@RequestBody List<Long> ids) {
         return ResponseEntity.ok(postService.getPostsByIds(ids));
     }
+
+    @GetMapping("/map")
+    public ResponseEntity<List<PostDto>> getPostsOnMap(
+            @RequestParam(required = false) Double latitude,
+            @RequestParam(required = false) Double longitude,
+            @RequestParam(defaultValue = "10") Double radius,
+            @RequestParam(required = false) String status
+    ) {
+        return ResponseEntity.ok(postService.getPostsOnMap(latitude, longitude, radius, status));
+    }
 }

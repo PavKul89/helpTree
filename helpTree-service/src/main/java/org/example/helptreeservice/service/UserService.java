@@ -170,6 +170,16 @@ public class UserService {
                 log.debug("Изменен город пользователя на: {}", request.getCity());
             }
 
+            if (request.getLatitude() != null) {
+                user.setLatitude(request.getLatitude());
+                changed = true;
+            }
+
+            if (request.getLongitude() != null) {
+                user.setLongitude(request.getLongitude());
+                changed = true;
+            }
+
             if (request.getBirthDate() != null && !request.getBirthDate().equals(user.getBirthDate())) {
                 user.setBirthDate(request.getBirthDate());
                 changed = true;

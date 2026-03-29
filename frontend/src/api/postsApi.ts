@@ -56,4 +56,9 @@ export const postsApi = {
     const response = await api.post<Post[]>('/api/posts/by-ids', ids);
     return response.data;
   },
+
+  getMapPosts: async (): Promise<Post[]> => {
+    const response = await api.get<Post[]>('/api/posts/map');
+    return response.data;
+  },
 };

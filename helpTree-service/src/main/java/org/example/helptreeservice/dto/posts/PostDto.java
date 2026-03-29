@@ -21,6 +21,8 @@ public class PostDto {
     private String userEmail;
     private Double userRating;
     private String userCity;
+    private Double latitude;
+    private Double longitude;
     private Long helperId;
     private String helperName;
     private PostStatus status;

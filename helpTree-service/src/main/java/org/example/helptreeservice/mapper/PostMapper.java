@@ -12,6 +12,8 @@ public interface PostMapper {
     @Mapping(source = "user.email", target = "userEmail")
     @Mapping(source = "user.rating", target = "userRating")
     @Mapping(source = "user.city", target = "userCity")
+    @Mapping(source = "latitude", target = "latitude")
+    @Mapping(source = "longitude", target = "longitude")
     @Mapping(source = "user.name", target = "authorName")
     @Mapping(source = "user.avatarUrl", target = "authorAvatarUrl")
     @Mapping(source = "helper.id", target = "helperId")

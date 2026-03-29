@@ -47,6 +47,9 @@ public class User {
     @Size(max = 100)
     private String city;
 
+    private Double latitude;
+    private Double longitude;
+
     @Column(name = "helped_count")
     private Integer helpedCount = 0;
 

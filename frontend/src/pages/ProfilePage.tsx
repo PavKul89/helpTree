@@ -11,6 +11,7 @@ import { Spinner } from '../components/Spinner';
 import { useToast } from '../components/Toast';
 import { theme } from '../theme';
 import type { User, UserPublic, Post } from '../types';
+import { geocodeCity } from '../utils/geocoding';
 
 export const ProfilePage = () => {
   const { userId } = useParams<{ userId?: string }>();
@@ -140,12 +141,25 @@ export const ProfilePage = () => {
   const handleSaveProfile = async () => {
     if (!currentUser) return;
     try {
+      let latitude: number | undefined;
+      let longitude: number | undefined;
+      
+      if (editForm.city) {
+        const coords = await geocodeCity(editForm.city);
+        if (coords) {
+          latitude = coords.lat;
+          longitude = coords.lng;
+        }
+      }
+      
       const updatedUser = await authApi.updateProfile(currentUser.id, {
         name: editForm.name,
         email: editForm.email,
         phone: editForm.phone || undefined,
         city: editForm.city || undefined,
         birthDate: editForm.birthDate ? new Date(editForm.birthDate).toISOString() : null,
+        latitude,
+        longitude,
       });
       setProfileUser(updatedUser);
       setUser(updatedUser);

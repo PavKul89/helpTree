@@ -62,6 +62,8 @@ public class PostService {
             post.setCreatedAt(LocalDateTime.now());
             post.setUpdatedAt(LocalDateTime.now());
             post.setStatus(PostStatus.OPEN);
+            post.setLatitude(user.getLatitude());
+            post.setLongitude(user.getLongitude());
             
             if (request.getImageUrls() != null && !request.getImageUrls().isEmpty()) {
                 post.setImageUrls(request.getImageUrls());
@@ -318,5 +320,12 @@ public class PostService {
                 .filter(p -> p.getDeleted() == null || !p.getDeleted())
                 .map(postMapper::toDto)
                 .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<PostDto> getPostsOnMap(Double latitude, Double longitude, Double radius, String status) {
+        log.info("Запрос всех активных постов для карты");
+        List<Post> posts = postRepository.findAllActive();
+        return posts.stream().map(postMapper::toDto).collect(Collectors.toList());
     }
 }

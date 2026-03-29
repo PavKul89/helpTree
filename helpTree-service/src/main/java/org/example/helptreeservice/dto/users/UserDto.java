@@ -18,6 +18,8 @@ public class UserDto {
     private String email;
     private String phone;
     private String city;
+    private Double latitude;
+    private Double longitude;
     private Integer helpedCount;
     private Integer debtCount;
     private Double rating;

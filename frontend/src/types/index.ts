@@ -7,6 +7,8 @@ export interface User {
   telegramChatId?: string;
   phone?: string;
   city?: string;
+  latitude?: number;
+  longitude?: number;
   avatarUrl?: string;
   createdAt: string;
   helpedCount?: number;
@@ -34,6 +36,8 @@ export interface Post {
   authorAvatarUrl?: string;
   authorRating: number;
   userCity?: string;
+  latitude?: number;
+  longitude?: number;
   helperId?: number;
   helperName?: string;
   imageUrls?: string[];

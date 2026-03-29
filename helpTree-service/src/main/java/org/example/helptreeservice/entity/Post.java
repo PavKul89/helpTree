@@ -48,4 +48,7 @@ public class Post {
 
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
+
+    private Double latitude;
+    private Double longitude;
 }

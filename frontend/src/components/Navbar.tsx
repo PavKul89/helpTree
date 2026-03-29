@@ -109,6 +109,9 @@ export const Navbar: React.FC = () => {
             </button>
             {(openDropdown === 'community' || !user) && (
               <div style={styles.dropdown}>
+                <Link to="/map" style={styles.dropdownItem} onClick={closeDropdown}>
+                  🗺️ Карта
+                </Link>
                 <Link to="/graph" style={styles.dropdownItem} onClick={closeDropdown}>
                   🌳 Граф помощи
                 </Link>

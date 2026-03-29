@@ -20,5 +20,8 @@ public class UpdateUserRequest {
 
     private String city;
 
+    private Double latitude;
+    private Double longitude;
+
     private LocalDateTime birthDate;
 }
