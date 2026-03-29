@@ -1,13 +1,14 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useTheme } from '../theme';
+import { useTheme, theme as defaultTheme } from '../theme';
 import { chatApi } from '../api/chatApi';
 import { authApi } from '../api/authApi';
 
 export const Navbar: React.FC = () => {
   const { user, logout } = useAuth();
-  const { theme, isDark, toggleTheme } = useTheme();
+  const { isDark, toggleTheme } = useTheme();
+  const theme = defaultTheme;
   const navigate = useNavigate();
   const [unreadChats, setUnreadChats] = useState(0);
   const [debtWarning, setDebtWarning] = useState<number | null>(null);
@@ -83,8 +84,11 @@ export const Navbar: React.FC = () => {
     setOpenDropdown(null);
   };
 
+  const navbarBg = isDark ? 'rgba(2, 44, 34, 0.95)' : 'rgba(240, 253, 250, 0.95)';
+  const dropdownBg = isDark ? 'rgba(6, 95, 70, 0.98)' : 'rgba(255, 255, 255, 0.98)';
+
   return (
-    <nav style={styles.navbar}>
+    <nav style={{ ...styles.navbar, background: navbarBg }}>
       <div style={styles.container}>
         <div onClick={handleLogoClick} style={styles.logo}>
           <svg viewBox="0 0 100 120" width="40" height="48">
@@ -94,33 +98,33 @@ export const Navbar: React.FC = () => {
             <circle cx="62" cy="48" r="16" fill="#10b981" opacity="0.8"/>
             <circle cx="50" cy="28" r="16" fill="#34d399" opacity="0.7"/>
           </svg>
-          <span style={styles.logoText}>Древо Помощи</span>
+          <span style={{ ...styles.logoText, color: theme.colors.text }}>Древо Помощи</span>
         </div>
 
         <div style={styles.links} ref={dropdownRef}>
-          <div onClick={handleLogoClick} style={styles.link}>Главная</div>
+          <div onClick={handleLogoClick} style={{ ...styles.link, color: theme.colors.textSecondary }}>Главная</div>
           
           <div style={styles.dropdownWrapper}>
             <button 
-              style={styles.dropdownTrigger}
+              style={{ ...styles.dropdownTrigger, color: theme.colors.textSecondary, borderRadius: theme.borderRadius.md }}
               onClick={() => toggleDropdown('community')}
               onMouseEnter={() => user && setOpenDropdown('community')}
             >
               Сообщество ▾
             </button>
             {(openDropdown === 'community' || !user) && (
-              <div style={styles.dropdown}>
-                <Link to="/map" style={styles.dropdownItem} onClick={closeDropdown}>
+              <div style={{ ...styles.dropdown, background: dropdownBg, border: `1px solid ${theme.colors.border}`, borderRadius: theme.borderRadius.md }}>
+                <Link to="/map" style={{ ...styles.dropdownItem, color: theme.colors.textSecondary }} onClick={closeDropdown}>
                   🗺️ Карта
                 </Link>
-                <Link to="/graph" style={styles.dropdownItem} onClick={closeDropdown}>
+                <Link to="/graph" style={{ ...styles.dropdownItem, color: theme.colors.textSecondary }} onClick={closeDropdown}>
                   🌳 Граф помощи
                 </Link>
-                <Link to="/achievements" style={styles.dropdownItem} onClick={closeDropdown}>
+                <Link to="/achievements" style={{ ...styles.dropdownItem, color: theme.colors.textSecondary }} onClick={closeDropdown}>
                   🏆 Достижения
                 </Link>
                 {user && (
-                  <Link to="/activity" style={styles.dropdownItem} onClick={closeDropdown}>
+                  <Link to="/activity" style={{ ...styles.dropdownItem, color: theme.colors.textSecondary }} onClick={closeDropdown}>
                     📋 Активность
                   </Link>
                 )}
@@ -130,7 +134,7 @@ export const Navbar: React.FC = () => {
 
           <button 
             onClick={toggleTheme}
-            style={styles.themeToggle}
+            style={{ ...styles.themeToggle, border: `1px solid ${theme.colors.border}`, color: theme.colors.text, borderRadius: theme.borderRadius.md }}
             title={isDark ? 'Светлая тема' : 'Тёмная тема'}
           >
             {isDark ? '☀️' : '🌙'}
@@ -140,24 +144,24 @@ export const Navbar: React.FC = () => {
             <>
               <div style={styles.dropdownWrapper}>
                 <button 
-                  style={styles.dropdownTrigger}
+                  style={{ ...styles.dropdownTrigger, color: theme.colors.textSecondary, borderRadius: theme.borderRadius.md }}
                   onClick={() => toggleDropdown('profile')}
                   onMouseEnter={() => setOpenDropdown('profile')}
                 >
                   👤 Профиль ▾
                 </button>
                 {openDropdown === 'profile' && (
-                  <div style={styles.dropdown}>
-                    <Link to="/profile" style={styles.dropdownItem} onClick={closeDropdown}>
+                  <div style={{ ...styles.dropdown, background: dropdownBg, border: `1px solid ${theme.colors.border}`, borderRadius: theme.borderRadius.md }}>
+                    <Link to="/profile" style={{ ...styles.dropdownItem, color: theme.colors.textSecondary }} onClick={closeDropdown}>
                       👤 Мой профиль
                     </Link>
-                    <Link to="/favorites" style={styles.dropdownItem} onClick={closeDropdown}>
+                    <Link to="/favorites" style={{ ...styles.dropdownItem, color: theme.colors.textSecondary }} onClick={closeDropdown}>
                       ⭐ Избранное
                     </Link>
-                    <Link to="/my-orders" style={styles.dropdownItem} onClick={closeDropdown}>
+                    <Link to="/my-orders" style={{ ...styles.dropdownItem, color: theme.colors.textSecondary }} onClick={closeDropdown}>
                       📦 Мои заказы
                     </Link>
-                    <Link to="/chats" style={styles.dropdownItem} onClick={closeDropdown}>
+                    <Link to="/chats" style={{ ...styles.dropdownItem, color: theme.colors.textSecondary }} onClick={closeDropdown}>
                       💬 Чаты
                       {unreadChats > 0 && <span style={styles.dropdownBadge}>{unreadChats}</span>}
                     </Link>
@@ -165,13 +169,13 @@ export const Navbar: React.FC = () => {
                 )}
               </div>
 
-              <button onClick={handleLogout} style={styles.logoutBtn}>
+              <button onClick={handleLogout} style={{ ...styles.logoutBtn, border: `1px solid ${theme.colors.border}`, color: theme.colors.textSecondary, borderRadius: theme.borderRadius.md }}>
                 Выйти
               </button>
             </>
           )}
           {!user && (
-            <Link to="/login" style={styles.loginBtn}>Войти</Link>
+            <Link to="/login" style={{ ...styles.loginBtn, background: theme.gradients.button, color: theme.colors.text, borderRadius: theme.borderRadius.md }}>Войти</Link>
           )}
         </div>
       </div>
@@ -186,9 +190,8 @@ export const Navbar: React.FC = () => {
 
 const styles: Record<string, React.CSSProperties> = {
   navbar: {
-    background: isDark ? 'rgba(2, 44, 34, 0.95)' : 'rgba(240, 253, 250, 0.95)',
     backdropFilter: 'blur(10px)',
-    borderBottom: `1px solid ${theme.colors.border}`,
+    borderBottom: `1px solid rgba(255, 255, 255, 0.2)`,
     position: 'sticky',
     top: 0,
     zIndex: 1000,
@@ -212,7 +215,6 @@ const styles: Record<string, React.CSSProperties> = {
   logoText: {
     fontSize: '20px',
     fontWeight: 700,
-    color: theme.colors.text,
   },
   links: {
     display: 'flex',
@@ -220,7 +222,6 @@ const styles: Record<string, React.CSSProperties> = {
     gap: '16px',
   },
   link: {
-    color: theme.colors.textSecondary,
     textDecoration: 'none',
     fontSize: '15px',
     fontWeight: 500,
@@ -233,12 +234,10 @@ const styles: Record<string, React.CSSProperties> = {
   dropdownTrigger: {
     background: 'transparent',
     border: 'none',
-    color: theme.colors.textSecondary,
     fontSize: '15px',
     fontWeight: 500,
     cursor: 'pointer',
     padding: '8px 12px',
-    borderRadius: theme.borderRadius.md,
     transition: 'all 0.2s',
     fontFamily: 'inherit',
   },
@@ -250,9 +249,6 @@ const styles: Record<string, React.CSSProperties> = {
     top: '100%',
     right: 0,
     marginTop: '8px',
-    background: isDark ? 'rgba(6, 95, 70, 0.98)' : 'rgba(255, 255, 255, 0.98)',
-    border: `1px solid ${theme.colors.border}`,
-    borderRadius: theme.borderRadius.md,
     minWidth: '180px',
     padding: '8px 0',
     boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
@@ -263,7 +259,6 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: '10px 16px',
-    color: theme.colors.textSecondary,
     textDecoration: 'none',
     fontSize: '14px',
     transition: 'all 0.2s',
@@ -277,21 +272,15 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
   },
   loginBtn: {
-    background: theme.gradients.button,
-    color: theme.colors.text,
     textDecoration: 'none',
     padding: '10px 20px',
-    borderRadius: theme.borderRadius.md,
     fontSize: '14px',
     fontWeight: 600,
     transition: 'all 0.3s',
   },
   logoutBtn: {
     background: 'transparent',
-    border: `1px solid ${theme.colors.border}`,
-    color: theme.colors.textSecondary,
     padding: '8px 16px',
-    borderRadius: theme.borderRadius.md,
     fontSize: '14px',
     fontWeight: 500,
     cursor: 'pointer',
@@ -307,10 +296,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   themeToggle: {
     background: 'transparent',
-    border: `1px solid ${theme.colors.border}`,
-    color: theme.colors.text,
     padding: '8px 12px',
-    borderRadius: theme.borderRadius.md,
     fontSize: '18px',
     cursor: 'pointer',
     transition: 'all 0.2s',

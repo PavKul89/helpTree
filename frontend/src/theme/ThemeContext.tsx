@@ -130,10 +130,10 @@ export const lightTheme = {
   mode: 'light' as const,
 };
 
-type ThemeType = typeof darkTheme;
+export type ThemeMode = 'dark' | 'light';
 
-interface ThemeContextType {
-  theme: ThemeType;
+export interface ThemeContextType {
+  theme: typeof darkTheme;
   isDark: boolean;
   toggleTheme: () => void;
 }
@@ -155,7 +155,7 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const theme = isDark ? darkTheme : lightTheme;
 
   return (
-    <ThemeContext.Provider value={{ theme, isDark, toggleTheme }}>
+    <ThemeContext.Provider value={{ theme: theme as typeof darkTheme, isDark, toggleTheme }}>
       {children}
     </ThemeContext.Provider>
   );
