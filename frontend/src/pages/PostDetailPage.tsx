@@ -373,7 +373,7 @@ export const PostDetailPage = () => {
         </div>
 
         <div style={styles.authorCard}>
-          <Avatar name={post.authorName} avatarUrl={post.authorAvatarUrl} size="large" />
+          <Avatar name={post.authorName} avatarUrl={post.authorAvatarUrl} size="large" clickable userId={post.userId} />
           <div style={styles.authorInfo}>
             <div style={styles.authorName}>{post.authorName}</div>
             <div style={styles.authorMeta}>
