@@ -70,6 +70,11 @@ public class HelpService {
             User receiver = post.getUser();
             log.debug("Автор поста (получатель): email={}, имя={}", receiver.getEmail(), receiver.getName());
 
+            if (receiver.getBlockedAt() != null) {
+                log.warn("Попытка откликнуться на пост заблокированного пользователя: receiverId={}", receiver.getId());
+                throw new BadRequestException("Автор поста заблокирован за долг. Нельзя откликнуться на его пост.");
+            }
+
             // Проверки
             if (helper.getId().equals(receiver.getId())) {
                 log.warn("Попытка помочь самому себе: helperId={}, receiverId={}",
@@ -77,12 +82,17 @@ public class HelpService {
                 throw new BadRequestException("Нельзя помочь самому себе");
             }
 
+            if (receiver.getBlockedAt() != null) {
+                log.warn("Попытка откликнуться на пост заблокированного пользователя: receiverId={}", receiver.getId());
+                throw new BadRequestException("Пользователь заблокирован за долг. Невозможно откликнуться на пост.");
+            }
+
             if (receiver.getDebtCount() > 5) {
                 log.warn("Попытка откликнуться на пост пользователя с долгом: receiverId={}, debtCount={}",
                         receiver.getId(), receiver.getDebtCount());
                 boolean isInGoodStanding = receiver.getHelpedCount() >= receiver.getDebtCount();
                 if (!isInGoodStanding) {
-                    throw new BadRequestException("Пользователь заблокирован из-за долга (" + receiver.getDebtCount() + "). Сначала погасите долг (помогите другим). Вы помогли: " + receiver.getHelpedCount());
+                    throw new BadRequestException("Пользователь заблокирован за долг. Невозможно откликнуться на пост.");
                 }
             }
 
@@ -464,22 +474,26 @@ public class HelpService {
      * Получить количество новых ответов на посты пользователя (от последнего входа)
      */
     @Transactional(readOnly = true)
-    public long getNewResponsesCount(Long userId) {
+    public long getNewResponsesCount(Long userId, String sinceParam) {
         log.info("Подсчет новых ответов для userId: {}", userId);
 
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new NotFoundException("Пользователь не найден с id: " + userId));
-
-        LocalDateTime lastLogin = user.getLastLogin();
-        if (lastLogin == null) {
-            lastLogin = LocalDateTime.of(1970, 1, 1, 0, 0);
+        LocalDateTime lastLogin;
+        if (sinceParam != null && !sinceParam.isEmpty()) {
+            lastLogin = LocalDateTime.parse(sinceParam);
+        } else {
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new NotFoundException("Пользователь не найден с id: " + userId));
+            lastLogin = user.getLastLogin();
+            if (lastLogin == null) {
+                lastLogin = LocalDateTime.of(1970, 1, 1, 0, 0);
+            }
         }
 
         List<Post> userPosts = postRepository.findByUserId(userId);
 
         long count = 0;
         for (Post post : userPosts) {
-            List<Help> helps = helpRepository.findByPost(post);
+            List<Help> helps = helpRepository.findByPostWithHelper(post);
             for (Help help : helps) {
                 if (help.getCreatedAt() != null && help.getCreatedAt().isAfter(lastLogin)) {
                     count++;
@@ -489,6 +503,36 @@ public class HelpService {
 
         log.info("Найдено {} новых ответов для userId: {}", count, userId);
         return count;
+    }
+
+    @Transactional(readOnly = true)
+    public List<org.example.helptreeservice.dto.helps.NewResponseDto> getNewResponses(Long userId, String sinceParam) {
+        log.info("Получение ответов для userId: {}", userId);
+
+        List<Post> userPosts = postRepository.findByUserId(userId);
+        List<org.example.helptreeservice.dto.helps.NewResponseDto> responses = new ArrayList<>();
+
+        for (Post post : userPosts) {
+            List<Help> helps = helpRepository.findByPostWithHelper(post);
+            for (Help help : helps) {
+                org.example.helptreeservice.dto.helps.NewResponseDto dto = new org.example.helptreeservice.dto.helps.NewResponseDto();
+                dto.setHelpId(help.getId());
+                dto.setPostId(post.getId());
+                dto.setPostTitle(post.getTitle());
+                String helperName = "Неизвестно";
+                if (help.getHelper() != null) {
+                    helperName = help.getHelper().getName();
+                }
+                dto.setHelperName(helperName);
+                if (help.getCreatedAt() != null) {
+                    dto.setCreatedAt(help.getCreatedAt().toString());
+                }
+                responses.add(dto);
+            }
+        }
+
+        log.info("Найдено {} ответов для userId: {}", responses.size(), userId);
+        return responses;
     }
 
     /**

@@ -9,6 +9,7 @@ import org.example.helptreeservice.service.HelpService;
 import org.example.helptreeservice.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -17,6 +18,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/helps")
+@Slf4j
 @RequiredArgsConstructor
 public class HelpController {
 
@@ -103,11 +105,25 @@ public class HelpController {
     }
 
     @GetMapping("/new-responses/count")
-    public ResponseEntity<Long> getNewResponsesCount() {
+    public ResponseEntity<Long> getNewResponsesCount(@RequestParam(required = false) String since) {
         var currentUser = authService.getCurrentUser();
         if (currentUser == null) {
             throw new ForbiddenException("Необходимо войти в систему");
         }
-        return ResponseEntity.ok(helpService.getNewResponsesCount(currentUser.getUserId()));
+        return ResponseEntity.ok(helpService.getNewResponsesCount(currentUser.getUserId(), since));
+    }
+
+    @GetMapping("/new-responses")
+    public ResponseEntity<List<org.example.helptreeservice.dto.helps.NewResponseDto>> getNewResponses(@RequestParam(required = false) String since) {
+        try {
+            var currentUser = authService.getCurrentUser();
+            if (currentUser == null) {
+                throw new ForbiddenException("Необходимо войти в систему");
+            }
+            return ResponseEntity.ok(helpService.getNewResponses(currentUser.getUserId(), since));
+        } catch (Exception e) {
+            log.error("Error getting new responses: {}", e.getMessage(), e);
+            return ResponseEntity.ok(List.of());
+        }
     }
 }

@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.helptreeservice.dto.auth.AuthResponse;
+import java.time.LocalDateTime;
 import org.example.helptreeservice.dto.auth.LoginRequest;
 import org.example.helptreeservice.dto.auth.RefreshTokenRequest;
 import org.example.helptreeservice.dto.users.CreateUserRequest;
@@ -62,6 +63,7 @@ public class AuthController {
             throw new UnauthorizedException("Аккаунт удалён");
         }
 
+        LocalDateTime previousLastLogin = user.getLastLogin();
         userService.updateLastLogin(user.getId());
 
         String accessToken = jwtService.generateToken(
@@ -74,7 +76,9 @@ public class AuthController {
 
         long expiresIn = jwtService.getExpirationTime();
 
-        return ResponseEntity.ok(new AuthResponse(accessToken, refreshToken, user.getId(), user.getEmail(), user.getRole().name(), expiresIn));
+        AuthResponse response = new AuthResponse(accessToken, refreshToken, user.getId(), user.getEmail(), user.getRole().name(), expiresIn);
+        response.setPreviousLastLogin(previousLastLogin);
+        return ResponseEntity.ok(response);
     }
 
     @PostMapping("/refresh")

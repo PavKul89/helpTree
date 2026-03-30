@@ -45,6 +45,7 @@ export interface Post {
   imageUrls?: string[];
   createdAt: string;
   updatedAt: string;
+  authorBlockedAt?: string;
 }
 
 export interface Review {

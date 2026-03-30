@@ -27,4 +27,5 @@ public class PostDto {
     private String helperName;
     private PostStatus status;
     private List<String> imageUrls;
+    private LocalDateTime authorBlockedAt;
 }

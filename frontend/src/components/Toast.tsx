@@ -72,6 +72,8 @@ const styles: Record<string, React.CSSProperties> = {
     gap: '10px',
     animation: 'slideIn 0.3s ease',
     boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+    whiteSpace: 'pre-wrap',
+    maxWidth: '400px',
   },
   success: {
     background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',

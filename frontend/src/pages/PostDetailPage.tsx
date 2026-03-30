@@ -230,7 +230,8 @@ export const PostDetailPage = () => {
   if (!post) return <div style={styles.notFound}>Пост не найден</div>;
 
   const isAuthor = user?.id === post.userId;
-  const canOfferHelp = user && !isAuthor && post.status === 'OPEN' && (!('blockedAt' in user) || !user.blockedAt);
+  const isAuthorBlocked = post.authorBlockedAt != null;
+  const canOfferHelp = user && !isAuthor && post.status === 'OPEN' && (!('blockedAt' in user) || !user.blockedAt) && !isAuthorBlocked;
 
   return (
     <div style={styles.container}>
@@ -396,6 +397,12 @@ export const PostDetailPage = () => {
         <Button onClick={handleOfferHelp} style={{ marginBottom: 20 }}>
           Откликнуться на пост
         </Button>
+      )}
+
+      {!canOfferHelp && user && !isAuthor && post.status === 'OPEN' && isAuthorBlocked && (
+        <div style={{ ...styles.errorBanner, marginBottom: 20 }}>
+          🚫 Автор поста заблокирован за долг. Невозможно откликнуться на пост.
+        </div>
       )}
 
       {helps.length > 0 && (

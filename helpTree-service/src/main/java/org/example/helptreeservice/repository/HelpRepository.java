@@ -14,6 +14,9 @@ import java.util.Optional;
 @Repository
 public interface HelpRepository extends JpaRepository<Help, Long> {
 
+    @Query("SELECT h FROM Help h JOIN FETCH h.post JOIN FETCH h.helper WHERE h.post = :post AND (h.deleted = false OR h.deleted IS NULL)")
+    List<Help> findByPostWithHelper(@Param("post") Post post);
+
     List<Help> findByPost(Post post);
 
     @Query("SELECT h FROM Help h JOIN FETCH h.post JOIN FETCH h.helper JOIN FETCH h.receiver WHERE h.post.id = :postId AND (h.deleted = false OR h.deleted IS NULL)")
