@@ -277,9 +277,9 @@ export const PostDetailPage = () => {
               src={post.imageUrls[0]} 
               alt={post.title} 
               style={styles.heroImage}
-              onClick={() => window.open(post.imageUrls[0], '_blank')}
+              onClick={() => window.open(post.imageUrls![0], '_blank')}
             />
-            {post.imageUrls.length > 1 && (
+            {post.imageUrls!.length > 1 && (
               <div style={styles.imageCount}>
                 +{post.imageUrls.length - 1} фото
               </div>
@@ -289,7 +289,7 @@ export const PostDetailPage = () => {
         
         {post.imageUrls && post.imageUrls.length > 1 && (
           <div style={styles.thumbnailsRow}>
-            {post.imageUrls.slice(1, 5).map((img: string, idx: number) => (
+            {post.imageUrls!.slice(1, 5).map((img: string, idx: number) => (
               <div 
                 key={idx} 
                 style={styles.thumbnail}
