@@ -225,6 +225,7 @@ export const ProfilePage = () => {
 
   const fullUser = profileUser as User;
   const isAdmin = 'role' in fullUser && fullUser.role === 'ADMIN';
+  const userAvatar = 'avatarUrl' in profileUser ? (profileUser as UserPublic).avatarUrl : undefined;
 
   return (
     <div style={styles.container}>
@@ -239,8 +240,8 @@ export const ProfilePage = () => {
           }} 
           onClick={() => isOwnProfile && avatarInputRef.current?.click()}
         >
-          {'avatarUrl' in fullUser && fullUser.avatarUrl ? (
-            <img src={fullUser.avatarUrl} alt="Avatar" style={styles.avatarImage} />
+          {userAvatar ? (
+            <img src={userAvatar} alt="Avatar" style={styles.avatarImage} />
           ) : (
             getInitials(profileUser.name)
           )}

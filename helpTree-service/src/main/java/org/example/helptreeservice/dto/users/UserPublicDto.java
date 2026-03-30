@@ -15,4 +15,5 @@ public class UserPublicDto {
     private Double rating;
     private Integer helpedCount;
     private Integer debtCount;
+    private String avatarUrl;
 }
