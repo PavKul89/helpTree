@@ -258,54 +258,68 @@ export const PostDetailPage = () => {
           </div>
         ) : (
           <>
+            <div style={styles.headerRow}>
+              <span style={{ ...styles.statusBadgeLarge, backgroundColor: getStatusColor(post.status) }}>
+                <span style={styles.statusDot}>●</span>
+                {getStatusLabel(post.status)}
+              </span>
+              <span style={styles.category}>{post.category}</span>
+            </div>
+            
             <h1 className="page-title" style={styles.title}>{post.title}</h1>
             <p style={styles.description}>{post.description}</p>
           </>
         )}
-        
-        {post.imageUrls && post.imageUrls.length > 0 ? (
-          <div style={styles.imagesSection}>
-            <h3 style={styles.sectionTitle}>Изображения ({post.imageUrls.length})</h3>
-            <div style={styles.imagesGrid}>
-              {post.imageUrls.map((img: string, idx: number) => (
-                <div 
-                  key={idx} 
-                  style={styles.imageWrapper} 
-                  className="post-image-wrapper"
-                  onClick={() => window.open(img, '_blank')}
-                >
-                  <img 
-                    src={img} 
-                    alt={`Изображение ${idx + 1}`} 
-                    style={styles.image}
-                  />
-                  <div className="img-overlay" style={styles.imageOverlay}>
-                    <span style={{ color: '#fff', fontSize: '24px' }}>🔍</span>
-                  </div>
-                  {isAuthor && (
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); handleDeleteImageClick(img); }}
-                      style={styles.removeImageBtn}
-                    >
-                      ×
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
+
+        {post.imageUrls && post.imageUrls.length > 0 && (
+          <div style={styles.heroImageContainer}>
+            <img 
+              src={post.imageUrls[0]} 
+              alt={post.title} 
+              style={styles.heroImage}
+              onClick={() => window.open(post.imageUrls[0], '_blank')}
+            />
+            {post.imageUrls.length > 1 && (
+              <div style={styles.imageCount}>
+                +{post.imageUrls.length - 1} фото
+              </div>
+            )}
           </div>
-        ) : null}
+        )}
         
-        <div style={styles.meta}>
-          <span style={styles.metaItem}><strong>Категория:</strong> {post.category}</span>
-          <span style={{ ...styles.statusBadge, backgroundColor: getStatusColor(post.status) }}>
-            {getStatusLabel(post.status)}
-          </span>
-          <span style={styles.metaItem}>
-            <strong>Автор:</strong> <Avatar name={post.authorName} avatarUrl={post.authorAvatarUrl} size="small" showName withRating={post.authorRating} clickable userId={post.userId} />
-          </span>
+        {post.imageUrls && post.imageUrls.length > 1 && (
+          <div style={styles.thumbnailsRow}>
+            {post.imageUrls.slice(1, 5).map((img: string, idx: number) => (
+              <div 
+                key={idx} 
+                style={styles.thumbnail}
+                onClick={() => window.open(img, '_blank')}
+              >
+                <img 
+                  src={img} 
+                  alt={`Фото ${idx + 2}`} 
+                  style={styles.thumbnailImg}
+                />
+              </div>
+            ))}
+            {post.imageUrls.length > 5 && (
+              <div style={styles.moreThumbnails}>
+                +{post.imageUrls.length - 5}
+              </div>
+            )}
+          </div>
+        )}
+        
+        <div style={styles.actions}>
+          {canOfferHelp && (
+            <Button onClick={handleOfferHelp} style={styles.actionButton}>
+              ✋ Откликнуться
+            </Button>
+          )}
+          
           {user && user.id !== post.userId && (
             <Button 
+              variant="outline"
               onClick={async () => {
                 try {
                   const chat = await chatApi.createChat({ participantId: post.userId });
@@ -314,13 +328,14 @@ export const PostDetailPage = () => {
                   console.error('Ошибка при создании чата:', err);
                 }
               }}
-              style={{ marginLeft: 'auto', padding: '8px 16px', fontSize: '13px' }}
+              style={styles.actionButton}
             >
               💬 Написать
             </Button>
           )}
+          
           {currentUserId && (
-            <span 
+            <button 
               onClick={async () => {
                 if (!currentUserId) return;
                 
@@ -345,15 +360,27 @@ export const PostDetailPage = () => {
                 }
               }}
               style={{
-                ...styles.favoriteBtn,
-                color: isFavorite ? '#FFD700' : 'rgba(255,255,255,0.5)',
-                textShadow: isFavorite ? '0 0 8px rgba(255, 215, 0, 0.8)' : 'none',
+                ...styles.favoriteButton,
+                color: isFavorite ? '#FFD700' : 'rgba(255,255,255,0.7)',
+                backgroundColor: isFavorite ? 'rgba(255, 215, 0, 0.15)' : 'rgba(255,255,255,0.08)',
+                borderColor: isFavorite ? '#FFD700' : 'rgba(255,255,255,0.2)',
               }}
-              title={isFavorite ? "Убрать из избранного" : "В избранное"}
             >
-              {isFavorite ? '★' : '☆'}
-            </span>
+              <span style={{ fontSize: '18px' }}>{isFavorite ? '★' : '☆'}</span>
+              <span>{isFavorite ? 'В избранном' : 'В избранное'}</span>
+            </button>
           )}
+        </div>
+
+        <div style={styles.authorCard}>
+          <Avatar name={post.authorName} avatarUrl={post.authorAvatarUrl} size="large" />
+          <div style={styles.authorInfo}>
+            <div style={styles.authorName}>{post.authorName}</div>
+            <div style={styles.authorMeta}>
+              {post.userCity && <span>📍 {post.userCity}</span>}
+              <span>⭐ {post.authorRating.toFixed(1)}</span>
+            </div>
+          </div>
         </div>
 
         {isAuthor && (
@@ -563,15 +590,157 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop: '16px',
     marginBottom: '24px',
   },
+  headerRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    marginBottom: '16px',
+    flexWrap: 'wrap',
+  },
+  statusBadgeLarge: {
+    padding: '8px 16px',
+    borderRadius: '24px',
+    fontSize: '13px',
+    fontWeight: 600,
+    color: '#fff',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.5px',
+  },
+  statusDot: {
+    fontSize: '10px',
+  },
+  category: {
+    color: theme.colors.accentLight,
+    fontSize: '14px',
+    fontWeight: 500,
+    background: 'rgba(6, 182, 212, 0.15)',
+    padding: '6px 14px',
+    borderRadius: '20px',
+    border: '1px solid rgba(6, 182, 212, 0.3)',
+  },
   title: {
     color: theme.colors.text,
-    fontSize: '28px',
+    fontSize: '32px',
+    fontWeight: 700,
     marginBottom: '16px',
+    lineHeight: 1.2,
   },
   description: {
     color: theme.colors.textSecondary,
     fontSize: '16px',
-    lineHeight: 1.6,
+    lineHeight: 1.7,
+  },
+  heroImageContainer: {
+    position: 'relative',
+    marginTop: '24px',
+    borderRadius: '16px',
+    overflow: 'hidden',
+    height: '320px',
+    cursor: 'pointer',
+  },
+  heroImage: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+    transition: 'transform 0.3s ease',
+  },
+  imageCount: {
+    position: 'absolute',
+    bottom: '12px',
+    right: '12px',
+    background: 'rgba(0,0,0,0.7)',
+    color: '#fff',
+    padding: '6px 12px',
+    borderRadius: '20px',
+    fontSize: '13px',
+    fontWeight: 500,
+  },
+  thumbnailsRow: {
+    display: 'flex',
+    gap: '12px',
+    marginTop: '12px',
+    overflowX: 'auto',
+    paddingBottom: '8px',
+  },
+  thumbnail: {
+    width: '100px',
+    height: '75px',
+    borderRadius: '12px',
+    overflow: 'hidden',
+    cursor: 'pointer',
+    flexShrink: 0,
+  },
+  thumbnailImg: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+  },
+  moreThumbnails: {
+    width: '100px',
+    height: '75px',
+    borderRadius: '12px',
+    background: 'rgba(255,255,255,0.1)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: theme.colors.textSecondary,
+    fontSize: '14px',
+    fontWeight: 500,
+    flexShrink: 0,
+  },
+  actions: {
+    display: 'flex',
+    gap: '12px',
+    marginTop: '24px',
+    paddingTop: '24px',
+    borderTop: `1px solid ${theme.colors.border}`,
+    flexWrap: 'wrap',
+  },
+  actionButton: {
+    padding: '12px 24px',
+    fontSize: '15px',
+    fontWeight: 600,
+  },
+  favoriteButton: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '12px 20px',
+    borderRadius: '12px',
+    border: '1px solid',
+    fontSize: '14px',
+    fontWeight: 500,
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+  },
+  authorCard: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '16px',
+    marginTop: '20px',
+    padding: '16px',
+    background: 'rgba(255,255,255,0.04)',
+    borderRadius: '16px',
+    border: `1px solid ${theme.colors.border}`,
+  },
+  authorInfo: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+  },
+  authorName: {
+    color: theme.colors.text,
+    fontSize: '16px',
+    fontWeight: 600,
+  },
+  authorMeta: {
+    display: 'flex',
+    gap: '16px',
+    color: theme.colors.textSecondary,
+    fontSize: '13px',
   },
   sectionTitle: {
     color: theme.colors.text,
