@@ -69,10 +69,13 @@ export const authApi = {
   },
 
   addFavorite: async (userId: number, postId: number): Promise<void> => {
-    await api.post(`/api/users/${userId}/favorites/${postId}`);
+    console.log('API addFavorite:', userId, postId);
+    const response = await api.post(`/api/users/${userId}/favorites/${postId}`);
+    console.log('API addFavorite done:', response);
   },
 
   removeFavorite: async (userId: number, postId: number): Promise<void> => {
+    console.log('API removeFavorite:', userId, postId);
     await api.delete(`/api/users/${userId}/favorites/${postId}`);
   },
 

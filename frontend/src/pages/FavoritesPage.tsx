@@ -112,23 +112,25 @@ export const FavoritesPage = () => {
             <Card hoverable style={styles.postCard}>
               <div style={styles.postHeader}>
                 <div style={styles.postHeaderLeft}>
-                  <span style={{
-                    ...styles.statusDot,
-                    backgroundColor: getStatusColor(post.status)
-                  }} />
-                  <span style={styles.statusText}>{getStatusLabel(post.status)}</span>
-                  <span style={styles.category}>{post.category}</span>
-                </div>
-                <button 
-                  onClick={(e) => toggleFavorite(post.id, e)}
-                  style={{
-                    ...styles.favoriteBtn,
-                    color: '#fbbf24',
-                  }}
-                  title="Убрать из избранного"
-                >
-                  ⭐
-                </button>
+                <span style={{
+                  ...styles.statusDot,
+                  backgroundColor: getStatusColor(post.status)
+                }} />
+                <span style={styles.statusText}>{getStatusLabel(post.status)}</span>
+                <span style={styles.category}>{post.category}</span>
+              </div>
+              <span 
+                onClick={(e) => toggleFavorite(post.id, e)}
+                style={{
+                  ...styles.favoriteBtn,
+                  color: '#FFD700',
+                  textShadow: '0 0 8px rgba(255, 215, 0, 0.8)',
+                  cursor: 'pointer',
+                }}
+                title="Убрать из избранного"
+              >
+                ★
+              </span>
               </div>
               <h3 style={styles.postTitle}>{post.title}</h3>
               <p style={styles.postDescription}>

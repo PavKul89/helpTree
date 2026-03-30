@@ -320,7 +320,7 @@ export const PostDetailPage = () => {
             </Button>
           )}
           {currentUserId && (
-            <button 
+            <span 
               onClick={async () => {
                 if (!currentUserId) return;
                 
@@ -346,18 +346,13 @@ export const PostDetailPage = () => {
               }}
               style={{
                 ...styles.favoriteBtn,
-                ...(isFavorite ? {
-                  color: '#fbbf24',
-                  fontSize: '24px',
-                  transform: 'translateY(-2px)',
-                } : {
-                  color: 'rgba(255,255,255,0.5)',
-                }),
+                color: isFavorite ? '#FFD700' : 'rgba(255,255,255,0.5)',
+                textShadow: isFavorite ? '0 0 8px rgba(255, 215, 0, 0.8)' : 'none',
               }}
               title={isFavorite ? "Убрать из избранного" : "В избранное"}
             >
               {isFavorite ? '★' : '☆'}
-            </button>
+            </span>
           )}
         </div>
 
@@ -659,7 +654,7 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     padding: '4px 8px',
     marginLeft: 'auto',
-    transition: 'all 0.2s ease',
+    color: 'rgba(255,255,255,0.5)',
   },
   metaItem: {
     color: theme.colors.textSecondary,

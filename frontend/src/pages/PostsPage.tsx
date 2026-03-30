@@ -11,6 +11,33 @@ import { getRelativeTime } from '../utils/dateUtils';
 
 type PostStatus = 'OPEN' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
 
+const FavoriteButton = ({ 
+  postId, 
+  isFavorite, 
+  onToggle 
+}: { 
+  postId: number; 
+  isFavorite: boolean; 
+  onToggle: (postId: number, e: React.MouseEvent) => void;
+}) => {
+  console.log('FavoriteButton rendered:', postId, isFavorite);
+  return (
+    <span 
+      onClick={(e) => onToggle(postId, e)}
+      style={{
+        fontSize: '20px',
+        cursor: 'pointer',
+        padding: '4px',
+        color: isFavorite ? '#FFD700' : 'rgba(255,255,255,0.5)',
+        textShadow: isFavorite ? '0 0 8px rgba(255, 215, 0, 0.8)' : 'none',
+      }}
+      title={isFavorite ? "Убрать из избранного" : "В избранное"}
+    >
+      {isFavorite ? '★' : '☆'}
+    </span>
+  );
+};
+
 const CATEGORIES = [
   'Все',
   'Дрова',
@@ -144,15 +171,35 @@ export const PostsPage = () => {
     
     authApi.getCurrentUser()
       .then(user => {
+        console.log('Current user:', user);
         setCurrentUserId(user.id);
         if ('city' in user && user.city) {
           setCurrentUserCity(user.city);
         }
         return authApi.getFavorites(user.id);
       })
-      .then(favs => setFavorites(favs))
-      .catch(console.error);
+      .then(favs => {
+        console.log('Favorites loaded:', favs);
+        setFavorites(favs);
+      })
+      .catch(err => console.error('Error loading user:', err));
   }, [location.key]);
+
+  useEffect(() => {
+    console.log('User changed:', user);
+    if (user) {
+      authApi.getFavorites(user.id)
+        .then(favs => {
+          console.log('Favorites loaded (user effect):', favs);
+          setFavorites(favs);
+        })
+        .catch(err => console.error('Error loading favorites:', err));
+    }
+  }, [user]);
+
+  useEffect(() => {
+    console.log('Favorites state changed:', favorites);
+  }, [favorites]);
 
   useEffect(() => {
     if (status === 'Избранное' && favorites.length > 0) {
@@ -184,30 +231,24 @@ export const PostsPage = () => {
       return;
     }
     
-    const isFav = favorites.includes(postId);
-    // Optimistic update
-    if (isFav) {
-      setFavorites(prev => prev.filter(id => id !== postId));
-    } else {
-      setFavorites(prev => [...prev, postId]);
-    }
+    const currentFavorites = favorites;
+    const isFav = currentFavorites.includes(postId);
+    const newFavorites = isFav 
+      ? currentFavorites.filter(id => id !== postId)
+      : [...currentFavorites, postId];
+    
+    console.log('Toggle favorite:', postId, 'isFav:', isFav, 'newFavorites:', newFavorites);
+    setFavorites(newFavorites);
+    
     try {
       if (isFav) {
         await authApi.removeFavorite(currentUserId, postId);
-        showToast('Убрано из избранного', 'success');
       } else {
         await authApi.addFavorite(currentUserId, postId);
-        showToast('Добавлено в избранное', 'success');
       }
     } catch (err) {
-      // Revert on error
-      if (isFav) {
-        setFavorites(prev => [...prev, postId]);
-      } else {
-        setFavorites(prev => prev.filter(id => id !== postId));
-      }
-      console.error('Error toggling favorite:', err);
-      showToast('Не удалось обновить избранное', 'error');
+      console.error('Favorite toggle failed:', err);
+      setFavorites(currentFavorites);
     }
   };
 
@@ -409,22 +450,11 @@ export const PostsPage = () => {
                     <span style={statusDotStyles[post.status]}>●</span>
                     {getStatusLabel(post.status)}
                   </div>
-                  <button 
-                    onClick={(e) => toggleFavorite(post.id, e, post.status)}
-                    style={{
-                      ...styles.favoriteBtn,
-                      ...(favorites.includes(post.id) ? {
-                        color: '#fbbf24',
-                        fontSize: '24px',
-                        transform: 'translateY(-2px)',
-                      } : {
-                        color: 'rgba(255,255,255,0.5)',
-                      }),
-                    }}
-                    title={favorites.includes(post.id) ? "Убрать из избранного" : "В избранное"}
-                  >
-                    {favorites.includes(post.id) ? '★' : '☆'}
-                  </button>
+                  <FavoriteButton 
+                    postId={post.id} 
+                    isFavorite={favorites.includes(post.id)} 
+                    onToggle={(postId, e) => toggleFavorite(postId, e, post.status)}
+                  />
                 </div>
                 <div style={styles.categoryRow}>
                   <span style={styles.categoryIcon}>{CATEGORY_ICONS[post.category] || '📌'}</span>
@@ -792,7 +822,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '20px',
     cursor: 'pointer',
     padding: '4px',
-    transition: 'all 0.2s ease',
+    color: 'rgba(255,255,255,0.5)',
   },
   postTitle: {
     color: theme.colors.text,
