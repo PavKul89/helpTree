@@ -184,16 +184,30 @@ export const PostsPage = () => {
       return;
     }
     
+    const isFav = favorites.includes(postId);
+    // Optimistic update
+    if (isFav) {
+      setFavorites(prev => prev.filter(id => id !== postId));
+    } else {
+      setFavorites(prev => [...prev, postId]);
+    }
     try {
-      if (favorites.includes(postId)) {
+      if (isFav) {
         await authApi.removeFavorite(currentUserId, postId);
-        setFavorites(favorites.filter(id => id !== postId));
+        showToast('Убрано из избранного', 'success');
       } else {
         await authApi.addFavorite(currentUserId, postId);
-        setFavorites([...favorites, postId]);
+        showToast('Добавлено в избранное', 'success');
       }
     } catch (err) {
+      // Revert on error
+      if (isFav) {
+        setFavorites(prev => [...prev, postId]);
+      } else {
+        setFavorites(prev => prev.filter(id => id !== postId));
+      }
       console.error('Error toggling favorite:', err);
+      showToast('Не удалось обновить избранное', 'error');
     }
   };
 
@@ -399,7 +413,13 @@ export const PostsPage = () => {
                     onClick={(e) => toggleFavorite(post.id, e, post.status)}
                     style={{
                       ...styles.favoriteBtn,
-                      color: favorites.includes(post.id) ? '#fbbf24' : 'rgba(255,255,255,0.5)',
+                      ...(favorites.includes(post.id) ? {
+                        color: '#fbbf24',
+                        fontSize: '24px',
+                        transform: 'translateY(-2px)',
+                      } : {
+                        color: 'rgba(255,255,255,0.5)',
+                      }),
                     }}
                     title={favorites.includes(post.id) ? "Убрать из избранного" : "В избранное"}
                   >
@@ -772,7 +792,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '20px',
     cursor: 'pointer',
     padding: '4px',
-    transition: 'transform 0.2s',
+    transition: 'all 0.2s ease',
   },
   postTitle: {
     color: theme.colors.text,

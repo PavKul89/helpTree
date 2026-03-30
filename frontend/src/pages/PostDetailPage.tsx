@@ -346,11 +346,17 @@ export const PostDetailPage = () => {
               }}
               style={{
                 ...styles.favoriteBtn,
-                color: isFavorite ? '#fbbf24' : 'rgba(255,255,255,0.5)',
+                ...(isFavorite ? {
+                  color: '#fbbf24',
+                  fontSize: '24px',
+                  transform: 'translateY(-2px)',
+                } : {
+                  color: 'rgba(255,255,255,0.5)',
+                }),
               }}
               title={isFavorite ? "Убрать из избранного" : "В избранное"}
             >
-              {isFavorite ? '⭐' : '☆'}
+              {isFavorite ? '★' : '☆'}
             </button>
           )}
         </div>
@@ -653,7 +659,7 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     padding: '4px 8px',
     marginLeft: 'auto',
-    transition: 'transform 0.2s',
+    transition: 'all 0.2s ease',
   },
   metaItem: {
     color: theme.colors.textSecondary,
