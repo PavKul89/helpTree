@@ -378,7 +378,7 @@ export const PostDetailPage = () => {
             <div style={styles.authorName}>{post.authorName}</div>
             <div style={styles.authorMeta}>
               {post.userCity && <span>📍 {post.userCity}</span>}
-              <span>⭐ {post.authorRating.toFixed(1)}</span>
+              <span>⭐ {post.authorRating ? post.authorRating.toFixed(1) : '0.0'}</span>
             </div>
           </div>
         </div>
