@@ -12,9 +12,18 @@ import java.util.List;
 
 @Repository
 public interface PostRepository extends JpaRepository<Post, Long>, JpaSpecificationExecutor<Post> {
-    List<Post> findByUserId(Long userId);
+    
+    @Query("SELECT p FROM Post p LEFT JOIN FETCH p.user LEFT JOIN FETCH p.helper WHERE p.user.id = :userId AND (p.deleted = false OR p.deleted IS NULL)")
+    List<Post> findByUserId(@Param("userId") Long userId);
+    
     long countByUserId(Long userId);
 
-    @Query("SELECT p FROM Post p JOIN FETCH p.user WHERE p.deleted = false AND p.status = 'OPEN'")
+    @Query("SELECT p FROM Post p LEFT JOIN FETCH p.user LEFT JOIN FETCH p.helper WHERE p.deleted = false AND p.status = 'OPEN'")
     List<Post> findAllActive();
+
+    @Query("SELECT p FROM Post p LEFT JOIN FETCH p.user LEFT JOIN FETCH p.helper WHERE p.id IN :ids")
+    List<Post> findByIdsWithUser(@Param("ids") List<Long> ids);
+
+    @Query("SELECT p FROM Post p LEFT JOIN FETCH p.user LEFT JOIN FETCH p.helper WHERE p.deleted = false OR p.deleted IS NULL")
+    List<Post> findAllNotDeleted();
 }

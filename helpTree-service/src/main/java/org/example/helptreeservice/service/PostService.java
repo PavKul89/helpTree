@@ -90,7 +90,6 @@ public class PostService {
 
         try {
             List<PostDto> posts = postRepository.findByUserId(userId).stream()
-                    .filter(p -> p.getDeleted() == null || !p.getDeleted())
                     .map(postMapper::toDto)
                     .collect(Collectors.toList());
 
@@ -133,8 +132,7 @@ public class PostService {
         log.info("Запрос списка всех активных постов");
 
         try {
-            List<PostDto> posts = postRepository.findAll().stream()
-                    .filter(p -> p.getDeleted() == null || !p.getDeleted())
+            List<PostDto> posts = postRepository.findAllNotDeleted().stream()
                     .map(postMapper::toDto)
                     .collect(Collectors.toList());
 
@@ -316,8 +314,7 @@ public class PostService {
     @Transactional(readOnly = true)
     public List<PostDto> getPostsByIds(List<Long> ids) {
         log.info("Запрос постов по списку ID: {}", ids);
-        return postRepository.findAllById(ids).stream()
-                .filter(p -> p.getDeleted() == null || !p.getDeleted())
+        return postRepository.findByIdsWithUser(ids).stream()
                 .map(postMapper::toDto)
                 .collect(Collectors.toList());
     }
