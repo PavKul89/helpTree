@@ -659,7 +659,7 @@ public class HelpService {
     }
 
     public org.example.helptreeservice.dto.graph.HelpStatsDto getHelpStats() {
-        List<Help> allHelps = helpRepository.findAll();
+        List<Help> allHelps = helpRepository.findAllWithDetails();
         
         // По месяцам
         Map<String, Long> byMonth = new LinkedHashMap<>();
