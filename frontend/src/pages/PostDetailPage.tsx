@@ -161,7 +161,7 @@ export const PostDetailPage = () => {
     if (!showDeleteImageModal || !post) return;
     const url = showDeleteImageModal;
     try {
-      const newImageUrls = post.imageUrls?.filter(img => img !== url) || [];
+      const newImageUrls = post.imageUrls?.filter((img: string) => img !== url) || [];
       await postsApi.update(Number(id), { imageUrls: newImageUrls });
       try {
         await imagesApi.delete(url);
@@ -267,7 +267,7 @@ export const PostDetailPage = () => {
           <div style={styles.imagesSection}>
             <h3 style={styles.sectionTitle}>Изображения ({post.imageUrls.length})</h3>
             <div style={styles.imagesGrid}>
-              {post.imageUrls.map((img, idx) => (
+              {post.imageUrls.map((img: string, idx: number) => (
                 <div 
                   key={idx} 
                   style={styles.imageWrapper} 
