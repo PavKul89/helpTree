@@ -6,12 +6,15 @@ import { authApi } from '../api/authApi';
 import { theme } from '../theme';
 
 export const Navbar: React.FC = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, newResponsesCount } = useAuth();
   const navigate = useNavigate();
   const [unreadChats, setUnreadChats] = useState(0);
   const [debtWarning, setDebtWarning] = useState<number | null>(null);
+  const [isBlocked, setIsBlocked] = useState(false);
+  const [daysUntilBlock, setDaysUntilBlock] = useState<number | null>(null);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const [showNotifications, setShowNotifications] = useState(false);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -51,8 +54,25 @@ export const Navbar: React.FC = () => {
 
       authApi.getCurrentUser()
         .then(userData => {
-          if ('debtCount' in userData && userData.debtCount !== undefined && userData.debtCount > 2) {
+          if ('blockedAt' in userData && userData.blockedAt) {
+            setIsBlocked(true);
+            setDebtWarning(null);
+            const hoursBlocked = (Date.now() - new Date(userData.blockedAt).getTime()) / (1000 * 60 * 60);
+            const totalHoursLeft = Math.max(0, 7 * 24 - hoursBlocked);
+            setDaysUntilBlock(totalHoursLeft);
+          } else if ('debtCount' in userData && userData.debtCount !== undefined && userData.debtCount > 2) {
+            setIsBlocked(false);
             setDebtWarning(userData.debtCount);
+            const debtStartDate = 'debtStartedAt' in userData && userData.debtStartedAt 
+              ? new Date(userData.debtStartedAt) 
+              : new Date(userData.createdAt);
+            const hoursSinceDebt = (Date.now() - debtStartDate.getTime()) / (1000 * 60 * 60);
+            const totalHoursLeft = Math.max(0, 7 * 24 - hoursSinceDebt);
+            setDaysUntilBlock(totalHoursLeft);
+          } else {
+            setIsBlocked(false);
+            setDebtWarning(null);
+            setDaysUntilBlock(null);
           }
         })
         .catch(console.error);
@@ -156,6 +176,17 @@ export const Navbar: React.FC = () => {
                 )}
               </div>
 
+              <button 
+                style={styles.notificationBtn}
+                onClick={() => setShowNotifications(!showNotifications)}
+                title="Уведомления"
+              >
+                🔔
+                {newResponsesCount > 0 && (
+                  <span style={styles.notificationBadge}>{newResponsesCount}</span>
+                )}
+              </button>
+
               <button onClick={handleLogout} style={styles.logoutBtn}>
                 Выйти
               </button>
@@ -166,9 +197,41 @@ export const Navbar: React.FC = () => {
           )}
         </div>
       </div>
-      {debtWarning && debtWarning > 2 && (
+      {isBlocked && (
+        <div style={styles.blockedBanner}>
+          🚫 Ваш аккаунт заблокирован за долг. Помогите другим пользователям, чтобы разблокировать аккаунт.
+          {daysUntilBlock !== null && daysUntilBlock > 0 && (
+            daysUntilBlock >= 24 
+              ? ` Осталось ${Math.floor(daysUntilBlock / 24)} дней и ${Math.floor(daysUntilBlock % 24)} часов.`
+              : ` Осталось ${Math.floor(daysUntilBlock)} часов.`
+          )}
+          {daysUntilBlock !== null && daysUntilBlock <= 0 && ` Ожидайте разблокировки.`}
+        </div>
+      )}
+      {debtWarning && debtWarning > 2 && !isBlocked && (
         <div style={styles.warningBanner}>
           ⚠️ Внимание! Ваш долг: {debtWarning}. Помогите {debtWarning - 2} людям, чтобы избежать блокировки.
+          {daysUntilBlock !== null && daysUntilBlock > 0 && (
+            daysUntilBlock >= 24 
+              ? ` Осталось ${Math.floor(daysUntilBlock / 24)} дней и ${Math.floor(daysUntilBlock % 24)} часов.`
+              : ` Осталось ${Math.floor(daysUntilBlock)} часов.`
+          )}
+        </div>
+      )}
+      {showNotifications && (
+        <div style={styles.notificationPopup}>
+          <div style={styles.notificationHeader}>Уведомления</div>
+          {newResponsesCount > 0 ? (
+            <div style={styles.notificationItem}>
+              <span style={styles.notificationIcon}>💬</span>
+              <div style={styles.notificationContent}>
+                <div style={styles.notificationText}>Новые отклики на ваши посты</div>
+                <div style={styles.notificationCount}>{newResponsesCount} новых откликов</div>
+              </div>
+            </div>
+          ) : (
+            <div style={styles.notificationEmpty}>Нет новых уведомлений</div>
+          )}
         </div>
       )}
     </nav>
@@ -295,5 +358,86 @@ const styles: Record<string, React.CSSProperties> = {
     textAlign: 'center',
     fontSize: '14px',
     fontWeight: 500,
+  },
+  blockedBanner: {
+    background: '#dc2626',
+    color: '#fff',
+    padding: '10px 24px',
+    textAlign: 'center',
+    fontSize: '14px',
+    fontWeight: 500,
+  },
+  notificationBtn: {
+    background: 'transparent',
+    border: 'none',
+    fontSize: '20px',
+    cursor: 'pointer',
+    padding: '8px',
+    position: 'relative',
+    borderRadius: theme.borderRadius.md,
+    transition: 'all 0.2s',
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: '0',
+    right: '0',
+    background: '#ef4444',
+    color: '#fff',
+    borderRadius: '10px',
+    padding: '2px 6px',
+    fontSize: '10px',
+    fontWeight: 600,
+    minWidth: '16px',
+    textAlign: 'center',
+  },
+  notificationPopup: {
+    position: 'absolute',
+    top: '60px',
+    right: '24px',
+    background: 'rgba(6, 95, 70, 0.98)',
+    border: `1px solid ${theme.colors.border}`,
+    borderRadius: theme.borderRadius.md,
+    minWidth: '280px',
+    padding: '12px 0',
+    boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
+    zIndex: 1002,
+  },
+  notificationHeader: {
+    padding: '8px 16px',
+    fontWeight: 600,
+    fontSize: '14px',
+    color: theme.colors.text,
+    borderBottom: `1px solid ${theme.colors.border}`,
+    marginBottom: '8px',
+  },
+  notificationItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    padding: '12px 16px',
+    cursor: 'pointer',
+    transition: 'background 0.2s',
+  } as React.CSSProperties,
+  notificationIcon: {
+    fontSize: '20px',
+  },
+  notificationContent: {
+    flex: 1,
+  },
+  notificationText: {
+    fontSize: '13px',
+    color: theme.colors.textSecondary,
+  },
+  notificationCount: {
+    fontSize: '12px',
+    color: theme.colors.textSecondary,
+    marginTop: '2px',
+    opacity: 0.8,
+  },
+  notificationEmpty: {
+    padding: '16px',
+    textAlign: 'center',
+    color: theme.colors.textSecondary,
+    fontSize: '13px',
   },
 };

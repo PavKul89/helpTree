@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -29,4 +30,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     @Query(value = "SELECT post_id FROM user_favorites WHERE user_id = :userId", nativeQuery = true)
     List<Long> findFavoritePostIds(@Param("userId") Long userId);
+
+    @Query("SELECT u FROM User u WHERE u.deleted = false AND u.debtCount > 5 AND (u.blockedAt IS NULL OR u.blockedAt < :sevenDaysAgo)")
+    List<User> findUsersWithDebtToBlock(@Param("sevenDaysAgo") LocalDateTime sevenDaysAgo);
 }

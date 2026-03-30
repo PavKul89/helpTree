@@ -62,6 +62,8 @@ public class AuthController {
             throw new UnauthorizedException("Аккаунт удалён");
         }
 
+        userService.updateLastLogin(user.getId());
+
         String accessToken = jwtService.generateToken(
                 user.getId(),
                 user.getEmail(),

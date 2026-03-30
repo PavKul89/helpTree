@@ -8,6 +8,7 @@ import { chatApi } from '../api/chatApi';
 import { authApi } from '../api/authApi';
 import type { Post, Comment, Help, Review } from '../types';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../components/Toast';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { Spinner } from '../components/Spinner';
@@ -36,6 +37,7 @@ export const PostDetailPage = () => {
   const [showDeleteImageModal, setShowDeleteImageModal] = useState<string | null>(null);
   const [showFavoriteModal, setShowFavoriteModal] = useState(false);
   const { user } = useAuth();
+  const { showToast } = useToast();
 
   useEffect(() => {
     loadData();
@@ -88,8 +90,11 @@ export const PostDetailPage = () => {
     try {
       await helpApi.acceptHelp({ postId: Number(id), helperId: user.id });
       loadData();
-    } catch (err) {
+      showToast('Вы откликнулись на пост!', 'success');
+    } catch (err: any) {
       console.error(err);
+      const message = err.response?.data?.message || 'Не удалось откликнуться на пост';
+      showToast(message, 'error');
     }
   };
 
@@ -225,7 +230,7 @@ export const PostDetailPage = () => {
   if (!post) return <div style={styles.notFound}>Пост не найден</div>;
 
   const isAuthor = user?.id === post.userId;
-  const canOfferHelp = user && !isAuthor && post.status === 'OPEN';
+  const canOfferHelp = user && !isAuthor && post.status === 'OPEN' && (!('blockedAt' in user) || !user.blockedAt);
 
   return (
     <div style={styles.container}>
@@ -327,12 +332,15 @@ export const PostDetailPage = () => {
                   if (isFavorite) {
                     await authApi.removeFavorite(currentUserId, post.id);
                     setIsFavorite(false);
+                    showToast('Убрано из избранного', 'success');
                   } else {
                     await authApi.addFavorite(currentUserId, post.id);
                     setIsFavorite(true);
+                    showToast('Добавлено в избранное', 'success');
                   }
                 } catch (err) {
                   console.error('Error toggling favorite:', err);
+                  showToast('Не удалось обновить избранное', 'error');
                 }
               }}
               style={{

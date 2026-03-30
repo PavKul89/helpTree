@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { postsApi } from '../api/postsApi';
 import { authApi } from '../api/authApi';
 import type { Post } from '../types';
 import { Card, Button, Spinner, EmptyState, Avatar } from '../components';
 import { useToast } from '../components/Toast';
+import { useAuth } from '../context/AuthContext';
 import { theme } from '../theme';
 import { getRelativeTime } from '../utils/dateUtils';
 
@@ -105,6 +106,8 @@ export const PostsPage = () => {
   const [totalPages, setTotalPages] = useState(0);
   const [favorites, setFavorites] = useState<number[]>([]);
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user } = useAuth();
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
   const [currentUserCity, setCurrentUserCity] = useState<string>('');
   const [showFilters, setShowFilters] = useState(false);
@@ -252,9 +255,15 @@ export const PostsPage = () => {
       <div style={styles.stickyContainer}>
         <header className="page-header" style={styles.header}>
           <h1 className="page-title" style={styles.title}>Посты о помощи</h1>
-          <Link to="/posts/new">
-            <Button>+ Создать пост</Button>
-          </Link>
+          {user && 'blockedAt' in user && user.blockedAt ? (
+            <Button onClick={() => showToast('Ваш аккаунт заблокирован за долг. Помогите другим пользователям!', 'error')} disabled>
+              + Создать пост
+            </Button>
+          ) : (
+            <Link to="/posts/new">
+              <Button>+ Создать пост</Button>
+            </Link>
+          )}
         </header>
 
         <div style={styles.filters}>
@@ -378,11 +387,6 @@ export const PostsPage = () => {
                       (e.target as HTMLImageElement).style.display = 'none';
                     }}
                   />
-                  <div style={styles.imageOverlay}>
-                    {post.imageUrls.length > 1 && (
-                      <span style={styles.imageCount}>+{post.imageUrls.length - 1}</span>
-                    )}
-                  </div>
                 </div>
               )}
               <div style={styles.cardContent}>

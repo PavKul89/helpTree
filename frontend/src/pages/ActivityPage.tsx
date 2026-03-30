@@ -72,6 +72,7 @@ export const ActivityPage = () => {
       case 'HELP_RECEIVED': return '#06b6d4';
       case 'POST_CREATED': return '#f59e0b';
       case 'ACHIEVEMENT_EARNED': return '#a855f7';
+      case 'USER_BLOCKED': return '#ef4444';
       default: return '#6b7280';
     }
   };

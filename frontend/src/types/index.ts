@@ -14,6 +14,8 @@ export interface User {
   helpedCount?: number;
   debtCount?: number;
   birthDate?: string;
+  blockedAt?: string;
+  debtStartedAt?: string;
 }
 
 export interface UserPublic {

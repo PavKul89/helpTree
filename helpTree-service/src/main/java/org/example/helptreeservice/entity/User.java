@@ -88,6 +88,15 @@ public class User {
     @Column(name = "telegram_chat_id", length = 50)
     private String telegramChatId;
 
+    @Column(name = "last_login")
+    private LocalDateTime lastLogin;
+
+    @Column(name = "blocked_at")
+    private LocalDateTime blockedAt;
+
+    @Column(name = "debt_started_at")
+    private LocalDateTime debtStartedAt;
+
     @Size(max = 500)
     @Column(name = "avatar_url")
     private String avatarUrl;

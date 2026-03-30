@@ -28,4 +28,6 @@ public class UserDto {
     private LocalDateTime createdAt;
     private String avatarUrl;
     private LocalDateTime birthDate;
+    private LocalDateTime blockedAt;
+    private LocalDateTime debtStartedAt;
 }

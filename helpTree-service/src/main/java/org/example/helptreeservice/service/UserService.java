@@ -289,7 +289,15 @@ public class UserService {
     public void incrementHelpedCount(Long receiverId) {
         log.info("Увеличение счетчика долгов для получателя помощи с ID: {}", receiverId);
         try {
-            userRepository.updateDebtCount(receiverId, 2);
+            User user = userRepository.findById(receiverId).orElse(null);
+            if (user != null) {
+                int newDebtCount = user.getDebtCount() + 2;
+                userRepository.updateDebtCount(receiverId, 2);
+                if (newDebtCount > 2 && user.getDebtStartedAt() == null) {
+                    user.setDebtStartedAt(LocalDateTime.now());
+                    userRepository.save(user);
+                }
+            }
             log.info("Счетчик долгов для получателя ID {} успешно обновлен", receiverId);
         } catch (Exception e) {
             log.error("Ошибка при увеличении счетчика долгов для получателя ID: {}", receiverId, e);
@@ -300,8 +308,13 @@ public class UserService {
     public void userHelpedSomeone(Long helperId) {
         log.info("Обработка помощи от пользователя с ID: {}", helperId);
         try {
+            User user = userRepository.findById(helperId).orElse(null);
             userRepository.incrementHelpedCount(helperId);
             userRepository.updateDebtCount(helperId, -1);
+            if (user != null && user.getDebtCount() <= 2 && user.getDebtStartedAt() != null) {
+                user.setDebtStartedAt(null);
+                userRepository.save(user);
+            }
             log.info("Данные помощника ID {} успешно обновлены", helperId);
         } catch (Exception e) {
             log.error("Ошибка при обработке помощи от пользователя ID: {}", helperId, e);
@@ -453,5 +466,40 @@ public class UserService {
     public boolean isFavorite(Long userId, Long postId) {
         User user = userRepository.findById(userId).orElse(null);
         return user != null && user.getFavoritePostIds() != null && user.getFavoritePostIds().contains(postId);
+    }
+
+    @Transactional
+    public void updateLastLogin(Long userId) {
+        log.info("Обновление времени последнего входа для пользователя {}", userId);
+        User user = getUserEntityById(userId);
+        user.setLastLogin(LocalDateTime.now());
+        userRepository.save(user);
+    }
+
+    @Transactional
+    public void blockUsersWithDebt() {
+        log.info("Запуск проверки блокировки пользователей за долг");
+        LocalDateTime sevenDaysAgo = LocalDateTime.now().minusDays(7);
+        List<User> usersToBlock = userRepository.findUsersWithDebtToBlock(sevenDaysAgo);
+        
+        for (User user : usersToBlock) {
+            if (user.getBlockedAt() == null) {
+                user.setBlockedAt(LocalDateTime.now());
+                userRepository.save(user);
+                log.info("Пользователь {} заблокирован за долг (debtCount: {})", user.getId(), user.getDebtCount());
+            }
+        }
+        
+        if (!usersToBlock.isEmpty()) {
+            log.info("Заблокировано {} пользователей за долг", usersToBlock.size());
+        }
+    }
+
+    public boolean isUserBlocked(Long userId) {
+        User user = userRepository.findById(userId).orElse(null);
+        if (user == null) {
+            return false;
+        }
+        return user.getBlockedAt() != null;
     }
 }

@@ -6,6 +6,7 @@ import org.example.helptreeservice.entity.Help;
 import org.example.helptreeservice.exception.ForbiddenException;
 import org.example.helptreeservice.service.AuthorizationService;
 import org.example.helptreeservice.service.HelpService;
+import org.example.helptreeservice.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -21,11 +22,16 @@ public class HelpController {
 
     private final HelpService helpService;
     private final AuthorizationService authService;
+    private final UserService userService;
 
     @PostMapping("/accept")
     public ResponseEntity<HelpResponse> acceptHelp(@Valid @RequestBody HelpRequest request) {
-        if (authService.getCurrentUser() == null) {
+        var currentUser = authService.getCurrentUser();
+        if (currentUser == null) {
             throw new ForbiddenException("Для отклика на пост необходимо войти в систему");
+        }
+        if (userService.isUserBlocked(currentUser.getUserId())) {
+            throw new ForbiddenException("Ваш аккаунт заблокирован за долг. Помогите другим пользователям, чтобы разблокировать аккаунт.");
         }
         HelpResponse response = helpService.acceptHelp(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
@@ -94,5 +100,14 @@ public class HelpController {
     @GetMapping("/stats")
     public ResponseEntity<org.example.helptreeservice.dto.graph.HelpStatsDto> getHelpStats() {
         return ResponseEntity.ok(helpService.getHelpStats());
+    }
+
+    @GetMapping("/new-responses/count")
+    public ResponseEntity<Long> getNewResponsesCount() {
+        var currentUser = authService.getCurrentUser();
+        if (currentUser == null) {
+            throw new ForbiddenException("Необходимо войти в систему");
+        }
+        return ResponseEntity.ok(helpService.getNewResponsesCount(currentUser.getUserId()));
     }
 }

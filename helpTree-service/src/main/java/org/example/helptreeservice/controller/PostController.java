@@ -7,6 +7,7 @@ import org.example.helptreeservice.enums.PostStatus;
 import org.example.helptreeservice.exception.ForbiddenException;
 import org.example.helptreeservice.service.AuthorizationService;
 import org.example.helptreeservice.service.PostService;
+import org.example.helptreeservice.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -26,12 +27,16 @@ public class PostController {
 
     private final PostService postService;
     private final AuthorizationService authService;
+    private final UserService userService;
 
     @PostMapping
     public ResponseEntity<PostDto> createPost(@Valid @RequestBody CreatePostRequest request) {
         var user = authService.getCurrentUser();
         if (user == null) {
             throw new ForbiddenException("Для создания поста необходимо войти в систему");
+        }
+        if (userService.isUserBlocked(user.getUserId())) {
+            throw new ForbiddenException("Ваш аккаунт заблокирован за долг. Помогите другим пользователям, чтобы разблокировать аккаунт.");
         }
         PostDto created = postService.createPost(request, user.getUserId());
         return ResponseEntity.status(HttpStatus.CREATED).body(created);

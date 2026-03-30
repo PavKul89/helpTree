@@ -35,10 +35,14 @@ spring:
       group-id: rating-service-group
       auto-offset-reset: earliest
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer  # Изменено!
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      properties:
+        spring.metrics.tracing.enabled: true
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        spring.metrics.tracing.enabled: true
 
 logging:
   level:
@@ -46,15 +50,32 @@ logging:
     com.example.rating.client: INFO
     org.springframework.kafka: INFO
     org.springframework.data.redis: INFO
+    io.micrometer.tracing: DEBUG
+    io.opentelemetry: DEBUG
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %highlight(%-5level) [%thread] %yellow([RATING]) %X{traceId} %X{spanId} %X{requestId} %X{userId} %cyan(%logger{36}) - %msg%n"
 
 management:
+  tracing:
+    enabled: true
+    sampling:
+      probability: 1.0
+    propagation:
+      type: w3c
+    mdc:
+      field-names:
+        - traceId
+        - spanId
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          endpoint: http://localhost:4318/v1/traces
+          protocol: http/protobuf
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
-
+        include: health,info,metrics,tracing
   endpoint:
     health:
       show-details: always

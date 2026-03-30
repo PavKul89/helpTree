@@ -4,7 +4,8 @@ public enum ActivityType {
     HELP_GIVEN("Помог", "🤝"),
     HELP_RECEIVED("Получил помощь", "🙏"),
     POST_CREATED("Создал запрос", "📝"),
-    ACHIEVEMENT_EARNED("Получил достижение", "🏆");
+    ACHIEVEMENT_EARNED("Получил достижение", "🏆"),
+    USER_BLOCKED("Заблокирован за долг", "🚫");
 
     private final String label;
     private final String emoji;

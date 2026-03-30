@@ -461,6 +461,37 @@ public class HelpService {
     }
 
     /**
+     * Получить количество новых ответов на посты пользователя (от последнего входа)
+     */
+    @Transactional(readOnly = true)
+    public long getNewResponsesCount(Long userId) {
+        log.info("Подсчет новых ответов для userId: {}", userId);
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new NotFoundException("Пользователь не найден с id: " + userId));
+
+        LocalDateTime lastLogin = user.getLastLogin();
+        if (lastLogin == null) {
+            lastLogin = LocalDateTime.of(1970, 1, 1, 0, 0);
+        }
+
+        List<Post> userPosts = postRepository.findByUserId(userId);
+
+        long count = 0;
+        for (Post post : userPosts) {
+            List<Help> helps = helpRepository.findByPost(post);
+            for (Help help : helps) {
+                if (help.getCreatedAt() != null && help.getCreatedAt().isAfter(lastLogin)) {
+                    count++;
+                }
+            }
+        }
+
+        log.info("Найдено {} новых ответов для userId: {}", count, userId);
+        return count;
+    }
+
+    /**
      * Получить помощь по ID
      */
     public Help getHelpById(Long id) {

@@ -41,6 +41,7 @@ public class ActivityService {
         activities.addAll(getHelpReceivedActivities(user));
         activities.addAll(getPostCreatedActivities(user));
         activities.addAll(getAchievementActivities(user));
+        activities.addAll(getBlockedActivities(user));
 
         return activities.stream()
                 .sorted(Comparator.comparing(ActivityDto::getTimestamp).reversed())
@@ -133,5 +134,20 @@ public class ActivityService {
                             .build();
                 })
                 .collect(Collectors.toList());
+    }
+
+    private List<ActivityDto> getBlockedActivities(User user) {
+        if (user.getBlockedAt() == null) {
+            return new ArrayList<>();
+        }
+
+        return List.of(ActivityDto.builder()
+                .type(ActivityType.USER_BLOCKED.name())
+                .typeLabel(ActivityType.USER_BLOCKED.getLabel())
+                .emoji(ActivityType.USER_BLOCKED.getEmoji())
+                .title("Заблокирован за долг")
+                .description("Ваш аккаунт заблокирован из-за большого количества долгов. Помогите другим пользователям, чтобы разблокировать аккаунт.")
+                .timestamp(user.getBlockedAt())
+                .build());
     }
 }
