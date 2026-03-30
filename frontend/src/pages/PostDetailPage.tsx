@@ -6,7 +6,7 @@ import { reviewApi } from '../api/reviewApi';
 import { imagesApi } from '../api/imagesApi';
 import { chatApi } from '../api/chatApi';
 import { authApi } from '../api/authApi';
-import type { Post, Comment, Help, Review } from 'types';
+import type { Post, Comment, Help, Review } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/Toast';
 import { Card } from '../components/Card';
