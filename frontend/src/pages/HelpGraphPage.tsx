@@ -261,7 +261,8 @@ export const HelpGraphPage = () => {
           const isPath = highlightedPath.some(p => p.id === n.id) && highlightedPath.some(p => p.id === child.id);
           const isDimmed = highlightedPath.length > 0 && !isPath;
           const isHovered = hoveredNode?.id === child.id;
-          const strokeColor = isPath ? '#fbbf24' : isHovered ? 'rgba(34, 211, 238, 0.8)' : 'rgba(34, 211, 238, 0.3)';
+          const nodeColor = DEPTH_COLORS[Math.min(child.depth, DEPTH_COLORS.length - 1)];
+          const strokeColor = isPath ? '#fbbf24' : isHovered ? '#fff' : nodeColor;
           const strokeWidth = isPath ? 3 : isHovered ? 2.5 : 2;
           
           const midX = (from.x + to.x) / 2;
@@ -281,10 +282,27 @@ export const HelpGraphPage = () => {
                 strokeWidth={strokeWidth}
                 fill="none"
                 strokeLinecap="round"
+                className={isPath ? 'graph-edge-highlighted' : 'graph-edge'}
               />
+              {!isPath && (
+                <path
+                  d={`M ${from.x} ${from.y + 24} Q ${from.x} ${midY} ${to.x} ${to.y - 24}`}
+                  stroke={nodeColor}
+                  strokeWidth={2}
+                  fill="none"
+                  strokeLinecap="round"
+                  strokeDasharray="6 94"
+                  style={{
+                    animation: 'flowRight 1.5s linear infinite',
+                    opacity: 0.7,
+                  }}
+                />
+              )}
               <polygon
                 points={`${to.x},${to.y - 24} ${to.x - 5},${to.y - 34} ${to.x + 5},${to.y - 34}`}
                 fill={strokeColor}
+                className={isPath ? 'graph-edge-highlighted' : ''}
+                style={!isPath ? { filter: `drop-shadow(0 0 6px ${nodeColor})`, animation: 'pulseGlow 2s ease-in-out infinite' } : {}}
               />
               {(isHovered || isPath) && child.postTitle && (
                 <g>
@@ -353,6 +371,7 @@ export const HelpGraphPage = () => {
         nodes.push(
           <g 
             key={`node-${n.id}`}
+            className="graph-node"
             style={{ 
               cursor: 'pointer',
               transition: 'opacity 0.3s ease',
@@ -376,7 +395,8 @@ export const HelpGraphPage = () => {
               strokeWidth={isSelected || isHovered ? 4 : 3}
               style={{ 
                 transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-                filter: isHovered ? 'drop-shadow(0 0 8px rgba(34, 211, 238, 0.6))' : 'none',
+                filter: isHovered ? 'drop-shadow(0 0 8px rgba(34, 211, 238, 0.6))' : 
+                       isAnimated && !isSelected ? 'drop-shadow(0 0 4px rgba(34, 211, 238, 0.4))' : 'none',
               }}
             />
             <text
