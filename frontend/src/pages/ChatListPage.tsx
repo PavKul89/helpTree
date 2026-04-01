@@ -47,10 +47,10 @@ export const ChatListPage = () => {
     const diffDays = Math.floor(diffMs / 86400000);
     
     if (diffMins < 1) return 'только что';
-    if (diffMins < 60) return `${diffMins} мин назад`;
-    if (diffHours < 24) return `${diffHours} ч назад`;
-    if (diffDays < 7) return `${diffDays} дн назад`;
-    return date.toLocaleDateString('ru-RU');
+    if (diffMins < 60) return `${diffMins} мин`;
+    if (diffHours < 24) return `${diffHours} ч`;
+    if (diffDays < 7) return `${diffDays} дн`;
+    return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
   };
 
   if (loading) return <Spinner message="Загрузка чатов..." />;
@@ -76,31 +76,48 @@ export const ChatListPage = () => {
             {chats.map((chat) => (
               <div 
                 key={chat.id} 
-                style={styles.chatItem}
+                className="chat-item"
+                style={{
+                  ...styles.chatItem,
+                  ...(chat.unreadCount > 0 ? styles.chatItemUnread : {}),
+                }}
                 onClick={() => navigate(`/chats/${chat.id}`)}
               >
-                <div style={styles.chatLeft}>
+                <div style={styles.avatarWrapper}>
                   <Avatar name={chat.participantName} avatarUrl={chat.participantAvatarUrl} size="large" />
-                  <div style={styles.chatInfo}>
+                  <div style={styles.onlineIndicator} />
+                </div>
+                <div style={styles.chatContent}>
+                  <div style={styles.chatTop}>
                     <div style={styles.chatName}>{chat.participantName}</div>
-                    <div style={styles.lastMessage}>
-                      {chat.lastMessage || 'Нет сообщений'}
+                    <div style={styles.chatMeta}>
+                      <span style={{
+                        ...styles.time,
+                        ...(chat.unreadCount > 0 ? styles.timeUnread : {}),
+                      }}>
+                        {formatTime(chat.lastMessageAt)}
+                      </span>
+                      {chat.unreadCount > 0 && (
+                        <span style={styles.unreadBadge}>
+                          {chat.unreadCount > 9 ? '9+' : chat.unreadCount}
+                        </span>
+                      )}
                     </div>
                   </div>
-                </div>
-                <div style={styles.chatRight}>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setDeleteChatId(chat.id); }}
-                    style={styles.deleteBtn}
-                  >
-                    🗑️
-                  </button>
-                  <span style={styles.time}>
-                    {formatTime(chat.lastMessageAt)}
-                  </span>
-                  {chat.unreadCount > 0 && (
-                    <span style={styles.unreadBadge}>{chat.unreadCount}</span>
-                  )}
+                  <div style={styles.chatBottom}>
+                    <div style={{
+                      ...styles.lastMessage,
+                      ...(chat.unreadCount > 0 ? styles.lastMessageUnread : {}),
+                    }}>
+                      {chat.lastMessage || 'Нет сообщений'}
+                    </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setDeleteChatId(chat.id); }}
+                      style={styles.deleteBtn}
+                    >
+                      ✕
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
@@ -161,29 +178,68 @@ const styles: Record<string, React.CSSProperties> = {
   },
   chatItem: {
     display: 'flex',
-    justifyContent: 'space-between',
     alignItems: 'center',
     padding: '16px 20px',
     borderRadius: theme.borderRadius.md,
     cursor: 'pointer',
     transition: 'all 0.2s ease',
-  },
-  chatLeft: {
-    display: 'flex',
-    alignItems: 'center',
     gap: '14px',
+  },
+  chatItemUnread: {
+    background: 'linear-gradient(90deg, rgba(6, 182, 212, 0.08) 0%, transparent 50%)',
+  },
+  avatarWrapper: {
+    position: 'relative',
+    flexShrink: 0,
+  },
+  onlineIndicator: {
+    position: 'absolute',
+    bottom: '2px',
+    right: '2px',
+    width: '14px',
+    height: '14px',
+    background: '#22c55e',
+    borderRadius: '50%',
+    border: '3px solid var(--card-bg)',
+  },
+  chatContent: {
     flex: 1,
     minWidth: 0,
   },
-  chatInfo: {
-    flex: 1,
-    minWidth: 0,
+  chatTop: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '6px',
   },
   chatName: {
     color: theme.colors.text,
     fontSize: '15px',
     fontWeight: 600,
-    marginBottom: '4px',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    flex: 1,
+    marginRight: '8px',
+  },
+  chatMeta: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    flexShrink: 0,
+  },
+  chatBottom: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  time: {
+    fontSize: '12px',
+    color: theme.colors.textMuted,
+  },
+  timeUnread: {
+    color: theme.colors.accentLight,
+    fontWeight: 500,
   },
   lastMessage: {
     color: theme.colors.textSecondary,
@@ -191,33 +247,31 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
-    maxWidth: '300px',
+    flex: 1,
+    marginRight: '8px',
   },
-  chatRight: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    flexShrink: 0,
-  },
-  time: {
-    color: theme.colors.textMuted,
-    fontSize: '12px',
+  lastMessageUnread: {
+    color: theme.colors.text,
+    fontWeight: 500,
   },
   deleteBtn: {
     background: 'transparent',
     border: 'none',
-    fontSize: '18px',
+    color: theme.colors.textMuted,
+    fontSize: '14px',
     cursor: 'pointer',
     padding: '4px 8px',
-    opacity: 0.6,
+    opacity: 0,
     transition: 'opacity 0.2s',
+    borderRadius: '4px',
   },
   unreadBadge: {
     background: theme.colors.accent,
     color: '#fff',
-    borderRadius: '50%',
-    width: '22px',
-    height: '22px',
+    borderRadius: '12px',
+    minWidth: '20px',
+    height: '20px',
+    padding: '0 6px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
