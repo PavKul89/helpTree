@@ -20,16 +20,18 @@ const FavoriteButton = ({
   isFavorite: boolean; 
   onToggle: (postId: number, e: React.MouseEvent) => void;
 }) => {
-  console.log('FavoriteButton rendered:', postId, isFavorite);
   return (
     <span 
       onClick={(e) => onToggle(postId, e)}
+      className={isFavorite ? 'favorite-active' : ''}
       style={{
         fontSize: '20px',
         cursor: 'pointer',
         padding: '4px',
         color: isFavorite ? '#FFD700' : 'rgba(255,255,255,0.5)',
         textShadow: isFavorite ? '0 0 8px rgba(255, 215, 0, 0.8)' : 'none',
+        transition: 'all 0.3s ease',
+        display: 'inline-block',
       }}
       title={isFavorite ? "Убрать из избранного" : "В избранное"}
     >
@@ -306,7 +308,7 @@ export const PostsPage = () => {
   if (loading) return <Spinner message="Загрузка постов..." />;
 
   return (
-    <div style={styles.container}>
+    <div style={styles.container} className="page-content">
       <div style={styles.stickyContainer}>
         <header className="page-header" style={styles.header}>
           <h1 className="page-title" style={styles.title}>Посты о помощи</h1>

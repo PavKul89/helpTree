@@ -234,7 +234,7 @@ export const PostDetailPage = () => {
   const canOfferHelp = user && !isAuthor && post.status === 'OPEN' && (!('blockedAt' in user) || !user.blockedAt) && !isAuthorBlocked;
 
   return (
-    <div style={styles.container}>
+    <div style={styles.container} className="page-content">
       <Link to="/" style={styles.backLink}>← На главную</Link>
       
       <Card style={styles.mainCard}>
