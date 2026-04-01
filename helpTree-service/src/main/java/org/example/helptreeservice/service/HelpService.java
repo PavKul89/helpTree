@@ -271,6 +271,13 @@ public class HelpService {
                 throw new BadRequestException("Помощь не в статусе COMPLETED");
             }
 
+            // Проверяем, не заблокирован ли получатель помощи
+            if (userService.isUserBlocked(help.getReceiver().getId())) {
+                log.warn("Попытка подтвердить помощь заблокированному пользователю: receiverId={}", 
+                        help.getReceiver().getId());
+                throw new BadRequestException("Нельзя подтвердить помощь заблокированному пользователю");
+            }
+
             help.setStatus(HelpStatus.CONFIRMED);
             help.setConfirmedAt(LocalDateTime.now());
             help.setUpdatedAt(LocalDateTime.now());

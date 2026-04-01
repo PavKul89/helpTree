@@ -299,8 +299,12 @@ public class PostService {
     private Post getPostEntityById(Long id) {
         log.debug("Поиск сущности поста по ID: {}", id);
 
-        Post post = postRepository.findById(id)
-                .orElseThrow(() -> new NotFoundException("Пост не найден с id: " + id));
+        Post post = postRepository.findByIdWithUser(id);
+        
+        if (post == null) {
+            log.debug("Пост с ID {} не найден", id);
+            throw new NotFoundException("Пост не найден с id: " + id);
+        }
 
         if (post.getDeleted() != null && post.getDeleted()) {
             log.debug("Пост с ID {} найден, но помечен как удаленный", id);

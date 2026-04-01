@@ -31,6 +31,7 @@ public class ReviewService {
     private final HelpRepository helpRepository;
     private final UserRepository userRepository;
     private final ReviewMapper reviewMapper;
+    private final UserService userService;
 
     @Transactional
     public ReviewResponse createReview(CreateReviewRequest request, Long currentUserId) {
@@ -74,6 +75,8 @@ public class ReviewService {
         Review savedReview = reviewRepository.save(review);
         log.info("Отзыв {} успешно создан", savedReview.getId());
 
+        updateUserRating(toUser);
+
         return reviewMapper.toResponse(savedReview);
     }
 
@@ -113,5 +116,20 @@ public class ReviewService {
         User toUser = review.getToUser();
         reviewRepository.delete(review);
         log.info("Отзыв {} удалён", reviewId);
+        
+        updateUserRating(toUser);
+    }
+    
+    private void updateUserRating(User user) {
+        List<Review> reviews = reviewRepository.findByToUserWithFromUser(user);
+        if (reviews.isEmpty()) {
+            userService.updateUserRating(user.getId(), 0.0);
+        } else {
+            double avgRating = reviews.stream()
+                    .mapToInt(r -> r.getRating() != null ? r.getRating() : 0)
+                    .average()
+                    .orElse(0.0);
+            userService.updateUserRating(user.getId(), Math.round(avgRating * 10.0) / 10.0);
+        }
     }
 }

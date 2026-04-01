@@ -16,6 +16,9 @@ public interface PostRepository extends JpaRepository<Post, Long>, JpaSpecificat
     @Query("SELECT p FROM Post p LEFT JOIN FETCH p.user LEFT JOIN FETCH p.helper WHERE p.user.id = :userId AND (p.deleted = false OR p.deleted IS NULL)")
     List<Post> findByUserId(@Param("userId") Long userId);
     
+    @Query("SELECT p FROM Post p LEFT JOIN FETCH p.user LEFT JOIN FETCH p.helper WHERE p.id = :id")
+    Post findByIdWithUser(@Param("id") Long id);
+    
     long countByUserId(Long userId);
 
     @Query("SELECT p FROM Post p LEFT JOIN FETCH p.user LEFT JOIN FETCH p.helper WHERE p.deleted = false AND p.status = 'OPEN'")

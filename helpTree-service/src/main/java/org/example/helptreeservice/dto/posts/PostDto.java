@@ -19,7 +19,7 @@ public class PostDto {
     private LocalDateTime updatedAt;
     private Long userId;
     private String userEmail;
-    private Double userRating;
+    private Double authorRating;
     private String userCity;
     private Double latitude;
     private Double longitude;
