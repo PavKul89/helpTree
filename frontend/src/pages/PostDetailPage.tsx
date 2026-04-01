@@ -14,6 +14,7 @@ import { Button } from '../components/Button';
 import { Spinner } from '../components/Spinner';
 import { Modal } from '../components/Modal';
 import { Avatar } from '../components/Avatar';
+import { PostDetailSkeleton } from '../components/Skeleton';
 import { theme } from '../theme';
 
 export const PostDetailPage = () => {
@@ -226,7 +227,12 @@ export const PostDetailPage = () => {
     return labels[status] || status;
   };
 
-  if (loading) return <Spinner message="Загрузка поста..." />;
+  if (loading) return (
+    <div style={styles.container} className="page-content">
+      <Link to="/" style={styles.backLink}>← На главную</Link>
+      <PostDetailSkeleton />
+    </div>
+  );
   if (!post) return <div style={styles.notFound}>Пост не найден</div>;
 
   const isAuthor = user?.id === post.userId;

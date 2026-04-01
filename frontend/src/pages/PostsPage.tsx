@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { postsApi } from '../api/postsApi';
 import { authApi } from '../api/authApi';
 import type { Post } from '../types';
-import { Card, Button, Spinner, EmptyState, Avatar } from '../components';
+import { Card, Button, Spinner, EmptyState, Avatar, PostCardSkeleton } from '../components';
 import { useToast } from '../components/Toast';
 import { useAuth } from '../context/AuthContext';
 import { theme } from '../theme';
@@ -305,7 +305,20 @@ export const PostsPage = () => {
     return labels[status] || status;
   };
 
-  if (loading) return <Spinner message="Загрузка постов..." />;
+  if (loading) return (
+    <div style={styles.container} className="page-content">
+      <div style={styles.stickyContainer}>
+        <header className="page-header" style={styles.header}>
+          <h1 className="page-title" style={styles.title}>Посты о помощи</h1>
+        </header>
+      </div>
+      <div style={styles.masonry}>
+        {[1, 2, 3, 4, 5, 6].map((i) => (
+          <PostCardSkeleton key={i} />
+        ))}
+      </div>
+    </div>
+  );
 
   return (
     <div style={styles.container} className="page-content">
@@ -434,7 +447,7 @@ export const PostsPage = () => {
         {posts.map((post) => (
           <Link key={post.id} to={`/posts/${post.id}`} style={styles.cardLink}>
             <Card hoverable style={styles.postCard}>
-              {post.imageUrls && post.imageUrls.length > 0 && (
+              {post.imageUrls && post.imageUrls.length > 0 ? (
                 <div style={styles.imageContainer}>
                   <img 
                     src={post.imageUrls[0]} 
@@ -444,23 +457,36 @@ export const PostsPage = () => {
                       (e.target as HTMLImageElement).style.display = 'none';
                     }}
                   />
+                  <div style={{ ...styles.imageStatusBadge, ...statusBadgeStyles[post.status] }}>
+                    <span style={statusDotStyles[post.status]}>●</span>
+                    {getStatusLabel(post.status)}
+                  </div>
+                  {post.imageUrls.length > 1 && (
+                    <div style={styles.imageOverlay}>
+                      <span style={styles.imageCount}>+{post.imageUrls.length - 1}</span>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div style={{ ...styles.imageContainer, background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div style={{ ...styles.imageStatusBadge, ...statusBadgeStyles[post.status] }}>
+                    <span style={statusDotStyles[post.status]}>●</span>
+                    {getStatusLabel(post.status)}
+                  </div>
+                  <span style={{ fontSize: '48px', opacity: 0.3 }}>{CATEGORY_ICONS[post.category] || '📌'}</span>
                 </div>
               )}
               <div style={styles.cardContent}>
                 <div style={styles.postHeader}>
-                  <div style={statusBadgeStyles[post.status]}>
-                    <span style={statusDotStyles[post.status]}>●</span>
-                    {getStatusLabel(post.status)}
+                  <div style={styles.categoryRow}>
+                    <span style={styles.categoryIcon}>{CATEGORY_ICONS[post.category] || '📌'}</span>
+                    <span style={styles.category}>{post.category}</span>
                   </div>
                   <FavoriteButton 
                     postId={post.id} 
                     isFavorite={favorites.includes(post.id)} 
                     onToggle={(postId, e) => toggleFavorite(postId, e, post.status)}
                   />
-                </div>
-                <div style={styles.categoryRow}>
-                  <span style={styles.categoryIcon}>{CATEGORY_ICONS[post.category] || '📌'}</span>
-                  <span style={styles.category}>{post.category}</span>
                 </div>
                 <h3 style={styles.postTitle}>{post.title}</h3>
                 <p style={styles.postDescription}>
@@ -768,7 +794,7 @@ const styles: Record<string, React.CSSProperties> = {
   imageContainer: {
     position: 'relative',
     width: '100%',
-    height: '180px',
+    height: '220px',
     overflow: 'hidden',
     borderRadius: '16px 16px 0 0',
   },
@@ -776,7 +802,23 @@ const styles: Record<string, React.CSSProperties> = {
     width: '100%',
     height: '100%',
     objectFit: 'cover',
-    transition: 'transform 0.3s ease',
+    transition: 'transform 0.4s ease',
+  },
+  imageStatusBadge: {
+    position: 'absolute',
+    top: '12px',
+    left: '12px',
+    padding: '6px 12px',
+    borderRadius: '20px',
+    fontSize: '11px',
+    fontWeight: 600,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.5px',
+    backdropFilter: 'blur(8px)',
+    zIndex: 2,
   },
   imageOverlay: {
     position: 'absolute',

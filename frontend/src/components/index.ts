@@ -6,4 +6,4 @@ export { Spinner } from './Spinner';
 export { EmptyState } from './EmptyState';
 export { Modal } from './Modal';
 export { Avatar } from './Avatar';
-export { Skeleton, PostCardSkeleton } from './Skeleton';
+export { Skeleton, PostCardSkeleton, PostDetailSkeleton } from './Skeleton';
