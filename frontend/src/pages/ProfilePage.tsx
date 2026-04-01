@@ -209,6 +209,16 @@ export const ProfilePage = () => {
     }
   };
 
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'OPEN': return 'Открыт';
+      case 'IN_PROGRESS': return 'В работе';
+      case 'COMPLETED': return 'Завершён';
+      case 'CANCELLED': return 'Отменён';
+      default: return status;
+    }
+  };
+
   const getRarityColor = (rarity: string) => {
     switch (rarity) {
       case 'COMMON': return '#9ca3af';
@@ -473,7 +483,7 @@ export const ProfilePage = () => {
                         ...styles.statusDot,
                         backgroundColor: getStatusColor(post.status)
                       }} />
-                      <span style={styles.statusText}>{post.status}</span>
+                      <span style={styles.statusText}>{getStatusLabel(post.status)}</span>
                     </div>
                     <div style={styles.postTitle}>{post.title}</div>
                     <div style={styles.postMeta}>
