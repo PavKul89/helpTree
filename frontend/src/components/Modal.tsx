@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Button } from './Button';
 import { AlertTriangle, Info } from 'lucide-react';
 
@@ -23,56 +23,39 @@ export const Modal: React.FC<ModalProps> = ({
   cancelText = 'Отмена',
   variant = 'danger'
 }) => {
-  const [isClosing, setIsClosing] = useState(false);
-  const [isVisible, setIsVisible] = useState(false);
+  const overlayRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (isOpen && !isVisible) {
-      setIsVisible(true);
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
     }
-    if (!isOpen && isVisible && !isClosing) {
-      setIsClosing(true);
-      setTimeout(() => {
-        setIsVisible(false);
-        setIsClosing(false);
-      }, 200);
-    }
-  }, [isOpen, isVisible, isClosing]);
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isOpen]);
 
-  const handleClose = () => {
-    setIsClosing(true);
-    setTimeout(() => {
-      onClose();
-    }, 200);
+  const handleClose = (e?: React.MouseEvent) => {
+    if (e) e.preventDefault();
+    onClose();
   };
 
   const handleConfirm = () => {
-    setIsClosing(true);
-    setTimeout(() => {
-      onConfirm();
-      onClose();
-      setIsClosing(false);
-      setIsVisible(false);
-    }, 200);
+    onConfirm();
+    onClose();
   };
 
-  if (!isVisible) return null;
+  if (!isOpen) return null;
 
   return (
     <div 
-      style={{
-        ...styles.overlay,
-        opacity: isClosing ? 0 : 1,
-        pointerEvents: isClosing ? 'none' : 'auto',
-      }} 
+      ref={overlayRef}
+      style={styles.overlay} 
       onClick={handleClose}
     >
       <div 
-        style={{
-          ...styles.modal,
-          transform: isClosing ? 'scale(0.9) translateY(10px)' : 'scale(1) translateY(0)',
-          opacity: isClosing ? 0 : 1,
-        }} 
+        style={styles.modal} 
         onClick={(e) => e.stopPropagation()}
       >
         <div style={styles.icon}>
@@ -103,13 +86,13 @@ const styles: Record<string, React.CSSProperties> = {
     left: 0,
     right: 0,
     bottom: 0,
-    background: 'rgba(0, 0, 0, 0.7)',
-    backdropFilter: 'blur(4px)',
+    background: 'rgba(0, 0, 0, 0.8)',
+    backdropFilter: 'blur(8px)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 1000,
-    transition: 'opacity 0.2s ease',
+    animation: 'fadeIn 0.2s ease',
   },
   modal: {
     background: 'linear-gradient(160deg, #0e7490 0%, #065F46 50%, #164e63 100%)',
@@ -120,12 +103,11 @@ const styles: Record<string, React.CSSProperties> = {
     textAlign: 'center',
     boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5), 0 0 40px rgba(34, 211, 238, 0.2)',
     border: '1px solid rgba(34, 211, 238, 0.3)',
-    transition: 'transform 0.2s ease, opacity 0.2s ease',
+    animation: 'slideUp 0.3s ease',
   },
   icon: {
-    fontSize: '48px',
     marginBottom: '16px',
-    animation: 'bounce 0.5s ease',
+    color: '#f59e0b',
   },
   title: {
     color: '#fff',
