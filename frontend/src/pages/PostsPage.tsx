@@ -14,12 +14,16 @@ type PostStatus = 'OPEN' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
 const FavoriteButton = ({ 
   postId, 
   isFavorite, 
-  onToggle 
+  onToggle,
+  disabled 
 }: { 
   postId: number; 
   isFavorite: boolean; 
   onToggle: (postId: number, e: React.MouseEvent) => void;
+  disabled?: boolean;
 }) => {
+  if (disabled) return null;
+  
   return (
     <span 
       onClick={(e) => onToggle(postId, e)}
@@ -486,6 +490,7 @@ export const PostsPage = () => {
                     postId={post.id} 
                     isFavorite={favorites.includes(post.id)} 
                     onToggle={(postId, e) => toggleFavorite(postId, e, post.status)}
+                    disabled={user?.id === post.userId}
                   />
                 </div>
                 <h3 style={styles.postTitle}>{post.title}</h3>

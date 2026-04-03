@@ -340,7 +340,7 @@ export const PostDetailPage = () => {
             </Button>
           )}
           
-          {currentUserId && (
+          {currentUserId && currentUserId !== post.userId && (
             <button 
               onClick={async () => {
                 if (!currentUserId) return;
