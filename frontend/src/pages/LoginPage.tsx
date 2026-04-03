@@ -83,7 +83,7 @@ export const LoginPage = () => {
           </p>
           <p style={styles.leftSubtext}>
             Каждый может внести свой вклад в общее дело.<br/>
-            Добро пожаловать в Древо Помощи!
+            Добро пожаловать в helpTree!
           </p>
         </div>
 

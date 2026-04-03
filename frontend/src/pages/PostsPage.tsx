@@ -5,7 +5,7 @@ import {
   ChefHat, Flower2, Car, Dog, Baby, Laptop, Scissors, Pill, Scale, BookOpen, 
   GraduationCap, CarFront, Home, Sparkles, Package, Heart, Brain, Wifi, Camera, 
   Music, Palette, Trophy, Plane, Bird, Plug, Shirt, Apple, Syringe, CreditCard,
-  Shield, Building, Pin, CircleDot
+  Shield, Building, Pin, CircleDot, Clock
 } from 'lucide-react';
 import { postsApi } from '../api/postsApi';
 import { authApi } from '../api/authApi';
@@ -575,8 +575,14 @@ export const PostsPage = () => {
                     <Avatar name={post.authorName} avatarUrl={post.authorAvatarUrl} size="small" showName withRating={post.authorRating} clickable userId={post.userId} />
                   </div>
                   <div style={styles.metaRight}>
-                    {post.userCity && <span style={styles.city}><MapPin size={12} style={{marginRight: 4}} />{post.userCity}</span>}
-                    <span style={styles.date}>
+                    {post.userCity && (
+                      <span style={styles.metaItem}>
+                        <MapPin size={13} style={{marginRight: 4}} />
+                        {post.userCity}
+                      </span>
+                    )}
+                    <span style={styles.metaItem}>
+                      <Clock size={13} style={{marginRight: 4}} />
                       {getRelativeTime(post.createdAt)}
                     </span>
                   </div>
@@ -927,13 +933,13 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     overflow: 'hidden',
     padding: 0,
+    borderRadius: '16px',
   },
   imageContainer: {
     position: 'relative',
     width: '100%',
-    height: '220px',
+    aspectRatio: '16/10',
     overflow: 'hidden',
-    borderRadius: '16px 16px 0 0',
   },
   postImage: {
     width: '100%',
@@ -1007,15 +1013,16 @@ const styles: Record<string, React.CSSProperties> = {
   },
   postTitle: {
     color: theme.colors.text,
-    fontSize: '17px',
-    fontWeight: 600,
-    margin: '0 0 10px 0',
-    lineHeight: 1.3,
+    fontSize: '18px',
+    fontWeight: 700,
+    margin: '0 0 12px 0',
+    lineHeight: 1.35,
+    letterSpacing: '-0.3px',
   },
   postDescription: {
     color: theme.colors.textSecondary,
     fontSize: '14px',
-    lineHeight: 1.5,
+    lineHeight: 1.6,
     flex: 1,
     margin: 0,
   },
@@ -1023,11 +1030,11 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: '14px',
-    paddingTop: '14px',
-    borderTop: `1px solid ${theme.colors.border}`,
+    marginTop: '16px',
+    paddingTop: '16px',
+    borderTop: `1px solid rgba(255,255,255,0.08)`,
     flexWrap: 'wrap',
-    gap: '8px',
+    gap: '12px',
   },
   author: {
     display: 'flex',
@@ -1036,16 +1043,13 @@ const styles: Record<string, React.CSSProperties> = {
   metaRight: {
     display: 'flex',
     alignItems: 'center',
-    gap: '10px',
+    gap: '14px',
   },
-  city: {
-    color: theme.colors.accentLight,
-    fontSize: '12px',
-    fontWeight: 500,
-  },
-  date: {
+  metaItem: {
     color: theme.colors.textMuted,
     fontSize: '12px',
+    display: 'flex',
+    alignItems: 'center',
   },
   pagination: {
     display: 'flex',

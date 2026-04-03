@@ -45,11 +45,10 @@ select:focus {
 }
 
 .card-hoverable {
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  transition: box-shadow 0.3s ease;
 }
 
 .card-hoverable:hover {
-  transform: translateY(-4px);
   box-shadow: 0 12px 24px -4px rgba(0, 0, 0, 0.3), 0 0 20px rgba(34, 211, 238, 0.15);
 }
 
@@ -59,7 +58,6 @@ button {
 }
 
 button:hover {
-  transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 

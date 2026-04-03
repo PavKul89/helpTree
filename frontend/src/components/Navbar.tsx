@@ -112,7 +112,7 @@ export const Navbar: React.FC = () => {
             <circle cx="62" cy="48" r="16" fill="#10b981" opacity="0.8"/>
             <circle cx="50" cy="28" r="16" fill="#34d399" opacity="0.7"/>
           </svg>
-          <span style={styles.logoText}>Древо Помощи</span>
+          <span style={styles.logoText}>helpTree</span>
         </div>
 
         <div style={styles.links} ref={dropdownRef}>
@@ -187,18 +187,40 @@ export const Navbar: React.FC = () => {
       </div>
       {isBlocked && (
         <div style={styles.blockedBanner}>
-          <Ban size={16} style={{ marginRight: 6 }} /> Ваш аккаунт заблокирован за долг. Помогите другим пользователям, чтобы разблокировать аккаунт.
-          {daysUntilBlock !== null && daysUntilBlock > 0 && (
-            daysUntilBlock >= 24 
-              ? ` Осталось ${Math.floor(daysUntilBlock / 24)} дней и ${Math.floor(daysUntilBlock % 24)} часов.`
-              : ` Осталось ${Math.floor(daysUntilBlock)} часов.`
-          )}
-          {daysUntilBlock !== null && daysUntilBlock <= 0 && ` Ожидайте разблокировки.`}
+          <div style={styles.bannerContent}>
+            <div style={styles.bannerIconWrapper}>
+              <Ban size={20} />
+            </div>
+            <div style={styles.bannerText}>
+              <div style={styles.bannerTitle}>Аккаунт заблокирован</div>
+              <div style={styles.bannerSubtitle}>
+                Помогите другим пользователям, чтобы разблокировать аккаунт.
+                {daysUntilBlock !== null && daysUntilBlock > 0 && (
+                  <span style={styles.bannerTimer}>
+                    {daysUntilBlock >= 24 
+                      ? ` Осталось ${Math.floor(daysUntilBlock / 24)} дн. ${Math.floor(daysUntilBlock % 24)} ч.`
+                      : ` Осталось ${Math.floor(daysUntilBlock)} ч.`}
+                  </span>
+                )}
+                {daysUntilBlock !== null && daysUntilBlock <= 0 && ' Ожидайте разблокировки.'}
+              </div>
+            </div>
+          </div>
         </div>
       )}
       {debtWarning && debtWarning > 2 && !isBlocked && (
         <div style={styles.warningBanner}>
-          <AlertTriangle size={16} style={{marginRight: 8}} /> Внимание! Ваш долг: {debtWarning}. Помогите {debtWarning - 2} людям, чтобы избежать блокировки.
+          <div style={styles.bannerContent}>
+            <div style={styles.bannerIconWrapper}>
+              <AlertTriangle size={20} />
+            </div>
+            <div style={styles.bannerText}>
+              <div style={styles.bannerTitle}>Внимание! Ваш долг: {debtWarning}</div>
+              <div style={styles.bannerSubtitle}>
+                Помогите {debtWarning - 2} {debtWarning - 2 === 1 ? 'человеку' : 'людям'}, чтобы избежать блокировки
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </nav>
@@ -322,23 +344,53 @@ const styles: Record<string, React.CSSProperties> = {
     transition: 'all 0.2s',
   },
   warningBanner: {
-    background: 'linear-gradient(90deg, rgba(220, 38, 38, 0.95) 0%, rgba(245, 158, 11, 0.95) 100%)',
+    background: 'linear-gradient(135deg, rgba(220, 38, 38, 0.95) 0%, rgba(245, 158, 11, 0.9) 100%)',
     color: '#fff',
-    padding: '12px 24px',
-    textAlign: 'center',
-    fontSize: '14px',
-    fontWeight: 500,
+    padding: '10px 20px',
     borderRadius: '0 0 16px 16px',
-    boxShadow: '0 4px 15px rgba(220, 38, 38, 0.3)',
+    boxShadow: '0 4px 20px rgba(220, 38, 38, 0.4)',
   },
   blockedBanner: {
-    background: 'linear-gradient(135deg, rgba(220, 38, 38, 0.95) 0%, rgba(185, 28, 28, 0.95) 100%)',
+    background: 'linear-gradient(135deg, rgba(185, 28, 28, 0.98) 0%, rgba(220, 38, 38, 0.95) 100%)',
     color: '#fff',
-    padding: '12px 24px',
-    textAlign: 'center',
-    fontSize: '14px',
-    fontWeight: 500,
+    padding: '10px 20px',
     borderRadius: '0 0 16px 16px',
-    boxShadow: '0 4px 15px rgba(220, 38, 38, 0.3)',
+    boxShadow: '0 4px 20px rgba(185, 28, 28, 0.5)',
+  },
+  bannerContent: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '16px',
+    maxWidth: '1200px',
+    margin: '0 auto',
+  },
+  bannerIconWrapper: {
+    background: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: '12px',
+    padding: '10px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bannerText: {
+    textAlign: 'left' as const,
+  },
+  bannerTitle: {
+    fontSize: '14px',
+    fontWeight: 700,
+    marginBottom: '2px',
+  },
+  bannerSubtitle: {
+    fontSize: '13px',
+    opacity: 0.9,
+  },
+  bannerTimer: {
+    background: 'rgba(255, 255, 255, 0.2)',
+    padding: '2px 8px',
+    borderRadius: '8px',
+    marginLeft: '8px',
+    fontSize: '12px',
+    fontWeight: 600,
   },
 };
