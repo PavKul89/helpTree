@@ -16,7 +16,7 @@ import { Modal } from '../components/Modal';
 import { Avatar } from '../components/Avatar';
 import { PostDetailSkeleton } from '../components/Skeleton';
 import { theme } from '../theme';
-import { MapPin, Star, MessageCircle, Ban } from 'lucide-react';
+import { MapPin, Star, MessageCircle, Ban, HandHeart } from 'lucide-react';
 
 export const PostDetailPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -320,7 +320,7 @@ export const PostDetailPage = () => {
         <div style={styles.actions}>
           {canOfferHelp && (
             <Button onClick={handleOfferHelp} style={styles.actionButton}>
-              ✋ Откликнуться
+              <HandHeart size={18} style={{ marginRight: 8 }} /> Откликнуться
             </Button>
           )}
           
