@@ -428,12 +428,6 @@ export const PostDetailPage = () => {
         cancelText=""
       />
 
-      {canOfferHelp && (
-        <Button onClick={handleOfferHelp} style={{ marginBottom: 20 }}>
-          Откликнуться на пост
-        </Button>
-      )}
-
       {!canOfferHelp && user && !isAuthor && post.status === 'OPEN' && isAuthorBlocked && (
         <div style={{ ...styles.errorBanner, marginBottom: 20 }}>
           <Ban size={18} style={{ marginRight: 8, verticalAlign: 'middle' }} /> Автор поста заблокирован за долг. Невозможно откликнуться на пост.
