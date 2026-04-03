@@ -5,7 +5,7 @@ import {
   ChefHat, Flower2, Car, Dog, Baby, Laptop, Scissors, Pill, Scale, BookOpen, 
   GraduationCap, CarFront, Home, Sparkles, Package, Heart, Brain, Wifi, Camera, 
   Music, Palette, Trophy, Plane, Bird, Plug, Shirt, Apple, Syringe, CreditCard,
-  Shield, Building, Pin
+  Shield, Building, Pin, CircleDot
 } from 'lucide-react';
 import { postsApi } from '../api/postsApi';
 import { authApi } from '../api/authApi';
@@ -152,6 +152,9 @@ export const PostsPage = () => {
   const [currentUserCity, setCurrentUserCity] = useState<string>('');
   const [showFilters, setShowFilters] = useState(false);
   const { showToast } = useToast();
+
+  const hasActiveFilters = category !== 'Все' || status !== 'Все' || city;
+  const activeFilterCount = [category !== 'Все', status !== 'Все', !!city].filter(Boolean).length;
 
   const loadPosts = useCallback(async (pageNum = 0, searchTerm?: string) => {
     try {
@@ -348,25 +351,31 @@ export const PostsPage = () => {
         </header>
 
         <div style={styles.filters}>
-          <div style={styles.searchForm}>
-            <input
-              type="text"
-              placeholder="Поиск..."
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-              style={styles.searchInput}
-            />
-            <Button onClick={handleSearch} style={styles.searchBtn}>Найти</Button>
+          <div style={styles.searchContainer}>
+            <div style={styles.searchForm}>
+              <input
+                type="text"
+                placeholder="Поиск постов..."
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                style={styles.searchInput}
+              />
+              <Button onClick={handleSearch} style={styles.searchBtn}>
+                <Search size={16} />
+              </Button>
+            </div>
           </div>
           <button 
             onClick={() => setShowFilters(!showFilters)}
             style={{
               ...styles.filterToggle,
-              ...(showFilters ? styles.filterToggleActive : {}),
+              ...(showFilters || hasActiveFilters ? styles.filterToggleActive : {}),
             }}
           >
-            <Settings size={16} style={{marginRight: 6}} /> Фильтры
+            <Settings size={16} style={{marginRight: 6}} /> 
+            Фильтры
+            {hasActiveFilters && <span style={styles.filterCount}>{activeFilterCount}</span>}
           </button>
         </div>
 
@@ -379,50 +388,74 @@ export const PostsPage = () => {
           transition: 'all 0.3s ease',
         }}>
           <div style={styles.filterPanel}>
-            <div style={styles.filterGroup}>
-              <label style={styles.filterLabel}>Категория</label>
-              <select
-                value={category}
-                onChange={(e) => handleCategoryChange(e.target.value)}
-                style={styles.filterSelect}
-              >
+            <div style={styles.filterSection}>
+              <div style={styles.filterSectionHeader}>
+                <Sparkles size={14} style={{marginRight: 6}} />
+                Категория
+              </div>
+              <div style={styles.chipContainer}>
                 {CATEGORIES.map((cat) => (
-                  <option key={cat} value={cat}>
-                    {cat}
-                  </option>
+                  <button
+                    key={cat}
+                    onClick={() => handleCategoryChange(cat)}
+                    style={{
+                      ...styles.chip,
+                      ...(category === cat ? styles.chipActive : {}),
+                    }}
+                  >
+                    {cat === 'Все' ? 'Все' : cat}
+                  </button>
                 ))}
-              </select>
+              </div>
             </div>
-            <div style={styles.filterGroup}>
-              <label style={styles.filterLabel}>Статус</label>
-              <select
-                value={status}
-                onChange={(e) => handleStatusChange(e.target.value)}
-                style={styles.filterSelect}
-              >
+
+            <div style={styles.filterSection}>
+              <div style={styles.filterSectionHeader}>
+                <CircleDot size={14} style={{marginRight: 6}} />
+                Статус
+              </div>
+              <div style={styles.chipContainer}>
                 {STATUSES.map((s) => (
-                  <option key={s} value={s}>{s === 'Все' ? 'Все статусы' : getStatusLabel(s)}</option>
+                  <button
+                    key={s}
+                    onClick={() => handleStatusChange(s)}
+                    style={{
+                      ...styles.chip,
+                      ...(status === s ? styles.chipActive : {}),
+                    }}
+                  >
+                    {s === 'Все' ? 'Все' : getStatusLabel(s)}
+                  </button>
                 ))}
-              </select>
+              </div>
             </div>
-            <div style={styles.filterGroup}>
-              <label style={styles.filterLabel}>Город</label>
+
+            <div style={styles.filterSection}>
+              <div style={styles.filterSectionHeader}>
+                <MapPin size={14} style={{marginRight: 6}} />
+                Город
+              </div>
               <div style={styles.cityFilter}>
                 <input
                   type="text"
-                  placeholder="Город..."
+                  placeholder="Введите город..."
                   value={cityInput}
                   onChange={(e) => handleCityInputChange(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleCitySearch()}
                   style={styles.cityInput}
                 />
-                <Button onClick={handleCitySearch} style={styles.cityBtn}>ОК</Button>
+                <Button onClick={handleCitySearch} style={styles.cityBtn}>
+                  <Search size={14} />
+                </Button>
                 {currentUserCity && (
-                  <Button onClick={handleMyCity} style={styles.myCityBtn}>Мой</Button>
+                  <Button onClick={handleMyCity} style={styles.myCityBtn}>
+                    <MapPin size={14} />
+                  </Button>
                 )}
               </div>
             </div>
-            {(category !== 'Все' || status !== 'Все' || city) && (
+
+            {hasActiveFilters && (
               <button 
                 onClick={() => {
                   setCategory('Все');
@@ -433,22 +466,47 @@ export const PostsPage = () => {
                 }}
                 style={styles.clearBtn}
               >
-                <X size={14} style={{marginRight: 4}} /> Очистить
+                <X size={14} style={{marginRight: 4}} /> Очистить все
               </button>
             )}
           </div>
         </div>
 
-        {(category !== 'Все' || status !== 'Все' || city) && !showFilters && (
+        {hasActiveFilters && !showFilters && (
           <div style={styles.activeFilters}>
             {category !== 'Все' && (
-              <span style={styles.filterChip}>{category}</span>
+              <span style={styles.filterChip}>
+                {category}
+                <button 
+                  onClick={() => { setCategory('Все'); loadPosts(0); }}
+                  style={styles.chipRemove}
+                >
+                  <X size={12} />
+                </button>
+              </span>
             )}
             {status !== 'Все' && (
-              <span style={styles.filterChip}>● {getStatusLabel(status)}</span>
+              <span style={styles.filterChip}>
+                {getStatusLabel(status)}
+                <button 
+                  onClick={() => { setStatus('Все'); loadPosts(0); }}
+                  style={styles.chipRemove}
+                >
+                  <X size={12} />
+                </button>
+              </span>
             )}
             {city && (
-              <span style={styles.filterChip}><MapPin size={12} style={{marginRight: 4}} /> {city}</span>
+              <span style={styles.filterChip}>
+                <MapPin size={12} style={{marginRight: 4}} />
+                {city}
+                <button 
+                  onClick={() => { setCity(''); setCityInput(''); loadPosts(0); }}
+                  style={styles.chipRemove}
+                >
+                  <X size={12} />
+                </button>
+              </span>
             )}
           </div>
         )}
@@ -668,12 +726,14 @@ const styles: Record<string, React.CSSProperties> = {
     flexWrap: 'wrap',
     alignItems: 'center',
   },
+  searchContainer: {
+    flex: 1,
+    minWidth: '280px',
+    maxWidth: '500px',
+  },
   searchForm: {
     display: 'flex',
     gap: '8px',
-    flex: 1,
-    order: 1,
-    minWidth: '200px',
   },
   searchInput: {
     flex: 1,
@@ -681,113 +741,159 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '15px',
     background: 'rgba(255,255,255,0.08)',
     border: `1px solid ${theme.colors.border}`,
-    borderRadius: theme.borderRadius.md,
+    borderRadius: theme.borderRadius.lg,
     color: theme.colors.text,
     outline: 'none',
+    transition: 'all 0.2s ease',
   },
   searchBtn: {
-    padding: '12px 20px',
+    padding: '12px 16px',
     whiteSpace: 'nowrap',
   },
   filterToggle: {
     background: 'rgba(255,255,255,0.08)',
     border: `1px solid ${theme.colors.border}`,
-    borderRadius: theme.borderRadius.md,
+    borderRadius: theme.borderRadius.lg,
     color: theme.colors.textSecondary,
     padding: '12px 20px',
     fontSize: '14px',
     cursor: 'pointer',
     transition: 'all 0.2s',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
   },
   filterToggleActive: {
-    background: 'rgba(6, 182, 212, 0.2)',
-    borderColor: 'rgba(6, 182, 212, 0.5)',
+    background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.25) 0%, rgba(6, 182, 212, 0.15) 100%)',
+    borderColor: theme.colors.accent,
     color: theme.colors.accentLight,
+  },
+  filterCount: {
+    background: theme.colors.accent,
+    color: '#fff',
+    fontSize: '11px',
+    fontWeight: 700,
+    padding: '2px 6px',
+    borderRadius: '10px',
+    marginLeft: '4px',
   },
   filterPanelWrapper: {
     background: 'rgba(255,255,255,0.02)',
-    borderRadius: theme.borderRadius.md,
+    borderRadius: theme.borderRadius.lg,
   },
   filterPanel: {
     display: 'flex',
-    gap: '16px',
+    gap: '24px',
     flexWrap: 'wrap',
-    padding: '16px',
+    padding: '20px',
     background: 'rgba(255,255,255,0.04)',
-    borderRadius: theme.borderRadius.md,
-    alignItems: 'flex-end',
+    borderRadius: theme.borderRadius.lg,
+    alignItems: 'flex-start',
+    border: `1px solid ${theme.colors.border}`,
   },
-  filterGroup: {
+  filterSection: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '6px',
+    gap: '10px',
+    minWidth: '200px',
   },
-  filterLabel: {
+  filterSectionHeader: {
     color: theme.colors.textMuted,
     fontSize: '12px',
-    fontWeight: 500,
+    fontWeight: 600,
     textTransform: 'uppercase',
+    letterSpacing: '0.5px',
+    display: 'flex',
+    alignItems: 'center',
   },
-  filterSelect: {
-    padding: '10px 36px 10px 14px',
-    fontSize: '14px',
-    background: 'rgba(255,255,255,0.08)',
-    border: `1px solid ${theme.colors.border}`,
-    borderRadius: theme.borderRadius.md,
-    color: theme.colors.text,
+  chipContainer: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '8px',
+  },
+  chip: {
+    background: 'rgba(255,255,255,0.06)',
+    border: '1px solid rgba(255,255,255,0.1)',
+    borderRadius: '20px',
+    padding: '8px 16px',
+    fontSize: '13px',
+    color: theme.colors.textSecondary,
     cursor: 'pointer',
-    minWidth: '140px',
-    appearance: 'none',
-    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2322d3ee' d='M6 8L1 3h10z'/%3E%3C/svg%3E")`,
-    backgroundRepeat: 'no-repeat',
-    backgroundPosition: 'right 10px center',
+    transition: 'all 0.2s ease',
+  },
+  chipActive: {
+    background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.3) 0%, rgba(6, 182, 212, 0.2) 100%)',
+    borderColor: theme.colors.accent,
+    color: theme.colors.accentLight,
+    fontWeight: 500,
   },
   clearBtn: {
     background: 'transparent',
     border: '1px solid rgba(239, 68, 68, 0.5)',
-    borderRadius: theme.borderRadius.md,
+    borderRadius: theme.borderRadius.lg,
     color: '#ef4444',
     padding: '10px 16px',
     fontSize: '14px',
     cursor: 'pointer',
     transition: 'all 0.2s',
-    alignSelf: 'flex-end',
+    display: 'flex',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    marginTop: 'auto',
   },
   activeFilters: {
     display: 'flex',
-    gap: '8px',
+    gap: '10px',
     flexWrap: 'wrap',
-    marginTop: '12px',
+    marginTop: '16px',
   },
   filterChip: {
-    background: 'rgba(6, 182, 212, 0.2)',
+    background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.2) 0%, rgba(6, 182, 212, 0.15) 100%)',
     border: '1px solid rgba(6, 182, 212, 0.4)',
     borderRadius: '20px',
-    padding: '6px 14px',
+    padding: '6px 10px 6px 14px',
     fontSize: '13px',
     color: theme.colors.accentLight,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+  },
+  chipRemove: {
+    background: 'rgba(255,255,255,0.1)',
+    border: 'none',
+    borderRadius: '50%',
+    width: '18px',
+    height: '18px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    padding: 0,
+    color: theme.colors.accentLight,
+    transition: 'all 0.2s',
   },
   cityFilter: {
     display: 'flex',
     gap: '8px',
     alignItems: 'center',
+    flexWrap: 'wrap',
   },
   cityInput: {
-    padding: '12px 16px',
-    fontSize: '15px',
+    padding: '10px 14px',
+    fontSize: '14px',
     background: 'rgba(255,255,255,0.08)',
     border: `1px solid ${theme.colors.border}`,
-    borderRadius: theme.borderRadius.md,
+    borderRadius: theme.borderRadius.lg,
     color: theme.colors.text,
     outline: 'none',
-    width: '150px',
+    width: '180px',
   },
   cityBtn: {
-    padding: '12px 16px',
+    padding: '10px 14px',
     whiteSpace: 'nowrap',
   },
   myCityBtn: {
-    padding: '12px 16px',
+    padding: '10px 14px',
     whiteSpace: 'nowrap',
     background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(5, 150, 105, 0.2) 100%)',
     border: '1px solid rgba(16, 185, 129, 0.4)',
