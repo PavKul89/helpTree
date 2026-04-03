@@ -1,5 +1,12 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { 
+  MapPin, Star, Settings, Search, X, Axe, Trash2, Wrench, Truck, ShoppingCart, 
+  ChefHat, Flower2, Car, Dog, Baby, Laptop, Scissors, Pill, Scale, BookOpen, 
+  GraduationCap, CarFront, Home, Sparkles, Package, Heart, Brain, Wifi, Camera, 
+  Music, Palette, Trophy, Plane, Bird, Plug, Shirt, Apple, Syringe, CreditCard,
+  Shield, Building, Pin
+} from 'lucide-react';
 import { postsApi } from '../api/postsApi';
 import { authApi } from '../api/authApi';
 import type { Post } from '../types';
@@ -85,44 +92,44 @@ const CATEGORIES = [
   'Другое',
 ];
 
-const CATEGORY_ICONS: Record<string, string> = {
-  'Дрова': '🪓',
-  'Уборка': '🧹',
-  'Ремонт': '🔧',
-  'Доставка': '📦',
-  'Покупки': '🛒',
-  'Готовка': '🍳',
-  'Садоводство': '🌱',
-  'Перевозка': '🚚',
-  'Уход за животными': '🐾',
-  'Помощь с детьми': '👶',
-  'Компьютерная помощь': '💻',
-  'Стрижка': '✂️',
-  'Медицинская помощь': '🏥',
-  'Юридическая консультация': '⚖️',
-  'Обучение': '📚',
-  'Репетитор': '🎓',
-  'Транспорт': '🚗',
-  'Строительство': '🏠',
-  'Клининг': '🧽',
-  'Курьер': '🏃',
-  'Волонтёрство': '❤️',
-  'Психологическая помощь': '🧠',
-  'Интернет и связь': '📡',
-  'Фото и видео': '📷',
-  'Музыка': '🎵',
-  'Искусство': '🎨',
-  'Спорт': '⚽',
-  'Путешествия': '✈️',
-  'Питомцы': '🐕',
-  'Бытовая техника': '🔌',
-  'Одежда и обувь': '👕',
-  'Продукты': '🥬',
-  'Аптека': '💊',
-  'Банковские услуги': '🏦',
-  'Страхование': '📋',
-  'Недвижимость': '🏘️',
-  'Другое': '📌',
+const CATEGORY_ICON_COMPONENTS: Record<string, React.ElementType> = {
+  'Дрова': Axe,
+  'Уборка': Trash2,
+  'Ремонт': Wrench,
+  'Доставка': Truck,
+  'Покупки': ShoppingCart,
+  'Готовка': ChefHat,
+  'Садоводство': Flower2,
+  'Перевозка': Car,
+  'Уход за животными': Dog,
+  'Помощь с детьми': Baby,
+  'Компьютерная помощь': Laptop,
+  'Стрижка': Scissors,
+  'Медицинская помощь': Pill,
+  'Юридическая консультация': Scale,
+  'Обучение': BookOpen,
+  'Репетитор': GraduationCap,
+  'Транспорт': CarFront,
+  'Строительство': Home,
+  'Клининг': Sparkles,
+  'Курьер': Package,
+  'Волонтёрство': Heart,
+  'Психологическая помощь': Brain,
+  'Интернет и связь': Wifi,
+  'Фото и видео': Camera,
+  'Музыка': Music,
+  'Искусство': Palette,
+  'Спорт': Trophy,
+  'Путешествия': Plane,
+  'Питомцы': Bird,
+  'Бытовая техника': Plug,
+  'Одежда и обувь': Shirt,
+  'Продукты': Apple,
+  'Аптека': Syringe,
+  'Банковские услуги': CreditCard,
+  'Страхование': Shield,
+  'Недвижимость': Building,
+  'Другое': Pin,
 };
 const STATUSES = ['Все', 'OPEN', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'Избранное'];
 
@@ -344,7 +351,7 @@ export const PostsPage = () => {
           <div style={styles.searchForm}>
             <input
               type="text"
-              placeholder="🔍 Поиск..."
+              placeholder="Поиск..."
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
@@ -359,7 +366,7 @@ export const PostsPage = () => {
               ...(showFilters ? styles.filterToggleActive : {}),
             }}
           >
-            ⚙️ Фильтры
+            <Settings size={16} style={{marginRight: 6}} /> Фильтры
           </button>
         </div>
 
@@ -381,7 +388,7 @@ export const PostsPage = () => {
               >
                 {CATEGORIES.map((cat) => (
                   <option key={cat} value={cat}>
-                    {cat === 'Все' ? cat : `${CATEGORY_ICONS[cat] || '📌'} ${cat}`}
+                    {cat}
                   </option>
                 ))}
               </select>
@@ -426,7 +433,7 @@ export const PostsPage = () => {
                 }}
                 style={styles.clearBtn}
               >
-                ✕ Очистить
+                <X size={14} style={{marginRight: 4}} /> Очистить
               </button>
             )}
           </div>
@@ -435,13 +442,13 @@ export const PostsPage = () => {
         {(category !== 'Все' || status !== 'Все' || city) && !showFilters && (
           <div style={styles.activeFilters}>
             {category !== 'Все' && (
-              <span style={styles.filterChip}>{CATEGORY_ICONS[category] || '📁'} {category}</span>
+              <span style={styles.filterChip}>{category}</span>
             )}
             {status !== 'Все' && (
               <span style={styles.filterChip}>● {getStatusLabel(status)}</span>
             )}
             {city && (
-              <span style={styles.filterChip}>📍 {city}</span>
+              <span style={styles.filterChip}><MapPin size={12} style={{marginRight: 4}} /> {city}</span>
             )}
           </div>
         )}
@@ -477,13 +484,19 @@ export const PostsPage = () => {
                     <span style={statusDotStyles[post.status]}>●</span>
                     {getStatusLabel(post.status)}
                   </div>
-                  <span style={{ fontSize: '48px', opacity: 0.3 }}>{CATEGORY_ICONS[post.category] || '📌'}</span>
+                  {(() => {
+                    const IconComp = CATEGORY_ICON_COMPONENTS[post.category];
+                    return IconComp ? <IconComp size={48} color={theme.colors.accent} style={{ opacity: 0.3 }} /> : <Pin size={48} color={theme.colors.accent} style={{ opacity: 0.3 }} />;
+                  })()}
                 </div>
               )}
               <div style={styles.cardContent}>
                 <div style={styles.postHeader}>
                   <div style={styles.categoryRow}>
-                    <span style={styles.categoryIcon}>{CATEGORY_ICONS[post.category] || '📌'}</span>
+                    {(() => {
+                      const IconComp = CATEGORY_ICON_COMPONENTS[post.category];
+                      return IconComp ? <IconComp size={16} color={theme.colors.accent} /> : <Pin size={16} color={theme.colors.accent} />;
+                    })()}
                     <span style={styles.category}>{post.category}</span>
                   </div>
                   <FavoriteButton 
@@ -504,7 +517,7 @@ export const PostsPage = () => {
                     <Avatar name={post.authorName} avatarUrl={post.authorAvatarUrl} size="small" showName withRating={post.authorRating} clickable userId={post.userId} />
                   </div>
                   <div style={styles.metaRight}>
-                    {post.userCity && <span style={styles.city}>📍 {post.userCity}</span>}
+                    {post.userCity && <span style={styles.city}><MapPin size={12} style={{marginRight: 4}} />{post.userCity}</span>}
                     <span style={styles.date}>
                       {getRelativeTime(post.createdAt)}
                     </span>

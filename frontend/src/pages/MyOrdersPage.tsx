@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { FileText, HandHeart } from 'lucide-react';
 import { postsApi } from '../api/postsApi';
 import { helpApi } from '../api/helpApi';
 import { useAuth } from '../context/AuthContext';
@@ -137,7 +138,7 @@ export const MyOrdersPage = () => {
           {activeTab === 'posts' && (
             myPosts.length === 0 ? (
               <div style={styles.emptyState}>
-                <div style={styles.emptyIcon}>📝</div>
+                <FileText size={48} color={theme.colors.accent} style={styles.emptyIcon as React.CSSProperties} />
                 <div style={styles.emptyTitle}>У вас пока нет постов</div>
                 <div style={styles.emptyDesc}>Создайте первый пост о помощи</div>
                 <Link to="/posts/new" style={{ marginTop: '16px', display: 'inline-block' }}>
@@ -183,7 +184,7 @@ export const MyOrdersPage = () => {
           {activeTab === 'helps' && (
             myHelps.length === 0 ? (
               <div style={styles.emptyState}>
-                <div style={styles.emptyIcon}>🤝</div>
+                <HandHeart size={48} color={theme.colors.accent} style={styles.emptyIcon as React.CSSProperties} />
                 <div style={styles.emptyTitle}>У вас пока нет откликов</div>
                 <div style={styles.emptyDesc}>Откликнитесь на пост другого пользователя</div>
                 <Link to="/" style={{ marginTop: '16px', display: 'inline-block' }}>
@@ -325,7 +326,6 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '48px 24px',
   },
   emptyIcon: {
-    fontSize: '48px',
     marginBottom: '16px',
   },
   emptyTitle: {

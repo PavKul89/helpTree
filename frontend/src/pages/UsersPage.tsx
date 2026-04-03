@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Star, HandHeart, ClipboardList } from 'lucide-react';
 import { authApi } from '../api/authApi';
 import { Card } from '../components/Card';
 import { Spinner } from '../components/Spinner';
@@ -46,17 +47,17 @@ export const UsersPage = () => {
                   <div style={styles.userName}>{user.name}</div>
                   <div style={styles.userStats}>
                     <span style={styles.statItem}>
-                      <span style={styles.statIcon}>★</span>
+                      <Star size={14} color={theme.colors.accent} fill={theme.colors.accent} />
                       <span style={styles.statValue}>{user.rating.toFixed(1)}</span>
                     </span>
                     <span style={styles.statDivider}>•</span>
                     <span style={styles.statItem}>
-                      <span style={styles.statIcon}>🤝</span>
+                      <HandHeart size={14} color={theme.colors.accent} />
                       <span style={styles.statValue}>{user.helpedCount}</span>
                     </span>
                     <span style={styles.statDivider}>•</span>
                     <span style={styles.statItem}>
-                      <span style={styles.statIcon}>📋</span>
+                      <ClipboardList size={14} color={theme.colors.accent} />
                       <span style={styles.statValue}>{user.debtCount}</span>
                     </span>
                   </div>

@@ -38,7 +38,6 @@ const getVariantStyles = (variant: string, isHovered: boolean): React.CSSPropert
       return isHovered ? {
         background: theme.gradients.buttonHover,
         boxShadow: theme.shadows.buttonHover,
-        transform: 'translateY(-2px) scale(1.02)',
       } : {
         background: theme.gradients.button,
         boxShadow: theme.shadows.button,
@@ -48,7 +47,6 @@ const getVariantStyles = (variant: string, isHovered: boolean): React.CSSPropert
         background: 'rgba(255,255,255,0.1)',
         borderColor: '#22d3ee',
         color: '#22d3ee',
-        transform: 'translateY(-2px)',
       } : {
         background: 'transparent',
         border: `1px solid ${theme.colors.border}`,
@@ -57,7 +55,6 @@ const getVariantStyles = (variant: string, isHovered: boolean): React.CSSPropert
     case 'danger':
       return isHovered ? {
         background: '#dc2626',
-        transform: 'translateY(-2px)',
       } : {
         background: theme.colors.error,
       };

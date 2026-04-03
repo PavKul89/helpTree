@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { MapPin, Map as MapIcon, User, Clock } from 'lucide-react';
 import { postsApi } from '../api/postsApi';
 import { authApi } from '../api/authApi';
 import { useAuth } from '../context/AuthContext';
@@ -20,15 +21,15 @@ L.Icon.Default.mergeOptions({
 });
 
 const CATEGORY_ICONS: Record<string, string> = {
-  'Дрова': '🪓', 'Уборка': '🧹', 'Ремонт': '🔧', 'Доставка': '📦',
-  'Покупки': '🛒', 'Готовка': '🍳', 'Садоводство': '🌱', 'Перевозка': '🚚',
-  'Уход за животными': '🐕', 'Помощь с детьми': '👶', 'Компьютерная помощь': '💻',
-  'Стрижка': '✂️', 'Медицинская помощь': '🏥', 'Юридическая консультация': '⚖️',
-  'Обучение': '📚', 'Репетитор': '🎓', 'Транспорт': '🚗', 'Строительство': '🏠',
-  'Электрика': '⚡', 'Сантехника': '🔩', 'Погрузка/Разгрузка': '📤',
+  'Дрова': 'DRW', 'Уборка': 'UBN', 'Ремонт': 'RMT', 'Доставка': 'DST',
+  'Покупки': 'PKP', 'Готовка': 'GTK', 'Садоводство': 'SDV', 'Перевозка': 'PRV',
+  'Уход за животными': 'JIV', 'Помощь с детьми': 'DTI', 'Компьютерная помощь': 'KMP',
+  'Стрижка': 'STR', 'Медицинская помощь': 'MDC', 'Юридическая консультация': 'YUR',
+  'Обучение': 'OBU', 'Репетитор': 'RPT', 'Транспорт': 'TRN', 'Строительство': 'STR',
+  'Электрика': 'ELK', 'Сантехника': 'SNK', 'Погрузка/Разгрузка': 'PGR',
 };
 
-const getCategoryIcon = (category: string): string => CATEGORY_ICONS[category] || '📌';
+const getCategoryIcon = (category: string): string => CATEGORY_ICONS[category] || category.substring(0, 3).toUpperCase();
 
 const getStatusColor = (status: string): string => {
   const colors: Record<string, string> = {
@@ -280,7 +281,7 @@ export const MapPage = () => {
     <div style={styles.container}>
       <div style={styles.header}>
         <div>
-          <h1 style={styles.title}>🗺️ Карта помощи</h1>
+          <h1 style={styles.title}><MapIcon size={28} style={{marginRight: 10, verticalAlign: 'middle'}} /> Карта помощи</h1>
           {userLocation && userCity && <p style={styles.subtitle}>Показываем посты рядом с {userCity}</p>}
         </div>
         <div style={styles.headerActions}>
@@ -301,7 +302,7 @@ export const MapPage = () => {
           </div>
           {!userLocation && (
             <Button onClick={handleUseMyLocation} style={styles.locationBtn}>
-              📍 Моё местоположение
+              <MapPin size={16} style={{marginRight: 6}} /> Моё местоположение
             </Button>
           )}
         </div>
@@ -311,7 +312,7 @@ export const MapPage = () => {
         <Card style={styles.errorCard}>
           <p>{locationError}</p>
           <Button onClick={handleUseMyLocation} style={styles.locationBtn}>
-            📍 Моё местоположение
+            <MapPin size={16} style={{marginRight: 6}} /> Моё местоположение
           </Button>
         </Card>
       )}
@@ -377,10 +378,10 @@ export const MapPage = () => {
                           padding: '12px',
                         }}>
                           <div style={{display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px'}}>
-                            <span style={{fontSize: '28px'}}>👤</span>
+                            <User size={28} color="#22d3ee" />
                             <div>
                               <strong style={{color: '#fff', fontSize: '16px', display: 'block'}}>{mainPost.authorName}</strong>
-                              <span style={{color: '#22d3ee', fontSize: '12px'}}>📍 {mainPost.userCity}</span>
+                              <span style={{color: '#22d3ee', fontSize: '12px'}}><MapPin size={12} style={{verticalAlign: 'middle', marginRight: 4}} />{mainPost.userCity}</span>
                             </div>
                           </div>
                           
@@ -452,9 +453,9 @@ export const MapPage = () => {
                 <h3 style={styles.postTitle}>{selectedPost.title}</h3>
                 <p style={styles.postDesc}>{selectedPost.description.substring(0, 100)}...</p>
                 <div style={styles.postMeta}>
-                  <span>👤 {selectedPost.authorName}</span>
-                  <span>📍 {selectedPost.userCity || 'Город не указан'}</span>
-                  <span>🕐 {getRelativeTime(selectedPost.createdAt)}</span>
+                  <span><User size={14} style={{verticalAlign: 'middle', marginRight: 4}} />{selectedPost.authorName}</span>
+                  <span><MapPin size={14} style={{verticalAlign: 'middle', marginRight: 4}} />{selectedPost.userCity || 'Город не указан'}</span>
+                  <span><Clock size={14} style={{verticalAlign: 'middle', marginRight: 4}} />{getRelativeTime(selectedPost.createdAt)}</span>
                 </div>
                 <Link to={`/posts/${selectedPost.id}`}>
                   <Button style={styles.viewBtn}>Смотреть пост</Button>

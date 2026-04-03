@@ -1,5 +1,13 @@
 import { useState, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { 
+  Axe, Trash2, Wrench, Truck, ShoppingCart, ChefHat, Flower2, 
+  Car, Dog, Baby, Laptop, Scissors, Pill, Scale, BookOpen, GraduationCap,
+  CarFront, Home, Sparkles, Package, Heart, Brain, Wifi, Camera, Music,
+  Palette, Trophy, Plane, Bird, Plug, Shirt, Apple, Syringe, CreditCard,
+  Shield, Building, Star, FileText, Image, FolderOpen, AlertTriangle,
+  Loader2, Send
+} from 'lucide-react';
 import { postsApi } from '../api/postsApi';
 import { imagesApi } from '../api/imagesApi';
 import { Card } from '../components/Card';
@@ -7,45 +15,50 @@ import { Button } from '../components/Button';
 import { theme } from '../theme';
 import { useToast } from '../components/Toast';
 
-const CATEGORIES = [
-  { value: 'Дрова', icon: '🪓', label: 'Дрова' },
-  { value: 'Уборка', icon: '🧹', label: 'Уборка' },
-  { value: 'Ремонт', icon: '🔧', label: 'Ремонт' },
-  { value: 'Доставка', icon: '🚚', label: 'Доставка' },
-  { value: 'Покупки', icon: '🛒', label: 'Покупки' },
-  { value: 'Готовка', icon: '🍳', label: 'Готовка' },
-  { value: 'Садоводство', icon: '🌱', label: 'Садоводство' },
-  { value: 'Перевозка', icon: '🚛', label: 'Перевозка' },
-  { value: 'Уход за животными', icon: '🐕', label: 'Животные' },
-  { value: 'Помощь с детьми', icon: '👶', label: 'Дети' },
-  { value: 'Компьютерная помощь', icon: '💻', label: 'Компьютеры' },
-  { value: 'Стрижка', icon: '✂️', label: 'Стрижка' },
-  { value: 'Медицинская помощь', icon: '💊', label: 'Медицина' },
-  { value: 'Юридическая консультация', icon: '⚖️', label: 'Юристы' },
-  { value: 'Обучение', icon: '📚', label: 'Обучение' },
-  { value: 'Репетитор', icon: '🎓', label: 'Репетитор' },
-  { value: 'Транспорт', icon: '🚗', label: 'Транспорт' },
-  { value: 'Строительство', icon: '🏠', label: 'Стройка' },
-  { value: 'Клининг', icon: '🧽', label: 'Клининг' },
-  { value: 'Курьер', icon: '📦', label: 'Курьер' },
-  { value: 'Волонтёрство', icon: '❤️', label: 'Волонтёрство' },
-  { value: 'Психологическая помощь', icon: '🧠', label: 'Психология' },
-  { value: 'Интернет и связь', icon: '📡', label: 'Интернет' },
-  { value: 'Фото и видео', icon: '📷', label: 'Фото/Видео' },
-  { value: 'Музыка', icon: '🎵', label: 'Музыка' },
-  { value: 'Искусство', icon: '🎨', label: 'Искусство' },
-  { value: 'Спорт', icon: '⚽', label: 'Спорт' },
-  { value: 'Путешествия', icon: '✈️', label: 'Путешествия' },
-  { value: 'Питомцы', icon: '🐾', label: 'Питомцы' },
-  { value: 'Бытовая техника', icon: '🔌', label: 'Техника' },
-  { value: 'Одежда и обувь', icon: '👕', label: 'Одежда' },
-  { value: 'Продукты', icon: '🥬', label: 'Продукты' },
-  { value: 'Аптека', icon: '💉', label: 'Аптека' },
-  { value: 'Банковские услуги', icon: '💳', label: 'Банки' },
-  { value: 'Страхование', icon: '🛡️', label: 'Страхование' },
-  { value: 'Недвижимость', icon: '🏢', label: 'Недвижимость' },
-  { value: 'Другое', icon: '✨', label: 'Другое' },
-];
+const CATEGORY_ICONS: Record<string, React.ElementType> = {
+  'Дрова': Axe,
+  'Уборка': Trash2,
+  'Ремонт': Wrench,
+  'Доставка': Truck,
+  'Покупки': ShoppingCart,
+  'Готовка': ChefHat,
+  'Садоводство': Flower2,
+  'Перевозка': Car,
+  'Уход за животными': Dog,
+  'Помощь с детьми': Baby,
+  'Компьютерная помощь': Laptop,
+  'Стрижка': Scissors,
+  'Медицинская помощь': Pill,
+  'Юридическая консультация': Scale,
+  'Обучение': BookOpen,
+  'Репетитор': GraduationCap,
+  'Транспорт': CarFront,
+  'Строительство': Home,
+  'Клининг': Sparkles,
+  'Курьер': Package,
+  'Волонтёрство': Heart,
+  'Психологическая помощь': Brain,
+  'Интернет и связь': Wifi,
+  'Фото и видео': Camera,
+  'Музыка': Music,
+  'Искусство': Palette,
+  'Спорт': Trophy,
+  'Путешествия': Plane,
+  'Питомцы': Bird,
+  'Бытовая техника': Plug,
+  'Одежда и обувь': Shirt,
+  'Продукты': Apple,
+  'Аптека': Syringe,
+  'Банковские услуги': CreditCard,
+  'Страхование': Shield,
+  'Недвижимость': Building,
+  'Другое': Star,
+};
+
+const CATEGORIES = Object.keys(CATEGORY_ICONS).map(value => ({
+  value,
+  label: value,
+}));
 
 export const CreatePostPage = () => {
   const [title, setTitle] = useState('');
@@ -124,12 +137,12 @@ export const CreatePostPage = () => {
     <div style={styles.container}>
       <Link to="/" style={styles.backLink}>← На главную</Link>
       <h1 className="page-title" style={styles.title}>Создать пост</h1>
-      {error && <div style={styles.errorBox}><span>⚠️</span> {error}</div>}
+      {error && <div style={styles.errorBox}><AlertTriangle size={18} color="#fca5a5" /> {error}</div>}
       <Card>
         <form onSubmit={handleSubmit}>
           <div style={styles.field}>
             <label style={styles.label}>
-              <span style={styles.labelIcon}>📝</span> Заголовок
+              <FileText size={18} style={styles.labelIcon as React.CSSProperties} /> Заголовок
             </label>
             <input
               type="text"
@@ -145,7 +158,7 @@ export const CreatePostPage = () => {
           </div>
           <div style={styles.field}>
             <label style={styles.label}>
-              <span style={styles.labelIcon}>📄</span> Описание
+              <FileText size={18} style={styles.labelIcon as React.CSSProperties} /> Описание
             </label>
             <textarea
               value={description}
@@ -161,23 +174,26 @@ export const CreatePostPage = () => {
           </div>
           <div style={styles.field}>
             <label style={styles.label}>
-              <span style={styles.labelIcon}>🏷️</span> Категория
+              <Sparkles size={18} style={styles.labelIcon as React.CSSProperties} /> Категория
             </label>
             <select
               value={category}
               onChange={(e) => setCategory(e.target.value)}
               style={styles.select}
             >
-              {CATEGORIES.map((cat) => (
-                <option key={cat.value} value={cat.value}>
-                  {cat.icon} {cat.label}
-                </option>
-              ))}
+              {CATEGORIES.map((cat) => {
+                const IconComponent = CATEGORY_ICONS[cat.value];
+                return (
+                  <option key={cat.value} value={cat.value}>
+                    {cat.label}
+                  </option>
+                );
+              })}
             </select>
           </div>
           <div style={styles.field}>
             <label style={styles.label}>
-              <span style={styles.labelIcon}>📷</span> Картинки
+              <Image size={18} style={styles.labelIcon as React.CSSProperties} /> Картинки
             </label>
             <div 
               style={styles.uploadArea}
@@ -192,7 +208,7 @@ export const CreatePostPage = () => {
                 style={{ display: 'none' }}
               />
               <div style={styles.uploadContent}>
-                <span style={styles.uploadIcon}>📁</span>
+                <FolderOpen size={40} color={theme.colors.accent} style={{ marginBottom: 8 }} />
                 <span style={styles.uploadText}>Нажмите или перетащите изображения</span>
                 <span style={styles.uploadHint}>PNG, JPG до 10MB</span>
               </div>
@@ -215,7 +231,11 @@ export const CreatePostPage = () => {
             )}
           </div>
           <Button type="submit" disabled={loading} style={styles.submitBtn}>
-            {loading ? '⏳ Создание...' : '✨ Создать пост'}
+            {loading ? (
+              <><Loader2 size={18} style={{ marginRight: 8, animation: 'spin 1s linear infinite' }} /> Создание...</>
+            ) : (
+              <><Send size={18} style={{ marginRight: 8 }} /> Создать пост</>
+            )}
           </Button>
         </form>
       </Card>
@@ -266,7 +286,6 @@ const styles: Record<string, React.CSSProperties> = {
   },
   labelIcon: {
     marginRight: '8px',
-    fontSize: '16px',
   },
   input: {
     width: '100%',
@@ -347,10 +366,6 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     alignItems: 'center',
     gap: '8px',
-  },
-  uploadIcon: {
-    fontSize: '40px',
-    marginBottom: '8px',
   },
   uploadText: {
     color: theme.colors.text,

@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { chatApi } from '../api/chatApi';
 import { authApi } from '../api/authApi';
 import { theme } from '../theme';
+import { Map, GitBranch, Trophy, ClipboardList, User, Star, Package, MessageCircle, AlertTriangle, Ban } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
   const { user, logout } = useAuth();
@@ -128,17 +129,17 @@ export const Navbar: React.FC = () => {
             {(openDropdown === 'community' || !user) && (
               <div style={styles.dropdown}>
                 <Link to="/map" style={styles.dropdownItem} onClick={closeDropdown}>
-                  🗺️ Карта
+                  <Map size={16} style={{marginRight: 8}} /> Карта
                 </Link>
                 <Link to="/graph" style={styles.dropdownItem} onClick={closeDropdown}>
-                  🌳 Граф помощи
+                  <GitBranch size={16} style={{marginRight: 8}} /> Граф помощи
                 </Link>
                 <Link to="/achievements" style={styles.dropdownItem} onClick={closeDropdown}>
-                  🏆 Достижения
+                  <Trophy size={16} style={{marginRight: 8}} /> Достижения
                 </Link>
                 {user && (
                   <Link to="/activity" style={styles.dropdownItem} onClick={closeDropdown}>
-                    📋 Активность
+                    <ClipboardList size={16} style={{marginRight: 8}} /> Активность
                   </Link>
                 )}
               </div>
@@ -153,21 +154,21 @@ export const Navbar: React.FC = () => {
                   onClick={() => toggleDropdown('profile')}
                   onMouseEnter={() => setOpenDropdown('profile')}
                 >
-                  👤 Профиль ▾
+                  <User size={16} style={{ marginRight: 6 }} /> Профиль ▾
                 </button>
                 {openDropdown === 'profile' && (
                   <div style={styles.dropdown}>
                     <Link to="/profile" style={styles.dropdownItem} onClick={closeDropdown}>
-                      👤 Мой профиль
+                      <User size={16} style={{marginRight: 8}} /> Мой профиль
                     </Link>
                     <Link to="/favorites" style={styles.dropdownItem} onClick={closeDropdown}>
-                      ⭐ Избранное
+                      <Star size={16} style={{marginRight: 8}} /> Избранное
                     </Link>
                     <Link to="/my-orders" style={styles.dropdownItem} onClick={closeDropdown}>
-                      📦 Мои заказы
+                      <Package size={16} style={{marginRight: 8}} /> Мои заказы
                     </Link>
                     <Link to="/chats" style={styles.dropdownItem} onClick={closeDropdown}>
-                      💬 Чаты
+                      <MessageCircle size={16} style={{marginRight: 8}} /> Чаты
                       {unreadChats > 0 && <span style={styles.dropdownBadge}>{unreadChats}</span>}
                     </Link>
                   </div>
@@ -186,7 +187,7 @@ export const Navbar: React.FC = () => {
       </div>
       {isBlocked && (
         <div style={styles.blockedBanner}>
-          🚫 Ваш аккаунт заблокирован за долг. Помогите другим пользователям, чтобы разблокировать аккаунт.
+          <Ban size={16} style={{ marginRight: 6 }} /> Ваш аккаунт заблокирован за долг. Помогите другим пользователям, чтобы разблокировать аккаунт.
           {daysUntilBlock !== null && daysUntilBlock > 0 && (
             daysUntilBlock >= 24 
               ? ` Осталось ${Math.floor(daysUntilBlock / 24)} дней и ${Math.floor(daysUntilBlock % 24)} часов.`
@@ -197,7 +198,7 @@ export const Navbar: React.FC = () => {
       )}
       {debtWarning && debtWarning > 2 && !isBlocked && (
         <div style={styles.warningBanner}>
-          ⚠️ Внимание! Ваш долг: {debtWarning}. Помогите {debtWarning - 2} людям, чтобы избежать блокировки.
+          <AlertTriangle size={16} style={{marginRight: 8}} /> Внимание! Ваш долг: {debtWarning}. Помогите {debtWarning - 2} людям, чтобы избежать блокировки.
         </div>
       )}
     </nav>

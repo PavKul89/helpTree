@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
+import { TreeDeciduous, BarChart3 } from 'lucide-react';
 import { helpApi, HelpStats } from '../api/helpApi';
 import { authApi } from '../api/authApi';
 import { Spinner, Avatar } from '../components';
@@ -126,7 +127,7 @@ export const HelpGraphPage = () => {
         <Link to="/" style={styles.backLink}>← На главную</Link>
         <h1 className="page-title" style={styles.title}>Граф помощи</h1>
         <div style={styles.emptyState}>
-          <div style={styles.emptyIcon}>🌳</div>
+          <TreeDeciduous size={64} color={theme.colors.accent} style={styles.emptyIcon as React.CSSProperties} />
           <h2>Пока нет связей помощи</h2>
           <p>Когда пользователи будут помогать друг другу, цепочки появятся здесь.</p>
           <Link to="/">
@@ -470,7 +471,7 @@ export const HelpGraphPage = () => {
     <div style={styles.container} onClick={() => { setSelectedNode(null); setHighlightedPath([]); }}>
       <div style={styles.header}>
         <Link to="/" style={styles.backLink}>← На главную</Link>
-        <h1 className="page-title" style={styles.title}>🌳 Граф помощи</h1>
+        <h1 className="page-title" style={styles.title}>Граф помощи</h1>
       </div>
       
       <div style={styles.stats}>
@@ -486,7 +487,8 @@ export const HelpGraphPage = () => {
           style={showStats ? {...styles.statsToggle, ...styles.statsToggleActive} : styles.statsToggle}
           onClick={() => setShowStats(!showStats)}
         >
-          📊 Статистика
+          <BarChart3 size={16} style={{ marginRight: 6 }} />
+          Статистика
         </button>
       </div>
 
@@ -713,7 +715,6 @@ const styles: Record<string, React.CSSProperties> = {
     color: theme.colors.text,
   },
   emptyIcon: {
-    fontSize: '64px',
     marginBottom: '16px',
   },
   btn: {

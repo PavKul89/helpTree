@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
+import { Star, Camera, Trophy, Sprout, HandHeart, Crown, Zap, Clock, Sun, MessageSquare, MessageCircle, FileText, Shield, Scale3D, Gem, Egg, Ghost, PartyPopper, Snowflake } from 'lucide-react';
 import { authApi } from '../api/authApi';
 import { chatApi } from '../api/chatApi';
 import { postsApi } from '../api/postsApi';
@@ -12,6 +13,31 @@ import { useToast } from '../components/Toast';
 import { theme } from '../theme';
 import type { User, UserPublic, Post } from '../types';
 import { geocodeCity } from '../utils/geocoding';
+
+const ACHIEVEMENT_ICONS: Record<string, React.ElementType> = {
+  SEEDLING: Sprout,
+  FIRST_HELP: HandHeart,
+  HELPER_5: HandHeart,
+  HELPER_10: HandHeart,
+  HELPER_25: HandHeart,
+  HELPER_50: HandHeart,
+  HELPER_100: Crown,
+  FAST_HELP: Zap,
+  NIGHT_OWL: Clock,
+  WEEKEND_HERO: Sun,
+  FIRST_CHAT: MessageSquare,
+  CHATTER_10: MessageCircle,
+  FIRST_POST: FileText,
+  POSTER_10: FileText,
+  DEBT_FREE: Shield,
+  BALANCED: Scale3D,
+  REPUTATION_5: Star,
+  NEW_YEAR_WIZARD: Gem,
+  EASTER_BUNNY: Egg,
+  HALLOWEEN_HERO: Ghost,
+  BIRTHDAY_HERO: PartyPopper,
+  WINTER_HELPER: Snowflake,
+};
 
 export const ProfilePage = () => {
   const { userId } = useParams<{ userId?: string }>();
@@ -109,7 +135,7 @@ export const ProfilePage = () => {
                 const lastSeen = new Date(lastSeenDate);
                 const latest = new Date(latestAchievement.earnedAt);
                 if (latest > lastSeen) {
-                  showToast(`🎉 Получено достижение: ${latestAchievement.name}!`, 'success');
+                  showToast(`Получено достижение: ${latestAchievement.name}!`, 'success');
                 }
               }
               localStorage.setItem(lastSeenKey, latestAchievement.earnedAt);
@@ -257,7 +283,7 @@ export const ProfilePage = () => {
           )}
           {isOwnProfile && (
             <div style={styles.avatarOverlay}>
-              {uploadingAvatar ? '...' : '📷'}
+              {uploadingAvatar ? '...' : <Camera size={20} color="#fff" />}
             </div>
           )}
         </div>
@@ -273,13 +299,12 @@ export const ProfilePage = () => {
             {isAdmin && <span style={styles.adminBadge}>Администратор</span>}
             <div style={styles.metaRow}>
               <span style={styles.metaItem}>
-                <span style={styles.metaIcon}>★</span>
+                <Star size={14} color={theme.colors.accent} fill={theme.colors.accent} />
                 <span style={styles.metaValue}>{profileUser.rating.toFixed(1)}</span>
                 <span style={styles.metaLabel}>рейтинг</span>
               </span>
               {'createdAt' in fullUser && (
                 <span style={styles.metaItem}>
-                  <span style={styles.metaIcon}>◷</span>
                   <span style={styles.metaValue}>{formatDate(fullUser.createdAt)}</span>
                   <span style={styles.metaLabel}>на сайте</span>
                 </span>
@@ -502,13 +527,15 @@ export const ProfilePage = () => {
           <div style={styles.content}>
             {achievements.length === 0 ? (
               <div style={styles.emptyState}>
-                <div style={styles.emptyIcon}>🏆</div>
+                <Trophy size={64} color={theme.colors.accent} style={styles.emptyIcon as React.CSSProperties} />
                 <div>Пока нет достижений</div>
                 <div style={styles.emptyHint}>Помогайте людям, чтобы получить первые достижения!</div>
               </div>
             ) : (
               <div style={styles.achievementsGrid}>
-                {achievements.map(achievement => (
+                {achievements.map(achievement => {
+                  const AchievementIcon = ACHIEVEMENT_ICONS[achievement.type] || Trophy;
+                  return (
                   <div 
                     key={achievement.type} 
                     style={{
@@ -516,7 +543,9 @@ export const ProfilePage = () => {
                       borderColor: getRarityColor(achievement.rarity),
                     }}
                   >
-                    <div style={styles.achievementEmoji}>{achievement.emoji}</div>
+                    <div style={{ ...styles.achievementIcon, color: getRarityColor(achievement.rarity) }}>
+                      <AchievementIcon size={40} />
+                    </div>
                     <div style={styles.achievementName}>{achievement.name}</div>
                     <div style={styles.achievementDesc}>{achievement.description}</div>
                     <div style={{
@@ -529,7 +558,8 @@ export const ProfilePage = () => {
                       {achievement.earnedAt && formatDate(achievement.earnedAt)}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -834,12 +864,9 @@ const styles: Record<string, React.CSSProperties> = {
     position: 'relative',
     overflow: 'hidden',
   },
-  achievementEmoji: {
-    fontSize: '48px',
-    marginBottom: '12px',
+  achievementIcon: {
+    marginBottom: '8px',
     display: 'block',
-    filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))',
-    transition: 'transform 0.3s ease',
   },
   achievementName: {
     color: theme.colors.text,
@@ -865,7 +892,6 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '11px',
   },
   emptyIcon: {
-    fontSize: '64px',
     marginBottom: '16px',
     opacity: 0.8,
   },

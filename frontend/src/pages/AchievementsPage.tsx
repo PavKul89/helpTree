@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Trophy, HandHeart, Zap, MessageCircle, Scale, PartyPopper, Sprout, Clock, Sun, MessageSquare, FileText, Scale3D, Star, Shield, Gem, Crown, Snowflake, Ghost, Egg } from 'lucide-react';
 import { achievementApi, Achievement } from '../api/achievementApi';
 import { useAuth } from '../context/AuthContext';
 import { Card } from '../components/Card';
@@ -13,12 +14,45 @@ interface AchievementWithProgress extends Achievement {
   targetValue: number;
 }
 
+const CATEGORY_ICONS: Record<string, React.ElementType> = {
+  help: HandHeart,
+  speed: Zap,
+  communication: MessageCircle,
+  debt: Scale,
+  holiday: PartyPopper,
+};
+
+const ACHIEVEMENT_ICONS: Record<string, React.ElementType> = {
+  SEEDLING: Sprout,
+  FIRST_HELP: HandHeart,
+  HELPER_5: HandHeart,
+  HELPER_10: HandHeart,
+  HELPER_25: HandHeart,
+  HELPER_50: HandHeart,
+  HELPER_100: Crown,
+  FAST_HELP: Zap,
+  NIGHT_OWL: Clock,
+  WEEKEND_HERO: Sun,
+  FIRST_CHAT: MessageSquare,
+  CHATTER_10: MessageCircle,
+  FIRST_POST: FileText,
+  POSTER_10: FileText,
+  DEBT_FREE: Shield,
+  BALANCED: Scale3D,
+  REPUTATION_5: Star,
+  NEW_YEAR_WIZARD: Gem,
+  EASTER_BUNNY: Egg,
+  HALLOWEEN_HERO: Ghost,
+  BIRTHDAY_HERO: PartyPopper,
+  WINTER_HELPER: Snowflake,
+};
+
 const CATEGORIES = {
-  help: { name: 'По количеству помощи', icon: '🤝' },
-  speed: { name: 'По скорости', icon: '⚡' },
-  communication: { name: 'По общению', icon: '💬' },
-  debt: { name: 'По долгам и рейтингу', icon: '⚖️' },
-  holiday: { name: 'Праздничные', icon: '🎉' },
+  help: { name: 'По количеству помощи' },
+  speed: { name: 'По скорости' },
+  communication: { name: 'По общению' },
+  debt: { name: 'По долгам и рейтингу' },
+  holiday: { name: 'Праздничные' },
 };
 
 const ACHIEVEMENT_CATEGORIES: Record<string, string[]> = {
@@ -94,7 +128,7 @@ export const AchievementsPage = () => {
 
       <Card style={styles.headerCard}>
         <div style={styles.headerContent}>
-          <div style={styles.trophyIcon}>🏆</div>
+          <Trophy size={64} color="#f59e0b" />
           <div style={styles.headerText}>
             <h1 style={styles.title}>Достижения</h1>
             <p style={styles.subtitle}>
@@ -125,7 +159,10 @@ export const AchievementsPage = () => {
         return (
           <div key={key} style={styles.categorySection}>
             <div style={styles.categoryHeader}>
-              <span style={styles.categoryIcon}>{category.icon}</span>
+              {(() => {
+                const IconComponent = CATEGORY_ICONS[key as keyof typeof CATEGORY_ICONS];
+                return IconComponent ? <IconComponent size={24} color={theme.colors.accent} /> : null;
+              })()}
               <h2 style={styles.categoryTitle}>{category.name}</h2>
               <span style={styles.categoryProgress}>
                 {progress.earned}/{progress.total}
@@ -133,7 +170,9 @@ export const AchievementsPage = () => {
             </div>
             
             <div style={styles.achievementsGrid}>
-              {achievements.map(achievement => (
+              {achievements.map(achievement => {
+                const AchievementIcon = ACHIEVEMENT_ICONS[achievement.type] || Trophy;
+                return (
                 <div
                   key={achievement.type}
                   style={{
@@ -146,10 +185,11 @@ export const AchievementsPage = () => {
                   }}
                 >
                   <div style={{
-                    ...styles.achievementEmoji,
+                    ...styles.achievementIcon,
                     transform: achievement.earned ? 'scale(1.1)' : 'scale(0.9)',
+                    color: getRarityColor(achievement.rarity),
                   }}>
-                    {achievement.emoji}
+                    <AchievementIcon size={48} />
                   </div>
                   <div style={styles.achievementName}>{achievement.name}</div>
                   <div style={styles.achievementDesc}>{achievement.description}</div>
@@ -183,7 +223,8 @@ export const AchievementsPage = () => {
                     </div>
                   )}
                 </div>
-              ))}
+              );
+              })}
             </div>
           </div>
         );
@@ -216,9 +257,6 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     gap: '24px',
     marginBottom: '20px',
-  },
-  trophyIcon: {
-    fontSize: '64px',
   },
   headerText: {
     flex: 1,
@@ -257,9 +295,6 @@ const styles: Record<string, React.CSSProperties> = {
     paddingBottom: '12px',
     borderBottom: `1px solid ${theme.colors.border}`,
   },
-  categoryIcon: {
-    fontSize: '24px',
-  },
   categoryTitle: {
     color: theme.colors.text,
     fontSize: '20px',
@@ -287,8 +322,7 @@ const styles: Record<string, React.CSSProperties> = {
     textAlign: 'center',
     transition: 'all 0.3s ease',
   },
-  achievementEmoji: {
-    fontSize: '40px',
+  achievementIcon: {
     marginBottom: '8px',
     display: 'block',
     transition: 'transform 0.3s ease',

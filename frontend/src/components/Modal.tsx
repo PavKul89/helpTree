@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Button } from './Button';
+import { AlertTriangle, Info } from 'lucide-react';
 
 interface ModalProps {
   isOpen: boolean;
@@ -75,7 +76,7 @@ export const Modal: React.FC<ModalProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         <div style={styles.icon}>
-          {variant === 'danger' ? '⚠️' : 'ℹ️'}
+          {variant === 'danger' ? <AlertTriangle size={48} /> : <Info size={48} />}
         </div>
         <h3 style={styles.title}>{title}</h3>
         <p style={styles.message}>{message}</p>

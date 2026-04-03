@@ -1,10 +1,19 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { ClipboardList, FileText, User, HandHeart, Gift, Plus, Trophy, Ban } from 'lucide-react';
 import { activityApi, Activity } from '../api/activityApi';
 import { useAuth } from '../context/AuthContext';
 import { Card } from '../components/Card';
 import { Spinner } from '../components/Spinner';
 import { theme } from '../theme';
+
+const ACTIVITY_ICONS: Record<string, React.ElementType> = {
+  'HELP_GIVEN': HandHeart,
+  'HELP_RECEIVED': Gift,
+  'POST_CREATED': Plus,
+  'ACHIEVEMENT_EARNED': Trophy,
+  'USER_BLOCKED': Ban,
+};
 
 export const ActivityPage = () => {
   const { userId } = useParams<{ userId?: string }>();
@@ -112,7 +121,7 @@ export const ActivityPage = () => {
         <div style={styles.content}>
           {activities.length === 0 ? (
             <div style={styles.emptyState}>
-              <div style={styles.emptyIcon}>📋</div>
+              <ClipboardList size={64} color={theme.colors.accent} style={styles.emptyIcon as React.CSSProperties} />
               <div>Пока нет активности</div>
               <div style={styles.emptyHint}>
                 Здесь будут отображаться ваши действия: помощь другим, полученная помощь, созданные запросы и достижения.
@@ -127,7 +136,10 @@ export const ActivityPage = () => {
                       ...styles.timelineDot,
                       backgroundColor: getActivityColor(activity.type),
                     }}>
-                      {activity.emoji}
+                      {(() => {
+                        const IconComp = ACTIVITY_ICONS[activity.type];
+                        return IconComp ? <IconComp size={18} color="#fff" /> : <Trophy size={18} color="#fff" />;
+                      })()}
                     </div>
                     {index < activities.length - 1 && <div style={styles.timelineConnector} />}
                   </div>
@@ -159,7 +171,8 @@ export const ActivityPage = () => {
                           to={`/posts/${activity.relatedPostId}`}
                           style={styles.metaLink}
                         >
-                          📝 {activity.relatedPostTitle}
+                          <FileText size={14} style={{ marginRight: 4 }} />
+                          {activity.relatedPostTitle}
                         </Link>
                       )}
                       
@@ -168,7 +181,8 @@ export const ActivityPage = () => {
                           to={`/profile/${activity.relatedUserId}`}
                           style={styles.metaLink}
                         >
-                          👤 {activity.relatedUserName}
+                          <User size={14} style={{ marginRight: 4 }} />
+                          {activity.relatedUserName}
                         </Link>
                       )}
                       
@@ -235,7 +249,6 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '15px',
   },
   emptyIcon: {
-    fontSize: '64px',
     marginBottom: '16px',
     opacity: 0.8,
   },

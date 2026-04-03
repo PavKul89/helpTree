@@ -16,6 +16,7 @@ import { Modal } from '../components/Modal';
 import { Avatar } from '../components/Avatar';
 import { PostDetailSkeleton } from '../components/Skeleton';
 import { theme } from '../theme';
+import { MapPin, Star, MessageCircle, Ban } from 'lucide-react';
 
 export const PostDetailPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -336,7 +337,7 @@ export const PostDetailPage = () => {
               }}
               style={styles.actionButton}
             >
-              💬 Написать
+              <MessageCircle size={16} style={{marginRight: 6}} /> Написать
             </Button>
           )}
           
@@ -383,8 +384,8 @@ export const PostDetailPage = () => {
           <div style={styles.authorInfo}>
             <div style={styles.authorName}>{post.authorName}</div>
             <div style={styles.authorMeta}>
-              {post.userCity && <span>📍 {post.userCity}</span>}
-              <span>⭐ {post.authorRating ? post.authorRating.toFixed(1) : '0.0'}</span>
+              {post.userCity && <span><MapPin size={14} style={{marginRight: 4}} />{post.userCity}</span>}
+              <span><Star size={14} style={{marginRight: 4}} />{post.authorRating ? post.authorRating.toFixed(1) : '0.0'}</span>
             </div>
           </div>
         </div>
@@ -435,7 +436,7 @@ export const PostDetailPage = () => {
 
       {!canOfferHelp && user && !isAuthor && post.status === 'OPEN' && isAuthorBlocked && (
         <div style={{ ...styles.errorBanner, marginBottom: 20 }}>
-          🚫 Автор поста заблокирован за долг. Невозможно откликнуться на пост.
+          <Ban size={18} style={{ marginRight: 8, verticalAlign: 'middle' }} /> Автор поста заблокирован за долг. Невозможно откликнуться на пост.
         </div>
       )}
 

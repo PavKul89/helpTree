@@ -1,5 +1,6 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { MessageCircle, Send } from 'lucide-react';
 import { chatApi } from '../api/chatApi';
 import { authApi } from '../api/authApi';
 import type { Message, User } from '../types';
@@ -116,7 +117,7 @@ export const ChatPage = () => {
         <div style={styles.messagesContainer}>
           {messages.length === 0 ? (
             <div style={styles.empty}>
-              <div style={styles.emptyIcon}>💬</div>
+              <MessageCircle size={48} color={theme.colors.accent} style={{ marginBottom: 12, opacity: 0.6 }} />
               <div>Начните общение!</div>
               <div style={styles.emptyHint}>Отправьте первое сообщение</div>
             </div>
@@ -187,7 +188,7 @@ export const ChatPage = () => {
             disabled={!newMessage.trim() || sending}
             style={sending ? styles.sendBtnDisabled : undefined}
           >
-            {sending ? '...' : '➤'}
+            {sending ? '...' : <Send size={18} />}
           </Button>
         </div>
       </Card>
@@ -240,11 +241,6 @@ const styles: Record<string, React.CSSProperties> = {
     textAlign: 'center',
     color: theme.colors.textMuted,
     padding: '60px 40px',
-  },
-  emptyIcon: {
-    fontSize: '48px',
-    marginBottom: '12px',
-    opacity: 0.6,
   },
   emptyHint: {
     fontSize: '13px',
