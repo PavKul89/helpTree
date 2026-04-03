@@ -29,4 +29,7 @@ public interface PostRepository extends JpaRepository<Post, Long>, JpaSpecificat
 
     @Query("SELECT p FROM Post p LEFT JOIN FETCH p.user LEFT JOIN FETCH p.helper WHERE p.deleted = false OR p.deleted IS NULL")
     List<Post> findAllNotDeleted();
+
+    @Query("SELECT COUNT(p) FROM Post p WHERE p.status = :status AND (p.deleted = false OR p.deleted IS NULL)")
+    long countByStatus(@Param("status") PostStatus status);
 }

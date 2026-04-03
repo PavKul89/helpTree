@@ -28,6 +28,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/comments/**").permitAll()
                 .requestMatchers("/api/achievements/**").permitAll()
                 .requestMatchers("/api/helps/stats").permitAll()
+                .requestMatchers("/api/stats/**").permitAll()
                 .requestMatchers("/internal/**").permitAll()
                 .requestMatchers("/actuator/**").permitAll()
                 .anyRequest().authenticated()

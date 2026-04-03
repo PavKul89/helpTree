@@ -1,5 +1,6 @@
 import React from 'react';
 import { theme } from '../theme';
+import { Footer } from './Footer';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -10,6 +11,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     <div style={styles.container}>
       <div style={styles.overlay}>
         {children}
+        <Footer />
       </div>
     </div>
   );
@@ -31,5 +33,7 @@ const styles: Record<string, React.CSSProperties> = {
   overlay: {
     background: 'rgba(0, 0, 0, 0.3)',
     minHeight: '100vh',
+    display: 'flex',
+    flexDirection: 'column',
   },
 };
