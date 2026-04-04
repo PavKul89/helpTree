@@ -138,6 +138,8 @@ export const PostsPage = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [searchInput, setSearchInput] = useState('');
+  const [authorSearch, setAuthorSearch] = useState('');
+  const [authorInput, setAuthorInput] = useState('');
   const [category, setCategory] = useState('Все');
   const [status, setStatus] = useState('Все');
   const [city, setCity] = useState('');
@@ -161,6 +163,7 @@ export const PostsPage = () => {
       const searchToUse = searchTerm !== undefined ? searchTerm : search;
       const params: any = { page: pageNum, size: 10 };
       if (searchToUse) params.title = searchToUse;
+      if (authorSearch) params.authorName = authorSearch;
       if (category !== 'Все') params.category = category;
       if (status !== 'Все') params.status = status;
       if (city) params.city = city;
@@ -173,11 +176,13 @@ export const PostsPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [search, category, status, city]);
+  }, [search, authorSearch, category, status, city]);
 
   useEffect(() => {
     setSearch('');
     setSearchInput('');
+    setAuthorSearch('');
+    setAuthorInput('');
     setCategory('Все');
     setStatus('Все');
     setCity('');
@@ -352,16 +357,33 @@ export const PostsPage = () => {
 
         <div style={styles.filters}>
           <div style={styles.searchContainer}>
-            <div style={styles.searchForm}>
+            <div style={{...styles.searchForm, display: 'flex', gap: '8px', flexWrap: 'wrap'}}>
               <input
                 type="text"
-                placeholder="Поиск постов..."
+                placeholder="Поиск по названию..."
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                 style={styles.searchInput}
               />
-              <Button onClick={handleSearch} style={styles.searchBtn}>
+              <input
+                type="text"
+                placeholder="Поиск по автору..."
+                value={authorInput}
+                onChange={(e) => setAuthorInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    setAuthorSearch(authorInput);
+                    loadPosts(0, search);
+                  }
+                }}
+                style={styles.searchInput}
+              />
+              <Button onClick={() => {
+                handleSearch();
+                setAuthorSearch(authorInput);
+                loadPosts(0, search);
+              }} style={styles.searchBtn}>
                 <Search size={16} />
               </Button>
             </div>
