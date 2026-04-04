@@ -112,7 +112,7 @@ export const Navbar: React.FC = () => {
             <circle cx="62" cy="48" r="16" fill="#10b981" opacity="0.8"/>
             <circle cx="50" cy="28" r="16" fill="#34d399" opacity="0.7"/>
           </svg>
-          <span style={styles.logoText}>Древо Помощи</span>
+          <span style={styles.logoText}>helpTree</span>
         </div>
 
         <div style={styles.links} ref={dropdownRef}>

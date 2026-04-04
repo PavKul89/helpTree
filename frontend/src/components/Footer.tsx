@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { TreeDeciduous, Users, Heart, FileText, Loader2 } from 'lucide-react';
+import { statsApi } from '../api/statsApi';
 import { theme } from '../theme';
 import './Footer.css';
 
@@ -16,18 +17,21 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Мои заказы', path: '/my-orders' },
 ];
 
+interface Stats {
+  totalUsers: number;
+  totalHelps: number;
+  activePosts: number;
+}
+
 export const Footer: React.FC = () => {
-  const [stats, setStats] = useState<{ totalUsers: number; totalHelps: number; activePosts: number } | null>(null);
+  const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const loadStats = async () => {
       try {
-        const response = await fetch('http://localhost:8080/api/stats');
-        if (response.ok) {
-          const data = await response.json();
-          setStats(data);
-        }
+        const data = await statsApi.getStats();
+        setStats(data);
       } catch (err) {
         console.error('Error loading stats:', err);
       } finally {

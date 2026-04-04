@@ -1,23 +1,51 @@
 import React, { useState } from 'react';
 import { theme } from '../theme';
+import './Button.css';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'outline' | 'danger';
   children: React.ReactNode;
 }
 
+interface Ripple {
+  x: number;
+  y: number;
+  id: number;
+}
+
 export const Button: React.FC<ButtonProps> = ({ 
   variant = 'primary', 
   children, 
   style,
+  onClick,
   ...props 
 }) => {
   const [isHovered, setIsHovered] = useState(false);
+  const [ripples, setRipples] = useState<Ripple[]>([]);
   
   const variantStyles = getVariantStyles(variant, isHovered);
   
+  const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    const button = e.currentTarget;
+    const rect = button.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const id = Date.now();
+    
+    setRipples([...ripples, { x, y, id }]);
+    
+    setTimeout(() => {
+      setRipples(prev => prev.filter(r => r.id !== id));
+    }, 600);
+    
+    if (onClick) {
+      onClick(e);
+    }
+  };
+  
   return (
     <button 
+      className={`ripple-button ripple-${variant}`}
       style={{ 
         ...styles.button, 
         ...variantStyles,
@@ -25,9 +53,17 @@ export const Button: React.FC<ButtonProps> = ({
       }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      onClick={handleClick}
       {...props}
     >
       {children}
+      {ripples.map(ripple => (
+        <span 
+          key={ripple.id}
+          className="ripple-effect"
+          style={{ left: ripple.x, top: ripple.y }}
+        />
+      ))}
     </button>
   );
 };
@@ -73,5 +109,7 @@ const styles: Record<string, React.CSSProperties> = {
     transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
     border: 'none',
     outline: 'none',
+    position: 'relative',
+    overflow: 'hidden',
   },
 };

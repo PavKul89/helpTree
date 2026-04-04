@@ -1,17 +1,21 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Circle } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { MapPin, Map as MapIcon, User, Clock } from 'lucide-react';
+import { MapPin, Navigation, Target, X, ChevronRight, Clock, Filter } from 'lucide-react';
 import { postsApi } from '../api/postsApi';
 import { authApi } from '../api/authApi';
 import { useAuth } from '../context/AuthContext';
 import type { Post } from '../types';
-import { Card, Button, Spinner } from '../components';
+import { Button, Spinner } from '../components';
 import { theme } from '../theme';
 import { getRelativeTime } from '../utils/dateUtils';
 import { geocodeCity } from '../utils/geocoding';
+
+interface PostWithDistance extends Post {
+  distance?: number;
+}
 
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -20,32 +24,46 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
-const CATEGORY_ICONS: Record<string, string> = {
-  'Дрова': 'DRW', 'Уборка': 'UBN', 'Ремонт': 'RMT', 'Доставка': 'DST',
-  'Покупки': 'PKP', 'Готовка': 'GTK', 'Садоводство': 'SDV', 'Перевозка': 'PRV',
-  'Уход за животными': 'JIV', 'Помощь с детьми': 'DTI', 'Компьютерная помощь': 'KMP',
-  'Стрижка': 'STR', 'Медицинская помощь': 'MDC', 'Юридическая консультация': 'YUR',
-  'Обучение': 'OBU', 'Репетитор': 'RPT', 'Транспорт': 'TRN', 'Строительство': 'STR',
-  'Электрика': 'ELK', 'Сантехника': 'SNK', 'Погрузка/Разгрузка': 'PGR',
+const CATEGORY_COLORS: Record<string, string> = {
+  'Дрова': '#f59e0b',
+  'Уборка': '#8b5cf6',
+  'Ремонт': '#ef4444',
+  'Доставка': '#3b82f6',
+  'Покупки': '#10b981',
+  'Готовка': '#f97316',
+  'Садоводство': '#22c55e',
+  'Перевозка': '#6366f1',
+  'Уход за животными': '#ec4899',
+  'Помощь с детьми': '#14b8a6',
+  'Компьютерная помощь': '#06b6d4',
+  'Стрижка': '#a855f7',
+  'Медицинская помощь': '#ef4444',
+  'Юридическая консультация': '#3b82f6',
+  'Обучение': '#8b5cf6',
+  'Репетитор': '#14b8a6',
+  'Транспорт': '#f59e0b',
+  'Строительство': '#78716c',
+  'Электрика': '#fbbf24',
+  'Сантехника': '#38bdf8',
+  'Погрузка/Разгрузка': '#84cc16',
 };
 
-const getCategoryIcon = (category: string): string => CATEGORY_ICONS[category] || category.substring(0, 3).toUpperCase();
-
-const getStatusColor = (status: string): string => {
-  const colors: Record<string, string> = {
-    OPEN: '#10B981',
-    IN_PROGRESS: '#38bdf8',
-    COMPLETED: '#F59E0B',
-    CANCELLED: '#EF4444',
-  };
-  return colors[status] || '#6B7280';
-};
+const getCategoryColor = (category: string): string => CATEGORY_COLORS[category] || '#06b6d4';
 
 const createCustomIcon = (category: string, status: string, isSelected: boolean) => {
-  const icon = getCategoryIcon(category);
-  const statusColor = getStatusColor(status);
-  const size = isSelected ? 44 : 38;
-  const borderColor = isSelected ? '#22d3ee' : statusColor;
+  const color = getCategoryColor(category);
+  const size = isSelected ? 48 : 40;
+  
+  const statusDot = status === 'OPEN' ? '' : `<div style="
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    width: 14px;
+    height: 14px;
+    background: ${status === 'IN_PROGRESS' ? '#38bdf8' : status === 'COMPLETED' ? '#10b981' : '#6b7280'};
+    border-radius: 50%;
+    border: 2px solid #065f46;
+  "></div>`;
   
   return L.divIcon({
     className: 'custom-marker',
@@ -53,24 +71,27 @@ const createCustomIcon = (category: string, status: string, isSelected: boolean)
       <div style="
         width: ${size}px;
         height: ${size}px;
-        background: linear-gradient(135deg, ${statusColor}40 0%, ${statusColor}80 100%);
-        border: 3px solid ${borderColor};
-        border-radius: 50% 50% 50% 0;
-        transform: rotate(-45deg);
+        background: linear-gradient(135deg, ${color}40 0%, ${color}80 100%);
+        border: 3px solid ${isSelected ? '#22d3ee' : color};
+        border-radius: 50%;
         display: flex;
         align-items: center;
         justify-content: center;
-        box-shadow: 0 3px 8px rgba(0,0,0,0.3);
+        box-shadow: 0 4px 12px ${color}60, 0 0 20px ${color}30;
+        transition: all 0.2s ease;
+        ${isSelected ? 'transform: scale(1.2);' : ''}
       ">
         <span style="
-          transform: rotate(45deg);
-          font-size: ${isSelected ? '18px' : '14px'};
-        ">${icon}</span>
+          color: #fff;
+          font-size: ${isSelected ? '14px' : '12px'};
+          font-weight: 700;
+          text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+        ">${category.substring(0, 2)}</span>
       </div>
+      ${statusDot}
     `,
     iconSize: [size, size],
-    iconAnchor: [size / 2, size],
-    popupAnchor: [0, -size],
+    iconAnchor: [size / 2, size / 2],
   });
 };
 
@@ -78,8 +99,6 @@ const RADIUS_OPTIONS = [5, 10, 25, 50];
 
 const BELARUS_CITIES: Record<string, { lat: number; lng: number }> = {
   'гомель': { lat: 52.4415, lng: 30.9877 },
-  'гомельск': { lat: 52.4415, lng: 30.9877 },
-  'речица': { lat: 52.3567, lng: 30.4366 },
   'минск': { lat: 53.9045, lng: 27.5615 },
   'брест': { lat: 52.0976, lng: 23.6881 },
   'гродно': { lat: 53.6694, lng: 23.8131 },
@@ -94,58 +113,94 @@ const BELARUS_CITIES: Record<string, { lat: number; lng: number }> = {
   'светлогорск': { lat: 52.6333, lng: 29.9500 },
   'калинковичи': { lat: 52.2431, lng: 29.3317 },
   'жлобин': { lat: 52.8875, lng: 29.7325 },
-  'добруш': { lat: 52.4167, lng: 31.3167 },
-  'ветка': { lat: 52.3500, lng: 31.0833 },
-  'хойники': { lat: 51.8833, lng: 29.1667 },
+  'речица': { lat: 52.3567, lng: 30.4366 },
+};
+
+const getSimplifiedCity = (city: string): string => {
+  const parts = city.split(',').map(p => p.trim().toLowerCase());
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const part = parts[i].replace(/^г\.\s*/, '').replace(/^г\s*/, '');
+    if (part.length > 2) {
+      return part.charAt(0).toUpperCase() + part.slice(1);
+    }
+  }
+  return parts[0];
+};
+
+const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+};
+
+const tryGeocode = async (cityName: string): Promise<{ lat: number; lng: number } | null> => {
+  const lowerCity = cityName.toLowerCase();
+  for (const [key, coords] of Object.entries(BELARUS_CITIES)) {
+    if (lowerCity.includes(key)) {
+      return coords;
+    }
+  }
+  let coords = await geocodeCity(cityName);
+  if (coords) return coords;
+  const simplified = getSimplifiedCity(cityName);
+  if (simplified !== cityName) {
+    coords = await geocodeCity(simplified);
+    if (coords) return coords;
+  }
+  return null;
 };
 
 export const MapPage = () => {
   const { user } = useAuth();
-  const [posts, setPosts] = useState<Post[]>([]);
+  const [posts, setPosts] = useState<PostWithDistance[]>([]);
   const [loading, setLoading] = useState(true);
   const [radius, setRadius] = useState(10);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
-  const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  const [selectedPost, setSelectedPost] = useState<PostWithDistance | null>(null);
   const [userCity, setUserCity] = useState<string>('');
   const [geoLoading, setGeoLoading] = useState(false);
 
-  const getSimplifiedCity = (city: string): string => {
-    const parts = city.split(',').map(p => p.trim().toLowerCase());
-    for (let i = parts.length - 1; i >= 0; i--) {
-      const part = parts[i].replace(/^г\.\s*/, '').replace(/^г\s*/, '');
-      if (part.length > 2) {
-        return part.charAt(0).toUpperCase() + part.slice(1);
-      }
+  const loadPosts = useCallback(async () => {
+    if (!userLocation) return;
+    setLoading(true);
+    try {
+      let data = await postsApi.getMapPosts();
+      
+      const postsWithCoords = await Promise.all(
+        data.map(async (post) => {
+          if (!post.latitude || !post.longitude) {
+            if (post.userCity) {
+              const coords = await tryGeocode(post.userCity);
+              if (coords) {
+                return { ...post, latitude: coords.lat, longitude: coords.lng };
+              }
+            }
+          }
+          return post;
+        })
+      );
+      
+      const filteredPosts: PostWithDistance[] = postsWithCoords
+        .filter(p => p.latitude && p.longitude)
+        .map(p => ({
+          ...p,
+          distance: calculateDistance(userLocation.lat, userLocation.lng, p.latitude!, p.longitude!)
+        }))
+        .filter(p => p.distance <= radius);
+      
+      setPosts(filteredPosts);
+    } catch (err) {
+      console.error('Error loading posts:', err);
+    } finally {
+      setLoading(false);
     }
-    return parts[0];
-  };
-
-  const tryGeocode = async (cityName: string): Promise<{ lat: number; lng: number } | null> => {
-    const lowerCity = cityName.toLowerCase();
-    
-    for (const [key, coords] of Object.entries(BELARUS_CITIES)) {
-      if (lowerCity.includes(key)) {
-        return coords;
-      }
-    }
-    
-    let coords = await geocodeCity(cityName);
-    if (coords) return coords;
-    
-    const simplified = getSimplifiedCity(cityName);
-    if (simplified !== cityName) {
-      coords = await geocodeCity(simplified);
-      if (coords) return coords;
-      coords = await geocodeCity(simplified + ', Belarus');
-      if (coords) return coords;
-    }
-    
-    coords = await geocodeCity(cityName + ', Belarus');
-    if (coords) return coords;
-    
-    return null;
-  };
+  }, [userLocation, radius]);
 
   useEffect(() => {
     const loadUserData = async () => {
@@ -155,13 +210,13 @@ export const MapPage = () => {
           const userData = await authApi.getCurrentUser();
           if ('city' in userData && userData.city) {
             setUserCity(userData.city);
-            if (!userData.latitude || !userData.longitude) {
+            if (userData.latitude && userData.longitude) {
+              setUserLocation({ lat: userData.latitude, lng: userData.longitude });
+            } else {
               const coords = await tryGeocode(userData.city);
               if (coords) {
                 setUserLocation({ lat: coords.lat, lng: coords.lng });
               }
-            } else {
-              setUserLocation({ lat: userData.latitude, lng: userData.longitude });
             }
           }
         } catch (err) {
@@ -181,59 +236,7 @@ export const MapPage = () => {
       setLocationError('Для использования карты необходимо войти в систему');
       setLoading(false);
     }
-  }, [radius, userLocation]);
-
-  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
-    const R = 6371;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-              Math.sin(dLon/2) * Math.sin(dLon/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    return R * c;
-  };
-
-  const loadPosts = async () => {
-    if (!userLocation) return;
-    setLoading(true);
-    try {
-      let data = await postsApi.getMapPosts();
-      
-      const postsWithCoords = await Promise.all(
-        data.map(async (post) => {
-          if (!post.latitude || !post.longitude) {
-            if (post.userCity) {
-              const coords = await tryGeocode(post.userCity);
-              if (coords) {
-                return { ...post, latitude: coords.lat, longitude: coords.lng };
-              }
-              const simple = getSimplifiedCity(post.userCity);
-              const simpleCoords = await tryGeocode(simple);
-              if (simpleCoords) {
-                return { ...post, latitude: simpleCoords.lat, longitude: simpleCoords.lng };
-              }
-            }
-          }
-          return post;
-        })
-      );
-      
-      const filteredPosts = postsWithCoords
-        .filter(p => p.latitude && p.longitude)
-        .map(p => ({
-          ...p,
-          distance: calculateDistance(userLocation.lat, userLocation.lng, p.latitude!, p.longitude!)
-        }))
-        .filter(p => p.distance <= radius);
-      
-      setPosts(filteredPosts);
-    } catch (err) {
-      console.error('Error loading posts:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [radius, userLocation, loadPosts, user]);
 
   const handleUseMyLocation = () => {
     if (!navigator.geolocation) {
@@ -250,21 +253,11 @@ export const MapPage = () => {
         });
         setLocationError(null);
       },
-      (error) => {
+      () => {
         setLocationError('Не удалось определить местоположение');
         setLoading(false);
       }
     );
-  };
-
-  const getStatusColor = (status: string) => {
-    const colors: Record<string, string> = {
-      OPEN: '#10B981',
-      IN_PROGRESS: '#38bdf8',
-      COMPLETED: '#F59E0B',
-      CANCELLED: '#EF4444',
-    };
-    return colors[status] || '#6B7280';
   };
 
   const getStatusLabel = (status: string) => {
@@ -277,15 +270,29 @@ export const MapPage = () => {
     return labels[status] || status;
   };
 
+  const openPostsCount = posts.filter(p => p.status === 'OPEN').length;
+
   return (
     <div style={styles.container}>
+      {/* Header */}
       <div style={styles.header}>
-        <div>
-          <h1 style={styles.title}><MapIcon size={28} style={{marginRight: 10, verticalAlign: 'middle'}} /> Карта помощи</h1>
-          {userLocation && userCity && <p style={styles.subtitle}>Показываем посты рядом с {userCity}</p>}
+        <div style={styles.headerLeft}>
+          <div style={styles.headerIcon}>
+            <MapPin size={24} color={theme.colors.accent} />
+          </div>
+          <div>
+            <h1 style={styles.title}>Карта помощи</h1>
+            {userLocation && (
+              <p style={styles.subtitle}>
+                Найдено {posts.length} постов • {openPostsCount} открытых
+              </p>
+            )}
+          </div>
         </div>
+        
         <div style={styles.headerActions}>
           <div style={styles.radiusSelector}>
+            <Filter size={16} color={theme.colors.textMuted} />
             <span style={styles.radiusLabel}>Радиус:</span>
             {RADIUS_OPTIONS.map(r => (
               <button
@@ -300,32 +307,43 @@ export const MapPage = () => {
               </button>
             ))}
           </div>
-          {!userLocation && (
-            <Button onClick={handleUseMyLocation} style={styles.locationBtn}>
-              <MapPin size={16} style={{marginRight: 6}} /> Моё местоположение
-            </Button>
-          )}
+          
+          <Button onClick={handleUseMyLocation} style={styles.locationBtn}>
+            <Target size={16} />
+            <span>Моё местоположение</span>
+          </Button>
         </div>
       </div>
 
+      {/* Error Banner */}
       {locationError && (
-        <Card style={styles.errorCard}>
-          <p>{locationError}</p>
-          <Button onClick={handleUseMyLocation} style={styles.locationBtn}>
-            <MapPin size={16} style={{marginRight: 6}} /> Моё местоположение
-          </Button>
-        </Card>
+        <div style={styles.errorBanner}>
+          <div style={styles.errorIcon}>
+            <MapPin size={20} />
+          </div>
+          <div style={styles.errorContent}>
+            <div style={styles.errorTitle}>{locationError}</div>
+            <Button onClick={handleUseMyLocation} style={styles.errorBtn}>
+              <Navigation size={14} />
+              Использовать моё местоположение
+            </Button>
+          </div>
+        </div>
       )}
 
-      <div style={styles.mapContainer}>
+      {/* Map Container */}
+      <div style={styles.mapWrapper}>
         {loading || geoLoading ? (
-          <Spinner message={geoLoading ? "Определяем местоположение..." : "Загрузка карты..."} />
+          <div style={styles.loadingOverlay}>
+            <Spinner message={geoLoading ? "Определяем местоположение..." : "Загрузка карты..."} />
+          </div>
         ) : (
           <>
             <MapContainer 
               center={userLocation ? [userLocation.lat, userLocation.lng] : [52.4415, 30.9877]}
               zoom={radius > 25 ? 8 : radius > 10 ? 10 : 11}
               style={styles.map}
+              zoomControl={true}
             >
               <TileLayer
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
@@ -339,139 +357,102 @@ export const MapPage = () => {
                   pathOptions={{
                     color: '#06b6d4',
                     fillColor: '#06b6d4',
-                    fillOpacity: 0.1
+                    fillOpacity: 0.08,
+                    weight: 2,
                   }}
                 />
               )}
 
-              {(() => {
-                const userGroups = new Map<number, typeof posts>();
-                posts.filter(p => p.latitude && p.longitude).forEach(post => {
-                  const existing = userGroups.get(post.userId) || [];
-                  userGroups.set(post.userId, [...existing, post]);
-                });
-                
-                let groupIndex = 0;
-                return Array.from(userGroups.entries()).map(([userId, userPosts]) => {
-                  const mainPost = userPosts[0];
-                  const offset = (groupIndex % 6) * 0.003;
-                  const offsetY = Math.floor(groupIndex / 6) * 0.003;
-                  groupIndex++;
-                  
-                  const openCount = userPosts.filter(p => p.status === 'OPEN').length;
-                  const inProgressCount = userPosts.filter(p => p.status === 'IN_PROGRESS').length;
-                  
-                  return (
-                    <Marker 
-                      key={userId}
-                      position={[mainPost.latitude! + offsetY, mainPost.longitude! + offset]}
-                      icon={createCustomIcon(mainPost.category, mainPost.status, selectedPost?.userId === userId)}
-                      eventHandlers={{
-                        click: () => setSelectedPost(mainPost),
-                      }}
-                    >
-                      <Popup>
-                        <div style={{
-                          minWidth: '240px',
-                          background: '#065F46',
-                          borderRadius: '12px',
-                          padding: '12px',
-                        }}>
-                          <div style={{display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px'}}>
-                            <User size={28} color="#22d3ee" />
-                            <div>
-                              <strong style={{color: '#fff', fontSize: '16px', display: 'block'}}>{mainPost.authorName}</strong>
-                              <span style={{color: '#22d3ee', fontSize: '12px'}}><MapPin size={12} style={{verticalAlign: 'middle', marginRight: 4}} />{mainPost.userCity}</span>
-                            </div>
-                          </div>
-                          
-                          {(openCount > 0 || inProgressCount > 0) && (
-                            <div style={{display: 'flex', gap: '6px', marginBottom: '10px'}}>
-                              {openCount > 0 && (
-                                <span style={{
-                                  background: 'rgba(16, 185, 129, 0.2)',
-                                  border: '1px solid rgba(16, 185, 129, 0.5)',
-                                  color: '#34d399',
-                                  fontSize: '10px',
-                                  padding: '3px 8px',
-                                  borderRadius: '10px',
-                                  fontWeight: 600,
-                                }}>● {openCount} Открыто</span>
-                              )}
-                              {inProgressCount > 0 && (
-                                <span style={{
-                                  background: 'rgba(56, 189, 248, 0.2)',
-                                  border: '1px solid rgba(56, 189, 248, 0.5)',
-                                  color: '#38bdf8',
-                                  fontSize: '10px',
-                                  padding: '3px 8px',
-                                  borderRadius: '10px',
-                                  fontWeight: 600,
-                                }}>● {inProgressCount} В работе</span>
-                              )}
-                            </div>
-                          )}
-                          
-                          <div style={{borderTop: '1px solid rgba(255,255,255,0.15)', paddingTop: '10px', maxHeight: '150px', overflowY: 'auto'}}>
-                            {userPosts.map(p => (
-                              <div key={p.id} style={{marginBottom: '10px', padding: '8px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px'}}>
-                                <Link to={`/posts/${p.id}`} style={{color: '#fff', textDecoration: 'none', fontSize: '13px', display: 'block', marginBottom: '4px'}}>
-                                  {getCategoryIcon(p.category)} {p.title.length > 28 ? p.title.substring(0, 28) + '...' : p.title}
-                                </Link>
-                                <div style={{display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px'}}>
-                                  <span style={{color: '#22d3ee'}}>{p.category}</span>
-                                  <span style={{
-                                    color: getStatusColor(p.status),
-                                    background: `${getStatusColor(p.status)}20`,
-                                    padding: '2px 6px',
-                                    borderRadius: '6px',
-                                    fontSize: '10px',
-                                    fontWeight: 500,
-                                  }}>{getStatusLabel(p.status)}</span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </Popup>
-                    </Marker>
-                  );
-                });
-              })()}
+              {posts.filter(p => p.latitude && p.longitude).map((post: PostWithDistance) => (
+                <Marker 
+                  key={post.id}
+                  position={[post.latitude!, post.longitude!]}
+                  icon={createCustomIcon(post.category, post.status, selectedPost?.id === post.id)}
+                  eventHandlers={{
+                    click: () => setSelectedPost(post),
+                  }}
+                />
+              ))}
             </MapContainer>
 
+            {/* Selected Post Card */}
             {selectedPost && (
-              <Card style={styles.postCard}>
-                <div style={styles.postHeader}>
-                  <span style={{
-                    ...styles.statusDot,
-                    backgroundColor: getStatusColor(selectedPost.status)
-                  }} />
-                  <span>{getStatusLabel(selectedPost.status)}</span>
-                  <span style={styles.category}>{selectedPost.category}</span>
+              <div style={styles.postCard}>
+                <div style={styles.postCardHeader}>
+                  <div style={{
+                    ...styles.statusBadge,
+                    backgroundColor: getCategoryColor(selectedPost.category) + '30',
+                    color: getCategoryColor(selectedPost.category),
+                  }}>
+                    {selectedPost.category}
+                  </div>
+                  <button 
+                    style={styles.closeBtn}
+                    onClick={() => setSelectedPost(null)}
+                  >
+                    <X size={18} />
+                  </button>
                 </div>
+                
                 <h3 style={styles.postTitle}>{selectedPost.title}</h3>
-                <p style={styles.postDesc}>{selectedPost.description.substring(0, 100)}...</p>
+                
                 <div style={styles.postMeta}>
-                  <span><User size={14} style={{verticalAlign: 'middle', marginRight: 4}} />{selectedPost.authorName}</span>
-                  <span><MapPin size={14} style={{verticalAlign: 'middle', marginRight: 4}} />{selectedPost.userCity || 'Город не указан'}</span>
-                  <span><Clock size={14} style={{verticalAlign: 'middle', marginRight: 4}} />{getRelativeTime(selectedPost.createdAt)}</span>
+                  <div style={styles.metaItem}>
+                    <MapPin size={14} color={theme.colors.accentLight} />
+                    <span>{selectedPost.userCity || 'Город не указан'}</span>
+                  </div>
+                  <div style={styles.metaItem}>
+                    <Clock size={14} color={theme.colors.textMuted} />
+                    <span>{getRelativeTime(selectedPost.createdAt)}</span>
+                  </div>
+                  {selectedPost.distance && (
+                    <div style={styles.metaItem}>
+                      <Navigation size={14} color={theme.colors.primaryLight} />
+                      <span>{selectedPost.distance.toFixed(1)} км</span>
+                    </div>
+                  )}
                 </div>
-                <Link to={`/posts/${selectedPost.id}`}>
-                  <Button style={styles.viewBtn}>Смотреть пост</Button>
+
+                <div style={{
+                  ...styles.statusIndicator,
+                  backgroundColor: selectedPost.status === 'OPEN' ? '#10b98120' : 
+                                   selectedPost.status === 'IN_PROGRESS' ? '#38bdf820' : '#6b728020',
+                  color: selectedPost.status === 'OPEN' ? '#10b981' : 
+                         selectedPost.status === 'IN_PROGRESS' ? '#38bdf8' : '#6b7280',
+                }}>
+                  {getStatusLabel(selectedPost.status)}
+                </div>
+
+                <p style={styles.postDesc}>
+                  {selectedPost.description.substring(0, 120)}
+                  {selectedPost.description.length > 120 ? '...' : ''}
+                </p>
+
+                <Link to={`/posts/${selectedPost.id}`} style={styles.viewLink}>
+                  <Button style={styles.viewBtn}>
+                    Смотреть пост
+                    <ChevronRight size={16} />
+                  </Button>
                 </Link>
-              </Card>
+              </div>
+            )}
+
+            {/* Empty State */}
+            {posts.length === 0 && userLocation && (
+              <div style={styles.emptyState}>
+                <div style={styles.emptyIcon}>📍</div>
+                <h3 style={styles.emptyTitle}>Постов не найдено</h3>
+                <p style={styles.emptyText}>
+                  В радиусе {radius} км от {userCity || 'вашего местоположения'} нет открытых постов
+                </p>
+                <Button onClick={() => setRadius(50)} style={styles.radiusBtn}>
+                  Увеличить радиус до 50 км
+                </Button>
+              </div>
             )}
           </>
         )}
       </div>
-
-      {posts.length === 0 && !loading && userLocation && (
-        <Card style={styles.emptyCard}>
-          <p>В выбранном радиусе нет открытых постов о помощи</p>
-          <p>Попробуйте увеличить радиус поиска</p>
-        </Card>
-      )}
     </div>
   );
 };
@@ -479,29 +460,44 @@ export const MapPage = () => {
 const styles: Record<string, React.CSSProperties> = {
   container: {
     maxWidth: '100%',
-    padding: '24px',
-    height: 'calc(100vh - 120px)',
+    padding: '0 24px 24px',
     display: 'flex',
     flexDirection: 'column',
+    height: 'calc(100vh - 100px)',
   },
   header: {
     display: 'flex',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: '16px',
+    alignItems: 'center',
+    padding: '20px 0',
+    gap: '20px',
     flexWrap: 'wrap',
+  },
+  headerLeft: {
+    display: 'flex',
+    alignItems: 'center',
     gap: '16px',
+  },
+  headerIcon: {
+    width: '56px',
+    height: '56px',
+    borderRadius: '16px',
+    background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.2) 0%, rgba(6, 182, 212, 0.1) 100%)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   title: {
     color: theme.colors.text,
     fontSize: '24px',
     fontWeight: 700,
     margin: 0,
+    lineHeight: 1.2,
   },
   subtitle: {
     color: theme.colors.textMuted,
-    fontSize: '14px',
-    marginTop: '4px',
+    fontSize: '13px',
+    margin: '4px 0 0',
   },
   headerActions: {
     display: 'flex',
@@ -512,110 +508,198 @@ const styles: Record<string, React.CSSProperties> = {
   radiusSelector: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
+    gap: '10px',
+    background: 'rgba(255,255,255,0.05)',
+    padding: '8px 16px',
+    borderRadius: '12px',
   },
   radiusLabel: {
     color: theme.colors.textMuted,
-    fontSize: '14px',
+    fontSize: '13px',
   },
   radiusBtn: {
-    background: 'rgba(255,255,255,0.08)',
-    border: `1px solid ${theme.colors.border}`,
+    background: 'transparent',
+    border: 'none',
     borderRadius: '8px',
-    padding: '8px 14px',
+    padding: '6px 12px',
     color: theme.colors.textSecondary,
     fontSize: '13px',
+    fontWeight: 500,
     cursor: 'pointer',
     transition: 'all 0.2s',
   },
   radiusBtnActive: {
-    background: 'rgba(6, 182, 212, 0.2)',
-    border: `1px solid ${theme.colors.accent}`,
-    color: theme.colors.accentLight,
+    background: theme.colors.accent,
+    color: '#fff',
   },
   locationBtn: {
-    padding: '10px 16px',
-  },
-  errorCard: {
-    textAlign: 'center',
-    padding: '24px',
-    marginBottom: '16px',
-    color: theme.colors.textMuted,
-  },
-  mapContainer: {
-    flex: 1,
-    display: 'flex',
-    gap: '16px',
-    borderRadius: '16px',
-    overflow: 'hidden',
-    position: 'relative',
-    minHeight: '500px',
-  },
-  map: {
-    flex: 1,
-    height: '500px',
-    borderRadius: '16px',
-    zIndex: 1,
-  },
-  popupLink: {
-    color: theme.colors.accentLight,
-    textDecoration: 'none',
-    fontSize: '13px',
-    display: 'inline-block',
-    marginTop: '4px',
-  },
-  postCard: {
-    position: 'absolute',
-    bottom: '20px',
-    right: '20px',
-    width: '300px',
-    zIndex: 1000,
-    padding: '16px',
-  },
-  postHeader: {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
+  },
+  errorBanner: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '16px',
+    background: 'rgba(239, 68, 68, 0.1)',
+    border: '1px solid rgba(239, 68, 68, 0.3)',
+    borderRadius: '16px',
+    padding: '16px 20px',
+    marginBottom: '16px',
+  },
+  errorIcon: {
+    width: '44px',
+    height: '44px',
+    borderRadius: '12px',
+    background: 'rgba(239, 68, 68, 0.2)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: '#ef4444',
+  },
+  errorContent: {
+    flex: 1,
+  },
+  errorTitle: {
+    color: theme.colors.text,
+    fontSize: '14px',
     marginBottom: '8px',
+  },
+  errorBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    fontSize: '13px',
+    padding: '8px 16px',
+  },
+  mapWrapper: {
+    flex: 1,
+    borderRadius: '20px',
+    overflow: 'hidden',
+    position: 'relative',
+    minHeight: '400px',
+    boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    inset: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background: 'rgba(2, 44, 34, 0.9)',
+    zIndex: 1000,
+  },
+  map: {
+    width: '100%',
+    height: '100%',
+    minHeight: '400px',
+  },
+  postCard: {
+    position: 'absolute',
+    top: '20px',
+    right: '20px',
+    width: '340px',
+    background: 'linear-gradient(160deg, #065f46 0%, #0e7490 100%)',
+    borderRadius: '20px',
+    padding: '20px',
+    boxShadow: '0 12px 40px rgba(0,0,0,0.4)',
+    zIndex: 1000,
+  },
+  postCardHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '12px',
+  },
+  statusBadge: {
+    padding: '4px 12px',
+    borderRadius: '10px',
     fontSize: '12px',
+    fontWeight: 600,
+  },
+  closeBtn: {
+    background: 'rgba(255,255,255,0.1)',
+    border: 'none',
+    borderRadius: '8px',
+    width: '32px',
+    height: '32px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
     color: theme.colors.textMuted,
-  },
-  statusDot: {
-    width: '8px',
-    height: '8px',
-    borderRadius: '50%',
-  },
-  category: {
-    color: theme.colors.accentLight,
-    fontSize: '11px',
-    marginLeft: 'auto',
+    cursor: 'pointer',
   },
   postTitle: {
     color: theme.colors.text,
-    fontSize: '16px',
-    fontWeight: 600,
-    margin: '0 0 8px',
-  },
-  postDesc: {
-    color: theme.colors.textMuted,
-    fontSize: '13px',
+    fontSize: '18px',
+    fontWeight: 700,
     margin: '0 0 12px',
+    lineHeight: 1.3,
   },
   postMeta: {
     display: 'flex',
     flexWrap: 'wrap',
     gap: '12px',
-    fontSize: '12px',
-    color: theme.colors.textSecondary,
     marginBottom: '12px',
+  },
+  metaItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    color: theme.colors.textSecondary,
+    fontSize: '13px',
+  },
+  statusIndicator: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '6px 12px',
+    borderRadius: '8px',
+    fontSize: '13px',
+    fontWeight: 600,
+    marginBottom: '12px',
+  },
+  postDesc: {
+    color: theme.colors.textSecondary,
+    fontSize: '14px',
+    lineHeight: 1.5,
+    margin: '0 0 16px',
+  },
+  viewLink: {
+    textDecoration: 'none',
   },
   viewBtn: {
     width: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
   },
-  emptyCard: {
+  emptyState: {
+    position: 'absolute',
+    bottom: '20px',
+    left: '50%',
+    transform: 'translateX(-50%)',
+    background: 'linear-gradient(160deg, #065f46 0%, #0e7490 100%)',
+    borderRadius: '20px',
+    padding: '24px 32px',
     textAlign: 'center',
-    padding: '40px',
-    marginTop: '16px',
+    boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+    zIndex: 1000,
+  },
+  emptyIcon: {
+    fontSize: '48px',
+    marginBottom: '12px',
+  },
+  emptyTitle: {
+    color: theme.colors.text,
+    fontSize: '18px',
+    fontWeight: 600,
+    margin: '0 0 8px',
+  },
+  emptyText: {
     color: theme.colors.textMuted,
+    fontSize: '14px',
+    margin: '0 0 16px',
+    maxWidth: '280px',
   },
 };
