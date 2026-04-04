@@ -5,21 +5,23 @@ import org.example.helptreeservice.dto.users.CreateUserRequest;
 import org.example.helptreeservice.dto.users.UpdateUserRequest;
 import org.example.helptreeservice.dto.users.UserDto;
 import org.example.helptreeservice.dto.users.UserPublicDto;
+import org.example.helptreeservice.dto.wallet.CoinTransactionDto;
+import org.example.helptreeservice.dto.wallet.WalletDto;
+import org.example.helptreeservice.enums.TransactionType;
 import org.example.helptreeservice.exception.ForbiddenException;
 import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.service.AuthorizationService;
 import org.example.helptreeservice.service.AuthorizationService.UserContext;
 import org.example.helptreeservice.service.UserService;
+import org.example.helptreeservice.service.WalletService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
-
-import java.util.List;
-import java.util.Map;
 
 import java.util.List;
 import java.util.Map;
@@ -32,6 +34,7 @@ public class UserController {
 
     private final UserService userService;
     private final AuthorizationService authService;
+    private final WalletService walletService;
 
     @PostMapping
     public ResponseEntity<UserDto> createUser(@Valid @RequestBody CreateUserRequest request) {
@@ -236,5 +239,73 @@ public class UserController {
     @GetMapping("/{id}/favorites/{postId}")
     public ResponseEntity<Map<String, Boolean>> isFavorite(@PathVariable Long id, @PathVariable Long postId) {
         return ResponseEntity.ok(Map.of("isFavorite", userService.isFavorite(id, postId)));
+    }
+
+    @GetMapping("/{id}/wallet")
+    public ResponseEntity<WalletDto> getWallet(@PathVariable Long id) {
+        if (!authService.canManageUser(id)) {
+            throw new ForbiddenException("Вы можете просматривать только свой кошелёк");
+        }
+        return ResponseEntity.ok(walletService.getWallet(id));
+    }
+
+    @GetMapping("/{id}/wallet/transactions")
+    public ResponseEntity<Page<CoinTransactionDto>> getTransactions(
+            @PathVariable Long id,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        if (!authService.canManageUser(id)) {
+            throw new ForbiddenException("Вы можете просматривать только свои транзакции");
+        }
+        return ResponseEntity.ok(walletService.getTransactions(id, page, size));
+    }
+
+    @PostMapping("/{id}/wallet/daily-bonus")
+    public ResponseEntity<Map<String, Object>> claimDailyBonus(@PathVariable Long id) {
+        if (!authService.canManageUser(id)) {
+            throw new ForbiddenException("Вы можете получить бонус только для своего аккаунта");
+        }
+        walletService.addDailyLoginBonus(id);
+        WalletDto wallet = walletService.getWallet(id);
+        return ResponseEntity.ok(Map.of(
+            "success", true,
+            "balance", wallet.getBalance(),
+            "message", "+1 HC за ежедневный вход!"
+        ));
+    }
+
+    @PostMapping("/{id}/wallet/admin-add")
+    public ResponseEntity<Map<String, Object>> adminAddCoins(
+            @PathVariable Long id,
+            @RequestParam long amount,
+            @RequestParam(required = false) String description) {
+        if (!authService.isAdmin()) {
+            throw new ForbiddenException("Только администратор может начислять монеты");
+        }
+        walletService.adminAddCoins(id, amount, description);
+        WalletDto wallet = walletService.getWallet(id);
+        return ResponseEntity.ok(Map.of(
+            "success", true,
+            "newBalance", wallet.getBalance(),
+            "addedAmount", amount
+        ));
+    }
+
+    @PostMapping("/{id}/wallet/spend")
+    public ResponseEntity<Map<String, Object>> spendCoins(
+            @PathVariable Long id,
+            @RequestParam long amount,
+            @RequestParam TransactionType type,
+            @RequestParam String description) {
+        if (!authService.canManageUser(id)) {
+            throw new ForbiddenException("Вы можете тратить монеты только со своего аккаунта");
+        }
+        walletService.spendCoins(id, amount, type, description);
+        WalletDto wallet = walletService.getWallet(id);
+        return ResponseEntity.ok(Map.of(
+            "success", true,
+            "newBalance", wallet.getBalance(),
+            "spentAmount", amount
+        ));
     }
 }

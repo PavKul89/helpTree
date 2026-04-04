@@ -1,0 +1,1 @@
+ALTER TABLE users ADD COLUMN help_coins BIGINT DEFAULT 0;

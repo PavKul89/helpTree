@@ -104,6 +104,9 @@ public class User {
     @Column(name = "avatar_url")
     private String avatarUrl;
 
+    @Column(name = "help_coins")
+    private Long helpCoins = 0L;
+
     @PrePersist
     protected void onCreate() {
         LocalDateTime now = LocalDateTime.now();

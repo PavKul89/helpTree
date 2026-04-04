@@ -16,6 +16,7 @@ export interface User {
   birthDate?: string;
   blockedAt?: string;
   debtStartedAt?: string;
+  helpCoins?: number;
 }
 
 export interface UserPublic {

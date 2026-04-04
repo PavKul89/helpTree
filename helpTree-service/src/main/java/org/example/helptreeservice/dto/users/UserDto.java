@@ -30,4 +30,5 @@ public class UserDto {
     private LocalDateTime birthDate;
     private LocalDateTime blockedAt;
     private LocalDateTime debtStartedAt;
+    private Long helpCoins;
 }

@@ -3,8 +3,9 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { chatApi } from '../api/chatApi';
 import { authApi } from '../api/authApi';
+import { walletApi } from '../api/walletApi';
 import { theme } from '../theme';
-import { Map, GitBranch, Trophy, ClipboardList, User, Star, Package, MessageCircle, AlertTriangle, Ban, Plus } from 'lucide-react';
+import { Map, GitBranch, Trophy, ClipboardList, User, Star, Package, MessageCircle, AlertTriangle, Ban, Plus, Coins } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
   const { user, logout } = useAuth();
@@ -14,6 +15,7 @@ export const Navbar: React.FC = () => {
   const [isBlocked, setIsBlocked] = useState(false);
   const [daysUntilBlock, setDaysUntilBlock] = useState<number | null>(null);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const [helpCoins, setHelpCoins] = useState<number>(0);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -73,6 +75,16 @@ export const Navbar: React.FC = () => {
             setDebtWarning(null);
             setDaysUntilBlock(null);
           }
+          
+          if (userData.helpCoins !== undefined) {
+            setHelpCoins(userData.helpCoins);
+          }
+        })
+        .catch(console.error);
+      
+      walletApi.getWallet(user.id)
+        .then(wallet => {
+          setHelpCoins(wallet.balance);
         })
         .catch(console.error);
       
@@ -171,6 +183,11 @@ export const Navbar: React.FC = () => {
                       <MessageCircle size={16} style={{marginRight: 8}} /> Чаты
                       {unreadChats > 0 && <span style={styles.dropdownBadge}>{unreadChats}</span>}
                     </Link>
+                    <div style={{...styles.dropdownItem, ...styles.walletDisplay}}>
+                      <Coins size={16} style={{marginRight: 8, color: '#fbbf24'}} /> 
+                      <span style={{color: '#fbbf24', fontWeight: 700}}>{helpCoins}</span>
+                      <span style={{color: 'rgba(255,255,255,0.6)', fontSize: '12px', marginLeft: 4}}>HC</span>
+                    </div>
                   </div>
                 )}
               </div>
@@ -300,6 +317,12 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     boxShadow: '0 2px 8px rgba(239, 68, 68, 0.4)',
   },
+  walletDisplay: {
+    marginTop: '8px',
+    paddingTop: '12px',
+    borderTop: '1px solid rgba(255,255,255,0.1)',
+    cursor: 'default',
+  } as React.CSSProperties,
   loginBtn: {
     background: theme.gradients.button,
     color: theme.colors.text,
