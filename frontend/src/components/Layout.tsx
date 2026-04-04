@@ -33,7 +33,5 @@ const styles: Record<string, React.CSSProperties> = {
   overlay: {
     background: 'rgba(0, 0, 0, 0.3)',
     minHeight: '100vh',
-    display: 'flex',
-    flexDirection: 'column',
   },
 };
