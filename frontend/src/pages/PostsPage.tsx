@@ -5,7 +5,7 @@ import {
   ChefHat, Flower2, Car, Dog, Baby, Laptop, Scissors, Pill, Scale, BookOpen, 
   GraduationCap, CarFront, Home, Sparkles, Package, Heart, Brain, Wifi, Camera, 
   Music, Palette, Trophy, Plane, Bird, Plug, Shirt, Apple, Syringe, CreditCard,
-  Shield, Building, Pin, CircleDot
+  Shield, Building, Pin, CircleDot, User
 } from 'lucide-react';
 import { postsApi } from '../api/postsApi';
 import { authApi } from '../api/authApi';
@@ -155,8 +155,8 @@ export const PostsPage = () => {
   const [showFilters, setShowFilters] = useState(false);
   const { showToast } = useToast();
 
-  const hasActiveFilters = category !== 'Все' || status !== 'Все' || city;
-  const activeFilterCount = [category !== 'Все', status !== 'Все', !!city].filter(Boolean).length;
+  const hasActiveFilters = category !== 'Все' || status !== 'Все' || city || authorSearch;
+  const activeFilterCount = [category !== 'Все', status !== 'Все', !!city, !!authorSearch].filter(Boolean).length;
 
   const loadPosts = useCallback(async (pageNum = 0, searchTerm?: string) => {
     try {
@@ -325,18 +325,20 @@ export const PostsPage = () => {
   };
 
   if (loading) return (
-    <div style={styles.container} className="page-content">
-      <div style={styles.stickyContainer}>
-        <header className="page-header" style={styles.header}>
-          <h1 className="page-title" style={styles.title}>Посты о помощи</h1>
-        </header>
+    <>
+      <div style={styles.container} className="page-content">
+        <div style={styles.stickyContainer}>
+          <header className="page-header" style={styles.header}>
+            <h1 className="page-title" style={styles.title}>Посты о помощи</h1>
+          </header>
+        </div>
+        <div style={styles.masonry}>
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <PostCardSkeleton key={i} />
+          ))}
+        </div>
       </div>
-      <div style={styles.masonry}>
-        {[1, 2, 3, 4, 5, 6].map((i) => (
-          <PostCardSkeleton key={i} />
-        ))}
-      </div>
-    </div>
+    </>
   );
 
   return (
@@ -344,76 +346,54 @@ export const PostsPage = () => {
       <div style={styles.stickyContainer}>
         <header className="page-header" style={styles.header}>
           <h1 className="page-title" style={styles.title}>Посты о помощи</h1>
-          {user && 'blockedAt' in user && user.blockedAt ? (
-            <Button onClick={() => showToast('Ваш аккаунт заблокирован за долг. Помогите другим пользователям!', 'error')} disabled>
-              + Создать пост
-            </Button>
-          ) : (
-            <Link to="/posts/new">
-              <Button>+ Создать пост</Button>
-            </Link>
-          )}
         </header>
+      </div>
 
-        <div style={styles.filters}>
-          <div style={styles.searchContainer}>
-            <div style={{...styles.searchForm, display: 'flex', gap: '8px', flexWrap: 'wrap'}}>
-              <input
-                type="text"
-                placeholder="Поиск по названию..."
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                style={styles.searchInput}
-              />
-              <input
-                type="text"
-                placeholder="Поиск по автору..."
-                value={authorInput}
-                onChange={(e) => setAuthorInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    setAuthorSearch(authorInput);
-                    loadPosts(0, search);
-                  }
-                }}
-                style={styles.searchInput}
-              />
-              <Button onClick={() => {
-                handleSearch();
-                setAuthorSearch(authorInput);
-                loadPosts(0, search);
-              }} style={styles.searchBtn}>
-                <Search size={16} />
-              </Button>
-            </div>
+      <div style={styles.filters}>
+        <div style={styles.searchContainer}>
+          <div style={styles.searchForm}>
+            <input
+              type="text"
+              placeholder="Поиск постов..."
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+              style={styles.searchInput}
+            />
+            <Button onClick={handleSearch} style={styles.searchBtn}>
+              <Search size={16} />
+            </Button>
           </div>
-          <button 
-            onClick={() => setShowFilters(!showFilters)}
-            style={{
-              ...styles.filterToggle,
-              ...(showFilters || hasActiveFilters ? styles.filterToggleActive : {}),
-            }}
-          >
-            <Settings size={16} style={{marginRight: 6}} /> 
-            Фильтры
-            {hasActiveFilters && <span style={styles.filterCount}>{activeFilterCount}</span>}
-          </button>
         </div>
+        <button 
+          onClick={() => setShowFilters(!showFilters)}
+          style={{
+            ...styles.filterToggle,
+            ...(showFilters || hasActiveFilters ? styles.filterToggleActive : {}),
+          }}
+        >
+          <Settings size={16} style={{marginRight: 6}} /> 
+          Фильтры
+          {hasActiveFilters && <span style={styles.filterCount}>{activeFilterCount}</span>}
+        </button>
+      </div>
 
-        <div style={{
-          ...styles.filterPanelWrapper,
-          maxHeight: showFilters ? '500px' : '0',
-          opacity: showFilters ? 1 : 0,
-          marginTop: showFilters ? '12px' : '0',
-          overflow: 'hidden',
-          transition: 'all 0.3s ease',
-        }}>
-          <div style={styles.filterPanel}>
-            <div style={styles.filterSection}>
-              <div style={styles.filterSectionHeader}>
-                <Sparkles size={14} style={{marginRight: 6}} />
-                Категория
+      <div style={{
+        ...styles.filterPanelWrapper,
+        maxHeight: showFilters ? '500px' : '0',
+        opacity: showFilters ? 1 : 0,
+        marginTop: showFilters ? '12px' : '0',
+        overflow: 'hidden',
+        transition: 'all 0.3s ease',
+      }}>
+        <div style={styles.filterPanel}>
+          <div style={styles.filterSection}>
+            <div style={styles.filterSectionHeader}>
+              <Sparkles size={14} style={{marginRight: 6}} />
+              Категория
+      <div style={styles.filterSectionHeader}>
+        <Sparkles size={14} style={{marginRight: 6}} />
+        Категория
               </div>
               <div style={styles.chipContainer}>
                 {CATEGORIES.map((cat) => (
@@ -454,6 +434,34 @@ export const PostsPage = () => {
 
             <div style={styles.filterSection}>
               <div style={styles.filterSectionHeader}>
+                <User size={14} style={{marginRight: 6}} />
+                Автор
+              </div>
+              <div style={styles.cityFilter}>
+                <input
+                  type="text"
+                  placeholder="Имя автора..."
+                  value={authorInput}
+                  onChange={(e) => setAuthorInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      setAuthorSearch(authorInput);
+                      loadPosts(0);
+                    }
+                  }}
+                  style={styles.cityInput}
+                />
+                <Button onClick={() => {
+                  setAuthorSearch(authorInput);
+                  loadPosts(0);
+                }} style={styles.cityBtn}>
+                  <Search size={14} />
+                </Button>
+              </div>
+            </div>
+
+            <div style={styles.filterSection}>
+              <div style={styles.filterSectionHeader}>
                 <MapPin size={14} style={{marginRight: 6}} />
                 Город
               </div>
@@ -484,6 +492,8 @@ export const PostsPage = () => {
                   setStatus('Все');
                   setCity('');
                   setCityInput('');
+                  setAuthorSearch('');
+                  setAuthorInput('');
                   loadPosts(0);
                 }}
                 style={styles.clearBtn}
