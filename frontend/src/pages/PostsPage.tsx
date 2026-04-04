@@ -158,15 +158,19 @@ export const PostsPage = () => {
   const hasActiveFilters = category !== 'Все' || status !== 'Все' || city || authorSearch;
   const activeFilterCount = [category !== 'Все', status !== 'Все', !!city, !!authorSearch].filter(Boolean).length;
 
-  const loadPosts = useCallback(async (pageNum = 0, searchTerm?: string) => {
+  const loadPosts = useCallback(async (pageNum = 0, searchTerm?: string, newCategory?: string, newStatus?: string, newCity?: string, newAuthorSearch?: string) => {
     try {
       const searchToUse = searchTerm !== undefined ? searchTerm : search;
+      const cat = newCategory !== undefined ? newCategory : category;
+      const stat = newStatus !== undefined ? newStatus : status;
+      const cit = newCity !== undefined ? newCity : city;
+      const author = newAuthorSearch !== undefined ? newAuthorSearch : authorSearch;
       const params: any = { page: pageNum, size: 10 };
       if (searchToUse) params.title = searchToUse;
-      if (authorSearch) params.authorName = authorSearch;
-      if (category !== 'Все') params.category = category;
-      if (status !== 'Все') params.status = status;
-      if (city) params.city = city;
+      if (author) params.authorName = author;
+      if (cat !== 'Все') params.category = cat;
+      if (stat !== 'Все') params.status = stat;
+      if (cit) params.city = cit;
       const data = await postsApi.getAll(params);
       setPosts(data.content);
       setTotalPages(data.totalPages);
@@ -238,7 +242,7 @@ export const PostsPage = () => {
     setStatus(value);
     if (value !== 'Избранное') {
       setLoading(true);
-      loadPosts(0);
+      loadPosts(0, undefined, undefined, value);
     }
   };
 
@@ -283,7 +287,7 @@ export const PostsPage = () => {
   const handleCategoryChange = (value: string) => {
     setCategory(value);
     setLoading(true);
-    loadPosts(0);
+    loadPosts(0, undefined, value);
   };
 
   const handleCityChange = (value: string) => {
@@ -299,14 +303,14 @@ export const PostsPage = () => {
   const handleCitySearch = () => {
     setCity(cityInput);
     setLoading(true);
-    loadPosts(0);
+    loadPosts(0, undefined, undefined, undefined, cityInput);
   };
 
   const handleMyCity = () => {
     setCity(currentUserCity);
     setCityInput(currentUserCity);
     setLoading(true);
-    loadPosts(0);
+    loadPosts(0, undefined, undefined, undefined, currentUserCity);
   };
 
   const handlePageChange = (newPage: number) => {
@@ -451,14 +455,14 @@ export const PostsPage = () => {
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     setAuthorSearch(authorInput);
-                    loadPosts(0);
+                    loadPosts(0, undefined, undefined, undefined, undefined, authorInput);
                   }
                 }}
                 style={styles.cityInput}
               />
               <Button onClick={() => {
                 setAuthorSearch(authorInput);
-                loadPosts(0);
+                loadPosts(0, undefined, undefined, undefined, undefined, authorInput);
               }} style={styles.cityBtn}>
                 <Search size={14} />
               </Button>
@@ -499,7 +503,7 @@ export const PostsPage = () => {
                 setCityInput('');
                 setAuthorSearch('');
                 setAuthorInput('');
-                loadPosts(0);
+                loadPosts(0, '', 'Все', 'Все', '', '');
               }}
               style={styles.clearBtn}
             >
@@ -515,7 +519,7 @@ export const PostsPage = () => {
             <User size={12} style={{marginRight: 4}} />
             Автор: {authorSearch}
             <button 
-              onClick={() => { setAuthorSearch(''); setAuthorInput(''); loadPosts(0); }}
+              onClick={() => { setAuthorSearch(''); setAuthorInput(''); loadPosts(0, undefined, undefined, undefined, undefined, ''); }}
               style={styles.chipRemove}
             >
               <X size={12} />
@@ -526,7 +530,7 @@ export const PostsPage = () => {
           <span style={styles.filterChip}>
             {category}
             <button 
-              onClick={() => { setCategory('Все'); loadPosts(0); }}
+              onClick={() => { setCategory('Все'); loadPosts(0, undefined, 'Все'); }}
               style={styles.chipRemove}
             >
               <X size={12} />
@@ -537,7 +541,7 @@ export const PostsPage = () => {
           <span style={styles.filterChip}>
             {getStatusLabel(status)}
             <button 
-              onClick={() => { setStatus('Все'); loadPosts(0); }}
+              onClick={() => { setStatus('Все'); loadPosts(0, undefined, undefined, 'Все'); }}
               style={styles.chipRemove}
             >
               <X size={12} />
@@ -549,7 +553,7 @@ export const PostsPage = () => {
             <MapPin size={12} style={{marginRight: 4}} />
             {city}
             <button 
-              onClick={() => { setCity(''); setCityInput(''); loadPosts(0); }}
+              onClick={() => { setCity(''); setCityInput(''); loadPosts(0, undefined, undefined, undefined, ''); }}
               style={styles.chipRemove}
             >
               <X size={12} />

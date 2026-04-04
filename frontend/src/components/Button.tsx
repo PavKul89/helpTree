@@ -74,9 +74,11 @@ const getVariantStyles = (variant: string, isHovered: boolean): React.CSSPropert
       return isHovered ? {
         background: theme.gradients.buttonHover,
         boxShadow: theme.shadows.buttonHover,
+        color: '#ffffff',
       } : {
         background: theme.gradients.button,
         boxShadow: theme.shadows.button,
+        color: '#ffffff',
       };
     case 'outline':
       return isHovered ? {
@@ -91,8 +93,10 @@ const getVariantStyles = (variant: string, isHovered: boolean): React.CSSPropert
     case 'danger':
       return isHovered ? {
         background: '#dc2626',
+        color: '#ffffff',
       } : {
         background: theme.colors.error,
+        color: '#ffffff',
       };
     default:
       return {};
@@ -111,5 +115,6 @@ const styles: Record<string, React.CSSProperties> = {
     outline: 'none',
     position: 'relative',
     overflow: 'hidden',
+    color: '#ffffff',
   },
 };
