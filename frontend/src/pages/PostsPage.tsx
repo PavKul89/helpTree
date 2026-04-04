@@ -391,156 +391,162 @@ export const PostsPage = () => {
             <div style={styles.filterSectionHeader}>
               <Sparkles size={14} style={{marginRight: 6}} />
               Категория
-      <div style={styles.filterSectionHeader}>
-        <Sparkles size={14} style={{marginRight: 6}} />
-        Категория
-              </div>
-              <div style={styles.chipContainer}>
-                {CATEGORIES.map((cat) => (
-                  <button
-                    key={cat}
-                    onClick={() => handleCategoryChange(cat)}
-                    style={{
-                      ...styles.chip,
-                      ...(category === cat ? styles.chipActive : {}),
-                    }}
-                  >
-                    {cat === 'Все' ? 'Все' : cat}
-                  </button>
-                ))}
-              </div>
             </div>
-
-            <div style={styles.filterSection}>
-              <div style={styles.filterSectionHeader}>
-                <CircleDot size={14} style={{marginRight: 6}} />
-                Статус
-              </div>
-              <div style={styles.chipContainer}>
-                {STATUSES.map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => handleStatusChange(s)}
-                    style={{
-                      ...styles.chip,
-                      ...(status === s ? styles.chipActive : {}),
-                    }}
-                  >
-                    {s === 'Все' ? 'Все' : getStatusLabel(s)}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div style={styles.filterSection}>
-              <div style={styles.filterSectionHeader}>
-                <User size={14} style={{marginRight: 6}} />
-                Автор
-              </div>
-              <div style={styles.cityFilter}>
-                <input
-                  type="text"
-                  placeholder="Имя автора..."
-                  value={authorInput}
-                  onChange={(e) => setAuthorInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      setAuthorSearch(authorInput);
-                      loadPosts(0);
-                    }
+            <div style={styles.chipContainer}>
+              {CATEGORIES.map((cat) => (
+                <button
+                  key={cat}
+                  onClick={() => handleCategoryChange(cat)}
+                  style={{
+                    ...styles.chip,
+                    ...(category === cat ? styles.chipActive : {}),
                   }}
-                  style={styles.cityInput}
-                />
-                <Button onClick={() => {
-                  setAuthorSearch(authorInput);
-                  loadPosts(0);
-                }} style={styles.cityBtn}>
-                  <Search size={14} />
-                </Button>
-              </div>
+                >
+                  {cat === 'Все' ? 'Все' : cat}
+                </button>
+              ))}
             </div>
+          </div>
 
-            <div style={styles.filterSection}>
-              <div style={styles.filterSectionHeader}>
-                <MapPin size={14} style={{marginRight: 6}} />
-                Город
-              </div>
-              <div style={styles.cityFilter}>
-                <input
-                  type="text"
-                  placeholder="Введите город..."
-                  value={cityInput}
-                  onChange={(e) => handleCityInputChange(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleCitySearch()}
-                  style={styles.cityInput}
-                />
-                <Button onClick={handleCitySearch} style={styles.cityBtn}>
-                  <Search size={14} />
-                </Button>
-                {currentUserCity && (
-                  <Button onClick={handleMyCity} style={styles.myCityBtn}>
-                    <MapPin size={14} />
-                  </Button>
-                )}
-              </div>
+          <div style={styles.filterSection}>
+            <div style={styles.filterSectionHeader}>
+              <CircleDot size={14} style={{marginRight: 6}} />
+              Статус
             </div>
+            <div style={styles.chipContainer}>
+              {STATUSES.map((s) => (
+                <button
+                  key={s}
+                  onClick={() => handleStatusChange(s)}
+                  style={{
+                    ...styles.chip,
+                    ...(status === s ? styles.chipActive : {}),
+                  }}
+                >
+                  {s === 'Все' ? 'Все' : getStatusLabel(s)}
+                </button>
+              ))}
+            </div>
+          </div>
 
-            {hasActiveFilters && (
-              <button 
-                onClick={() => {
-                  setCategory('Все');
-                  setStatus('Все');
-                  setCity('');
-                  setCityInput('');
-                  setAuthorSearch('');
-                  setAuthorInput('');
-                  loadPosts(0);
+          <div style={styles.filterSection}>
+            <div style={styles.filterSectionHeader}>
+              <User size={14} style={{marginRight: 6}} />
+              Автор
+            </div>
+            <div style={styles.cityFilter}>
+              <input
+                type="text"
+                placeholder="Имя автора..."
+                value={authorInput}
+                onChange={(e) => setAuthorInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    setAuthorSearch(authorInput);
+                    loadPosts(0);
+                  }
                 }}
-                style={styles.clearBtn}
-              >
-                <X size={14} style={{marginRight: 4}} /> Очистить все
-              </button>
-            )}
+                style={styles.cityInput}
+              />
+              <Button onClick={() => {
+                setAuthorSearch(authorInput);
+                loadPosts(0);
+              }} style={styles.cityBtn}>
+                <Search size={14} />
+              </Button>
+            </div>
           </div>
-        </div>
 
-        {hasActiveFilters && !showFilters && (
-          <div style={styles.activeFilters}>
-            {category !== 'Все' && (
-              <span style={styles.filterChip}>
-                {category}
-                <button 
-                  onClick={() => { setCategory('Все'); loadPosts(0); }}
-                  style={styles.chipRemove}
-                >
-                  <X size={12} />
-                </button>
-              </span>
-            )}
-            {status !== 'Все' && (
-              <span style={styles.filterChip}>
-                {getStatusLabel(status)}
-                <button 
-                  onClick={() => { setStatus('Все'); loadPosts(0); }}
-                  style={styles.chipRemove}
-                >
-                  <X size={12} />
-                </button>
-              </span>
-            )}
-            {city && (
-              <span style={styles.filterChip}>
-                <MapPin size={12} style={{marginRight: 4}} />
-                {city}
-                <button 
-                  onClick={() => { setCity(''); setCityInput(''); loadPosts(0); }}
-                  style={styles.chipRemove}
-                >
-                  <X size={12} />
-                </button>
-              </span>
-            )}
+          <div style={styles.filterSection}>
+            <div style={styles.filterSectionHeader}>
+              <MapPin size={14} style={{marginRight: 6}} />
+              Город
+            </div>
+            <div style={styles.cityFilter}>
+              <input
+                type="text"
+                placeholder="Введите город..."
+                value={cityInput}
+                onChange={(e) => handleCityInputChange(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleCitySearch()}
+                style={styles.cityInput}
+              />
+              <Button onClick={handleCitySearch} style={styles.cityBtn}>
+                <Search size={14} />
+              </Button>
+              {currentUserCity && (
+                <Button onClick={handleMyCity} style={styles.myCityBtn}>
+                  <MapPin size={14} />
+                </Button>
+              )}
+            </div>
           </div>
+
+          {hasActiveFilters && (
+            <button 
+              onClick={() => {
+                setCategory('Все');
+                setStatus('Все');
+                setCity('');
+                setCityInput('');
+                setAuthorSearch('');
+                setAuthorInput('');
+                loadPosts(0);
+              }}
+              style={styles.clearBtn}
+            >
+              <X size={14} style={{marginRight: 4}} /> Очистить все
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div style={styles.activeFilters}>
+        {authorSearch && (
+          <span style={styles.filterChip}>
+            <User size={12} style={{marginRight: 4}} />
+            Автор: {authorSearch}
+            <button 
+              onClick={() => { setAuthorSearch(''); setAuthorInput(''); loadPosts(0); }}
+              style={styles.chipRemove}
+            >
+              <X size={12} />
+            </button>
+          </span>
+        )}
+        {category !== 'Все' && (
+          <span style={styles.filterChip}>
+            {category}
+            <button 
+              onClick={() => { setCategory('Все'); loadPosts(0); }}
+              style={styles.chipRemove}
+            >
+              <X size={12} />
+            </button>
+          </span>
+        )}
+        {status !== 'Все' && (
+          <span style={styles.filterChip}>
+            {getStatusLabel(status)}
+            <button 
+              onClick={() => { setStatus('Все'); loadPosts(0); }}
+              style={styles.chipRemove}
+            >
+              <X size={12} />
+            </button>
+          </span>
+        )}
+        {city && (
+          <span style={styles.filterChip}>
+            <MapPin size={12} style={{marginRight: 4}} />
+            {city}
+            <button 
+              onClick={() => { setCity(''); setCityInput(''); loadPosts(0); }}
+              style={styles.chipRemove}
+            >
+              <X size={12} />
+            </button>
+          </span>
         )}
       </div>
 
