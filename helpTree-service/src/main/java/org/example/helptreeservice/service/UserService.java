@@ -33,6 +33,7 @@ public class UserService {
     private final PasswordService passwordService;
     private final ImageService imageService;
     private final AchievementService achievementService;
+    private final GeocodingService geocodingService;
 
     public UserDto createUser(CreateUserRequest request) {
         return createUserWithRole(request, Role.USER);
@@ -53,6 +54,13 @@ public class UserService {
         user.setPassword(passwordService.encode(request.getPassword()));
         user.setPhone(request.getPhone());
         user.setCity(request.getCity());
+        if (request.getCity() != null) {
+            geocodingService.geocodeCity(request.getCity())
+                    .ifPresent(coords -> {
+                        user.setLatitude(coords.lat());
+                        user.setLongitude(coords.lng());
+                    });
+        }
         user.setHelpedCount(0);
         user.setDebtCount(0);
         user.setRating(0.0);
@@ -168,6 +176,14 @@ public class UserService {
                 user.setCity(request.getCity());
                 changed = true;
                 log.debug("Изменен город пользователя на: {}", request.getCity());
+                
+                if (request.getLatitude() == null || request.getLongitude() == null) {
+                    geocodingService.geocodeCity(request.getCity())
+                            .ifPresent(coords -> {
+                                user.setLatitude(coords.lat());
+                                user.setLongitude(coords.lng());
+                            });
+                }
             }
 
             if (request.getLatitude() != null) {

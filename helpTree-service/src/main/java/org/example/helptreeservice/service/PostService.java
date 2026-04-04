@@ -34,6 +34,7 @@ public class PostService {
     private final PostRepository postRepository;
     private final UserRepository userRepository;
     private final PostMapper postMapper;
+    private final GeocodingService geocodingService;
 
     @BusinessMetric(
             value = "post.created",
@@ -62,8 +63,17 @@ public class PostService {
             post.setCreatedAt(LocalDateTime.now());
             post.setUpdatedAt(LocalDateTime.now());
             post.setStatus(PostStatus.OPEN);
-            post.setLatitude(user.getLatitude());
-            post.setLongitude(user.getLongitude());
+            
+            if (user.getLatitude() != null && user.getLongitude() != null) {
+                post.setLatitude(user.getLatitude());
+                post.setLongitude(user.getLongitude());
+            } else if (user.getCity() != null) {
+                geocodingService.geocodeCity(user.getCity())
+                        .ifPresent(coords -> {
+                            post.setLatitude(coords.lat());
+                            post.setLongitude(coords.lng());
+                        });
+            }
             
             if (request.getImageUrls() != null && !request.getImageUrls().isEmpty()) {
                 post.setImageUrls(request.getImageUrls());
@@ -327,6 +337,17 @@ public class PostService {
     public List<PostDto> getPostsOnMap(Double latitude, Double longitude, Double radius, String status) {
         log.info("Запрос всех активных постов для карты");
         List<Post> posts = postRepository.findAllActive();
+        
+        for (Post post : posts) {
+            if ((post.getLatitude() == null || post.getLongitude() == null) && post.getUser() != null && post.getUser().getCity() != null) {
+                final String city = post.getUser().getCity();
+                geocodingService.geocodeCity(city).ifPresent(coords -> {
+                    post.setLatitude(coords.lat());
+                    post.setLongitude(coords.lng());
+                });
+            }
+        }
+        
         return posts.stream().map(postMapper::toDto).collect(Collectors.toList());
     }
 }
