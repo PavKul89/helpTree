@@ -210,13 +210,9 @@ export const MapPage = () => {
           const userData = await authApi.getCurrentUser();
           if ('city' in userData && userData.city) {
             setUserCity(userData.city);
-            if (userData.latitude && userData.longitude) {
-              setUserLocation({ lat: userData.latitude, lng: userData.longitude });
-            } else {
-              const coords = await tryGeocode(userData.city);
-              if (coords) {
-                setUserLocation({ lat: coords.lat, lng: coords.lng });
-              }
+            const coords = await tryGeocode(userData.city);
+            if (coords) {
+              setUserLocation({ lat: coords.lat, lng: coords.lng });
             }
           }
         } catch (err) {
