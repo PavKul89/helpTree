@@ -30,68 +30,70 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 
 const AppLayout = () => {
   return (
-    <Layout>
+    <>
       <Navbar />
-      <main style={styles.main}>
-        <Routes>
-          <Route path="/login" element={<Navigate to="/" />} />
-          <Route path="/register" element={<Navigate to="/" />} />
-          <Route path="/" element={<PostsPage />} />
-          <Route path="/posts/new" element={
-            <ProtectedRoute>
-              <CreatePostPage />
-            </ProtectedRoute>
-          } />
-          <Route path="/posts/:id" element={<PostDetailPage />} />
-          <Route path="/users" element={<UsersPage />} />
-          <Route path="/my-orders" element={
-            <ProtectedRoute>
-              <MyOrdersPage />
-            </ProtectedRoute>
-          } />
-          <Route path="/favorites" element={
-            <ProtectedRoute>
-              <FavoritesPage />
-            </ProtectedRoute>
-          } />
-          <Route path="/graph" element={<HelpGraphPage />} />
-          <Route path="/map" element={
-            <ProtectedRoute>
-              <MapPage />
-            </ProtectedRoute>
-          } />
-          <Route path="/achievements" element={<AchievementsPage />} />
-          <Route path="/activity" element={
-            <ProtectedRoute>
-              <ActivityPage />
-            </ProtectedRoute>
-          } />
-          <Route path="/activity/:userId" element={<ActivityPage />} />
-          <Route path="/profile" element={
-            <ProtectedRoute>
-              <ProfilePage />
-            </ProtectedRoute>
-          } />
-          <Route path="/profile/:userId" element={<ProfilePage key={window.location.pathname} />} />
-          <Route 
-            path="/chats" 
-            element={
+      <Layout>
+        <main style={styles.main}>
+          <Routes>
+            <Route path="/login" element={<Navigate to="/" />} />
+            <Route path="/register" element={<Navigate to="/" />} />
+            <Route path="/" element={<PostsPage />} />
+            <Route path="/posts/new" element={
               <ProtectedRoute>
-                <ChatListPage />
+                <CreatePostPage />
               </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/chats/:id" 
-            element={
+            } />
+            <Route path="/posts/:id" element={<PostDetailPage />} />
+            <Route path="/users" element={<UsersPage />} />
+            <Route path="/my-orders" element={
               <ProtectedRoute>
-                <ChatPage />
+                <MyOrdersPage />
               </ProtectedRoute>
-            } 
-          />
-        </Routes>
-      </main>
-    </Layout>
+            } />
+            <Route path="/favorites" element={
+              <ProtectedRoute>
+                <FavoritesPage />
+              </ProtectedRoute>
+            } />
+            <Route path="/graph" element={<HelpGraphPage />} />
+            <Route path="/map" element={
+              <ProtectedRoute>
+                <MapPage />
+              </ProtectedRoute>
+            } />
+            <Route path="/achievements" element={<AchievementsPage />} />
+            <Route path="/activity" element={
+              <ProtectedRoute>
+                <ActivityPage />
+              </ProtectedRoute>
+            } />
+            <Route path="/activity/:userId" element={<ActivityPage />} />
+            <Route path="/profile" element={
+              <ProtectedRoute>
+                <ProfilePage />
+              </ProtectedRoute>
+            } />
+            <Route path="/profile/:userId" element={<ProfilePage key={window.location.pathname} />} />
+            <Route 
+              path="/chats" 
+              element={
+                <ProtectedRoute>
+                  <ChatListPage />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/chats/:id" 
+              element={
+                <ProtectedRoute>
+                  <ChatPage />
+                </ProtectedRoute>
+              } 
+            />
+          </Routes>
+        </main>
+      </Layout>
+    </>
   );
 };
 
@@ -173,8 +175,6 @@ function App() {
 const styles: Record<string, React.CSSProperties> = {
   main: {
     padding: '24px',
-    maxWidth: '1200px',
-    margin: '0 auto',
   },
   loading: {
     display: 'flex',

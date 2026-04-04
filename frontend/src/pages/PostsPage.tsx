@@ -346,47 +346,55 @@ export const PostsPage = () => {
       <div style={styles.stickyContainer}>
         <header className="page-header" style={styles.header}>
           <h1 className="page-title" style={styles.title}>Посты о помощи</h1>
-        </header>
-      </div>
-
-      <div style={styles.filters}>
-        <div style={styles.searchContainer}>
-          <div style={styles.searchForm}>
-            <input
-              type="text"
-              placeholder="Поиск постов..."
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-              style={styles.searchInput}
-            />
-            <Button onClick={handleSearch} style={styles.searchBtn}>
-              <Search size={16} />
+          {user && 'blockedAt' in user && user.blockedAt ? (
+            <Button onClick={() => showToast('Ваш аккаунт заблокирован за долг. Помогите другим пользователям!', 'error')} disabled>
+              + Создать пост
             </Button>
-          </div>
-        </div>
-        <button 
-          onClick={() => setShowFilters(!showFilters)}
-          style={{
-            ...styles.filterToggle,
-            ...(showFilters || hasActiveFilters ? styles.filterToggleActive : {}),
-          }}
-        >
-          <Settings size={16} style={{marginRight: 6}} /> 
-          Фильтры
-          {hasActiveFilters && <span style={styles.filterCount}>{activeFilterCount}</span>}
-        </button>
-      </div>
+          ) : (
+            <Link to="/posts/new">
+              <Button>+ Создать пост</Button>
+            </Link>
+          )}
+        </header>
 
-      <div style={{
-        ...styles.filterPanelWrapper,
-        maxHeight: showFilters ? '500px' : '0',
-        opacity: showFilters ? 1 : 0,
-        marginTop: showFilters ? '12px' : '0',
-        overflow: 'hidden',
-        transition: 'all 0.3s ease',
-      }}>
-        <div style={styles.filterPanel}>
+        <div style={styles.filters}>
+          <div style={styles.searchContainer}>
+            <div style={styles.searchForm}>
+              <input
+                type="text"
+                placeholder="Поиск постов..."
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                style={styles.searchInput}
+              />
+              <Button onClick={handleSearch} style={styles.searchBtn}>
+                <Search size={16} />
+              </Button>
+            </div>
+          </div>
+          <button 
+            onClick={() => setShowFilters(!showFilters)}
+            style={{
+              ...styles.filterToggle,
+              ...(showFilters || hasActiveFilters ? styles.filterToggleActive : {}),
+            }}
+          >
+            <Settings size={16} style={{marginRight: 6}} /> 
+            Фильтры
+            {hasActiveFilters && <span style={styles.filterCount}>{activeFilterCount}</span>}
+          </button>
+        </div>
+
+        <div style={{
+          ...styles.filterPanelWrapper,
+          maxHeight: showFilters ? '500px' : '0',
+          opacity: showFilters ? 1 : 0,
+          marginTop: showFilters ? '12px' : '0',
+          overflow: 'hidden',
+          transition: 'all 0.3s ease',
+        }}>
+          <div style={styles.filterPanel}>
           <div style={styles.filterSection}>
             <div style={styles.filterSectionHeader}>
               <Sparkles size={14} style={{marginRight: 6}} />
@@ -548,6 +556,7 @@ export const PostsPage = () => {
             </button>
           </span>
         )}
+      </div>
       </div>
 
       <div style={styles.masonry}>
@@ -731,8 +740,6 @@ const statusDotStyles: Record<PostStatus, React.CSSProperties> = {
 
 const styles: Record<string, React.CSSProperties> = {
   container: {
-    maxWidth: 1200,
-    margin: '0 auto',
     padding: '24px',
   },
   stickyContainer: {

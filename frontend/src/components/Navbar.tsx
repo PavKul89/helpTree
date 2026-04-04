@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { chatApi } from '../api/chatApi';
 import { authApi } from '../api/authApi';
 import { theme } from '../theme';
-import { Map, GitBranch, Trophy, ClipboardList, User, Star, Package, MessageCircle, AlertTriangle, Ban } from 'lucide-react';
+import { Map, GitBranch, Trophy, ClipboardList, User, Star, Package, MessageCircle, AlertTriangle, Ban, Plus } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
   const { user, logout } = useAuth();
@@ -320,6 +320,19 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 500,
     cursor: 'pointer',
     transition: 'all 0.2s',
+  },
+  createPostBtn: {
+    background: theme.gradients.button,
+    color: theme.colors.text,
+    textDecoration: 'none',
+    padding: '10px 18px',
+    borderRadius: theme.borderRadius.md,
+    fontSize: '14px',
+    fontWeight: 600,
+    display: 'flex',
+    alignItems: 'center',
+    transition: 'all 0.3s',
+    boxShadow: '0 4px 15px rgba(6, 182, 212, 0.3)',
   },
   warningBanner: {
     background: 'linear-gradient(90deg, rgba(220, 38, 38, 0.95) 0%, rgba(245, 158, 11, 0.95) 100%)',
