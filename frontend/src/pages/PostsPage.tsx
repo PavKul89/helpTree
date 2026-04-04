@@ -563,6 +563,10 @@ export const PostsPage = () => {
       </div>
       </div>
 
+      <div style={styles.resultsInfo}>
+        Найдено постов: <span style={styles.resultsCount}>{posts.length}</span>
+      </div>
+
       <div style={styles.masonry}>
         {posts.map((post) => (
           <Link key={post.id} to={`/posts/${post.id}`} style={styles.cardLink}>
@@ -959,6 +963,22 @@ const styles: Record<string, React.CSSProperties> = {
     background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.25) 0%, rgba(5, 150, 105, 0.25) 100%)',
     border: '1px solid rgba(16, 185, 129, 0.5)',
     borderRadius: '50px',
+  },
+  resultsInfo: {
+    color: theme.colors.textSecondary,
+    fontSize: '14px',
+    marginBottom: '16px',
+    padding: '12px 16px',
+    background: 'rgba(0, 0, 0, 0.15)',
+    borderRadius: theme.borderRadius.md,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+  },
+  resultsCount: {
+    color: theme.colors.accentLight,
+    fontWeight: 700,
+    fontSize: '16px',
   },
   masonry: {
     display: 'grid',
