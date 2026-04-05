@@ -627,7 +627,7 @@ export const PostsPage = () => {
                 </p>
                 <div style={styles.postFooter}>
                   <div style={styles.author}>
-                    <Avatar name={post.authorName} avatarUrl={post.authorAvatarUrl} size="small" showName withRating={post.authorRating} clickable userId={post.userId} />
+                    <Avatar name={post.authorName} avatarUrl={post.authorAvatarUrl} size="small" showName withRating={post.authorRating} clickable userId={post.userId} nicknameColor={post.authorNicknameColor} />
                   </div>
                   <div style={styles.metaRight}>
                     {post.userCity && <span style={styles.city}><MapPin size={12} style={{marginRight: 4}} />{post.userCity}</span>}

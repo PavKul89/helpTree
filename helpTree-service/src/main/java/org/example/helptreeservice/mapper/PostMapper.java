@@ -17,6 +17,7 @@ public interface PostMapper {
     @Mapping(source = "longitude", target = "longitude")
     @Mapping(source = "user.name", target = "authorName")
     @Mapping(source = "user.avatarUrl", target = "authorAvatarUrl")
+    @Mapping(source = "user.nicknameColor", target = "authorNicknameColor")
     @Mapping(source = "helper.id", target = "helperId")
     @Mapping(source = "helper.name", target = "helperName")
     @Mapping(source = "status", target = "status")

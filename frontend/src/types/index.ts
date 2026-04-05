@@ -51,6 +51,7 @@ export interface Post {
   authorBlockedAt?: string;
   boostedUntil?: string;
   boosted: boolean;
+  authorNicknameColor?: string;
 }
 
 export interface Review {

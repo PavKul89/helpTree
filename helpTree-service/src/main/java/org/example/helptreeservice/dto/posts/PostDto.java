@@ -30,4 +30,5 @@ public class PostDto {
     private LocalDateTime authorBlockedAt;
     private LocalDateTime boostedUntil;
     private boolean boosted;
+    private String authorNicknameColor;
 }

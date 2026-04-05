@@ -188,7 +188,10 @@ export const Navbar: React.FC = () => {
                   }}
                 >
                   <User size={16} style={{ marginRight: 6 }} /> 
-                  {isVip ? <span style={{color: '#fbbf24', marginRight: 4}}>⭐</span> : null} Профиль ▾
+                  <span style={{ color: user.nicknameColor || 'inherit', marginRight: 4 }}>
+                    {user.name}
+                  </span>
+                  {isVip ? <span style={{color: '#fbbf24', marginRight: 4}}>⭐</span> : null} ▾
                 </button>
                 {openDropdown === 'profile' && (
                   <div style={styles.dropdown}>

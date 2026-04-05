@@ -413,9 +413,9 @@ export const PostDetailPage = () => {
         </div>
 
         <div style={styles.authorCard}>
-          <Avatar name={post.authorName} avatarUrl={post.authorAvatarUrl} size="large" clickable userId={post.userId} />
+          <Avatar name={post.authorName} avatarUrl={post.authorAvatarUrl} size="large" clickable userId={post.userId} nicknameColor={post.authorNicknameColor} />
           <div style={styles.authorInfo}>
-            <div style={styles.authorName}>{post.authorName}</div>
+            <div style={{...styles.authorName, color: post.authorNicknameColor || undefined}}>{post.authorName}</div>
             <div style={styles.authorMeta}>
               {post.userCity && <span><MapPin size={14} style={{marginRight: 4}} />{post.userCity}</span>}
               <span><Star size={14} style={{marginRight: 4}} />{post.authorRating ? post.authorRating.toFixed(1) : '0.0'}</span>
