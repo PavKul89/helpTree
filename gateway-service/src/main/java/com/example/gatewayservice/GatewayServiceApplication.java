@@ -27,13 +27,11 @@ public class GatewayServiceApplication {
         SpringApplication.run(GatewayServiceApplication.class, args);
         log.info("🚀 Api-gateway service started successfully at: http://localhost:8081");
         log.info("🚀 HelpTree service started successfully at: http://localhost:8081");
-        log.info("🚀 Rating service started successfully at: http://localhost:8085");
         log.info("🚀 Kafka-ui successfully at: http://localhost:8082");
         log.info("🚀 Prometheus successfully at: http://localhost:9090");
         log.info("🚀 Grafana successfully at: http://localhost:3000");
         log.info("🚀 Jaeger successfully at: http://localhost:16686");
         log.info("🚀 MinIO successfully at: http://localhost:9001/browser/helptree");
-        log.info("🚀 Notification service at: http://localhost:8087");
     }
 
     @Bean
@@ -80,25 +78,11 @@ public class GatewayServiceApplication {
                                         .setName("usersService")))
                         .uri("http://localhost:8081"))
 
-                .route("rating-service", r -> r
-                        .path("/api/ratings/**")
-                        .filters(f -> f
-                                .addRequestHeader("X-Forwarded-For", "gateway")
-                                .circuitBreaker(config -> config
-                                        .setName("ratingService")))
-                        .uri("http://localhost:8085"))
-
                 .route("helpTree-internal", r -> r
                         .path("/internal/users/**")
                         .filters(f -> f
                                 .addRequestHeader("X-Forwarded-For", "gateway"))
                         .uri("http://localhost:8081"))
-
-                .route("rating-internal", r -> r
-                        .path("/internal/ratings/**")
-                        .filters(f -> f
-                                .addRequestHeader("X-Forwarded-For", "gateway"))
-                        .uri("http://localhost:8085"))
                 .build();
     }
 }

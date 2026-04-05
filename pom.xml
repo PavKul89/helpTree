@@ -20,7 +20,6 @@
 
 	<modules>
 		<module>helpTree-service</module>
-		<module>rating-service</module>
 	</modules>
 
 	<properties>
