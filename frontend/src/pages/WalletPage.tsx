@@ -426,7 +426,7 @@ export const WalletPage: React.FC = () => {
               <ArrowDownLeft size={16} color="#06b6d4" />
             </div>
             <div style={styles.earnText}>Получить помощь</div>
-            <div style={styles.earnAmount}>+10</div>
+            <div style={styles.earnAmount}>+2</div>
           </div>
           <div style={styles.earnItem}>
             <div style={styles.earnIcon}>

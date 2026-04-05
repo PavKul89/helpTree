@@ -28,6 +28,7 @@ public class WalletService {
     private final UserService userService;
 
     private static final long COINS_PER_HELP = 10L;
+    private static final long COINS_PER_HELP_RECEIVED = 2L;
     private static final long COINS_PER_REVIEW = 2L;
     private static final long COINS_PER_DAILY_LOGIN = 1L;
 
@@ -78,20 +79,20 @@ public class WalletService {
         
         User receiver = getUserOrThrow(receiverId);
         Long current = receiver.getHelpCoins();
-        receiver.setHelpCoins((current != null ? current : 0L) + COINS_PER_HELP);
+        receiver.setHelpCoins((current != null ? current : 0L) + COINS_PER_HELP_RECEIVED);
         userRepository.save(receiver);
         
         CoinTransaction transaction = CoinTransaction.builder()
                 .userId(receiverId)
                 .type(TransactionType.HELP_RECEIVED)
-                .amount(COINS_PER_HELP)
+                .amount(COINS_PER_HELP_RECEIVED)
                 .description("Получена помощь")
                 .relatedUserId(helperId)
                 .relatedPostId(postId)
                 .build();
         transactionRepository.save(transaction);
         
-        log.info("Начислено {} монет пользователю {}", COINS_PER_HELP, receiverId);
+        log.info("Начислено {} монет пользователю {}", COINS_PER_HELP_RECEIVED, receiverId);
     }
 
     public void addCoinsForReview(Long userId) {
