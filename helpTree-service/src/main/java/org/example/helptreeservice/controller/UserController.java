@@ -262,6 +262,9 @@ public class UserController {
 
     @PostMapping("/{id}/wallet/daily-bonus")
     public ResponseEntity<Map<String, Object>> claimDailyBonus(@PathVariable Long id) {
+        if (authService.getCurrentUser() == null) {
+            throw new ForbiddenException("Необходимо авторизоваться");
+        }
         if (!authService.canManageUser(id)) {
             throw new ForbiddenException("Вы можете получить бонус только для своего аккаунта");
         }

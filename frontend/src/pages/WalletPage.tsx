@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { walletApi, WalletDto, CoinTransactionDto } from '../api/walletApi';
 import { theme } from '../theme';
-import { Coins, ArrowUpRight, ArrowDownLeft, Gift, Star, Calendar, TrendingUp, History, Gift as GiftIcon, Sparkles } from 'lucide-react';
+import { Coins, ArrowUpRight, ArrowDownLeft, Gift, Star, Calendar, TrendingUp, History, Gift as GiftIcon, Sparkles, Crown, Zap, Unlock, CreditCard } from 'lucide-react';
 import { Button } from '../components';
 import { useToast } from '../components/Toast';
 import { getRelativeTime } from '../utils/dateUtils';
@@ -75,7 +75,7 @@ export const WalletPage: React.FC = () => {
   const [wallet, setWallet] = useState<WalletDto | null>(null);
   const [transactions, setTransactions] = useState<CoinTransactionDto[]>([]);
   const [loading, setLoading] = useState(true);
-  const [claiming, setClaiming] = useState(false);
+  const [spending, setSpending] = useState<string | null>(null);
   const { showToast } = useToast();
 
   const styles: Record<string, React.CSSProperties> = {
@@ -263,6 +263,53 @@ export const WalletPage: React.FC = () => {
       fontWeight: 700,
       marginLeft: 'auto',
     },
+    spendSection: {
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+      gap: '12px',
+    },
+    spendItem: {
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      padding: '20px 16px',
+      background: 'rgba(255,255,255,0.05)',
+      borderRadius: theme.borderRadius.lg,
+      border: '1px solid rgba(255,255,255,0.1)',
+      cursor: 'pointer',
+      transition: 'all 0.2s',
+    },
+    spendItemDisabled: {
+      opacity: 0.5,
+      cursor: 'not-allowed',
+    },
+    spendIcon: {
+      width: '48px',
+      height: '48px',
+      borderRadius: '12px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: '12px',
+    },
+    spendTitle: {
+      color: theme.colors.text,
+      fontSize: '14px',
+      fontWeight: 600,
+      textAlign: 'center',
+      marginBottom: '4px',
+    },
+    spendDesc: {
+      color: theme.colors.textSecondary,
+      fontSize: '11px',
+      textAlign: 'center',
+      marginBottom: '12px',
+    },
+    spendPrice: {
+      color: '#fbbf24',
+      fontWeight: 700,
+      fontSize: '16px',
+    },
   };
 
   useEffect(() => {
@@ -289,23 +336,42 @@ export const WalletPage: React.FC = () => {
     try {
       const data = await walletApi.getTransactions(user.id, 0, 50);
       setTransactions(data.content);
+      
+      const lastTx = data.content[0];
+      if (lastTx && lastTx.type === 'DAILY_LOGIN') {
+        const txTime = new Date(lastTx.createdAt).getTime();
+        const now = Date.now();
+        if (now - txTime < 60000) {
+          showToast('+1 HC за ежедневный вход!', 'success');
+        }
+      }
     } catch (err) {
       console.error('Error loading transactions:', err);
     }
   };
 
-  const handleClaimDailyBonus = async () => {
-    if (!user) return;
-    setClaiming(true);
+  const handleSpend = async (type: 'VIP' | 'BOOST' | 'UNBLOCK') => {
+    if (!user || !wallet) return;
+    
+    const prices = { VIP: 50, BOOST: 5, UNBLOCK: 100 };
+    const price = prices[type];
+    const names = { VIP: 'VIP статус', BOOST: 'поднятие поста', UNBLOCK: 'разблокировку' };
+    
+    if (wallet.balance < price) {
+      showToast(`Недостаточно HC. Нужно ${price}, у вас ${wallet.balance}`, 'error');
+      return;
+    }
+    
+    setSpending(type);
     try {
-      const result = await walletApi.claimDailyBonus(user.id);
-      showToast(result.message, 'success');
+      await walletApi.spend(user.id, type.toUpperCase(), names[type]);
+      showToast(`Вы потратили ${price} HC на ${names[type]}`, 'success');
       loadWallet();
       loadTransactions();
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Ошибка при получении бонуса', 'error');
+      showToast(err.response?.data?.message || 'Ошибка при покупке', 'error');
     } finally {
-      setClaiming(false);
+      setSpending(null);
     }
   };
 
@@ -344,29 +410,6 @@ export const WalletPage: React.FC = () => {
 
       <div style={styles.section}>
         <div style={styles.sectionTitle}>
-          <Sparkles size={20} color="#fbbf24" />
-          Ежедневный бонус
-        </div>
-        <div style={styles.dailyBonus}>
-          <div style={styles.bonusInfo}>
-            <Coins size={24} color="#fbbf24" />
-            <div>
-              <div style={styles.bonusText}>Получить +1 HC</div>
-              <div style={styles.bonusSubtext}>За ежедневный вход</div>
-            </div>
-          </div>
-          <Button 
-            onClick={handleClaimDailyBonus} 
-            disabled={claiming}
-            style={{ background: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)' }}
-          >
-            {claiming ? '...' : 'Получить'}
-          </Button>
-        </div>
-      </div>
-
-      <div style={styles.section}>
-        <div style={styles.sectionTitle}>
           <TrendingUp size={20} color={theme.colors.accent} />
           Как заработать
         </div>
@@ -398,6 +441,41 @@ export const WalletPage: React.FC = () => {
             </div>
             <div style={styles.earnText}>Ежедневный вход</div>
             <div style={styles.earnAmount}>+1</div>
+          </div>
+        </div>
+      </div>
+
+      <div style={styles.section}>
+        <div style={styles.sectionTitle}>
+          <CreditCard size={20} color={theme.colors.accent} />
+          Потратить HC
+        </div>
+        <div style={styles.spendSection}>
+          <div style={styles.spendItem} onClick={() => handleSpend('VIP')}>
+            <div style={{...styles.spendIcon, background: 'linear-gradient(135deg, rgba(251, 191, 36, 0.2) 0%, rgba(251, 191, 36, 0.1) 100%)'}}>
+              <Crown size={24} color="#fbbf24" />
+            </div>
+            <div style={styles.spendTitle}>VIP статус</div>
+            <div style={styles.spendDesc}>Золотая рамка профиля на месяц</div>
+            <div style={styles.spendPrice}>50 HC</div>
+          </div>
+          
+          <div style={styles.spendItem} onClick={() => handleSpend('BOOST')}>
+            <div style={{...styles.spendIcon, background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.2) 0%, rgba(6, 182, 212, 0.1) 100%)'}}>
+              <Zap size={24} color="#06b6d4" />
+            </div>
+            <div style={styles.spendTitle}>Поднять пост</div>
+            <div style={styles.spendDesc}>Пост в топе на 24 часа</div>
+            <div style={styles.spendPrice}>5 HC</div>
+          </div>
+          
+          <div style={styles.spendItem} onClick={() => handleSpend('UNBLOCK')}>
+            <div style={{...styles.spendIcon, background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(239, 68, 68, 0.1) 100%)'}}>
+              <Unlock size={24} color="#ef4444" />
+            </div>
+            <div style={styles.spendTitle}>Разблокировка</div>
+            <div style={styles.spendDesc}>Снять блокировку за долг</div>
+            <div style={styles.spendPrice}>100 HC</div>
           </div>
         </div>
       </div>

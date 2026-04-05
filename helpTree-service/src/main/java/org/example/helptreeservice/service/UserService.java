@@ -520,4 +520,13 @@ public class UserService {
         }
         return user.getBlockedAt() != null;
     }
+
+    @Transactional
+    public void unblockUser(Long userId) {
+        log.info("Разблокировка пользователя {}", userId);
+        User user = getUserEntityById(userId);
+        user.setBlockedAt(null);
+        userRepository.save(user);
+        log.info("Пользователь {} разблокирован", userId);
+    }
 }

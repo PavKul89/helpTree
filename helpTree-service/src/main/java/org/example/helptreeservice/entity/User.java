@@ -107,6 +107,13 @@ public class User {
     @Column(name = "help_coins")
     private Long helpCoins = 0L;
 
+    @Column(name = "vip_until")
+    private LocalDateTime vipUntil;
+
+    public boolean isVip() {
+        return vipUntil != null && vipUntil.isAfter(LocalDateTime.now());
+    }
+
     @PrePersist
     protected void onCreate() {
         LocalDateTime now = LocalDateTime.now();

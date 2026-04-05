@@ -62,7 +62,8 @@ public class RoleBasedAuthFilter implements GlobalFilter {
 
     private static final Set<String> USER_ID_PATH_EXCEPTIONS = Set.of(
             "/telegram",
-            "/reviews"
+            "/reviews",
+            "/wallet"
     );
 
     private static final Set<HttpMethod> ADMIN_ONLY_METHODS = Set.of(
@@ -165,7 +166,7 @@ public class RoleBasedAuthFilter implements GlobalFilter {
         }
         if (path.matches("/api/users/\\d+.*")) {
             for (String exception : USER_ID_PATH_EXCEPTIONS) {
-                if (path.endsWith(exception)) {
+                if (path.contains(exception) || path.endsWith(exception)) {
                     return false;
                 }
             }

@@ -262,6 +262,10 @@ export const ProfilePage = () => {
   const fullUser = profileUser as User;
   const isAdmin = 'role' in fullUser && fullUser.role === 'ADMIN';
   const userAvatar = 'avatarUrl' in profileUser ? (profileUser as UserPublic).avatarUrl : undefined;
+  const isVip = fullUser.vipUntil && new Date(fullUser.vipUntil) > new Date();
+  const vipDaysLeft = fullUser.vipUntil 
+    ? Math.ceil((new Date(fullUser.vipUntil).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+    : 0;
 
   return (
     <div style={styles.container}>
@@ -273,6 +277,10 @@ export const ProfilePage = () => {
           style={{
             ...styles.avatarLarge,
             ...(isOwnProfile ? { cursor: 'pointer' } : {}),
+            ...(isVip ? { 
+              boxShadow: '0 0 20px rgba(251, 191, 36, 0.7), 0 0 40px rgba(251, 191, 36, 0.4)',
+              border: '3px solid #fbbf24',
+            } : {}),
           }} 
           onClick={() => isOwnProfile && avatarInputRef.current?.click()}
         >
@@ -296,7 +304,10 @@ export const ProfilePage = () => {
           />
           <div style={styles.headerInfo}>
             <h1 style={styles.name}>{profileUser.name}</h1>
-            {isAdmin && <span style={styles.adminBadge}>Администратор</span>}
+            <div>
+              {isAdmin && <span style={styles.adminBadge}>Администратор</span>}
+              {isVip && <span style={styles.vipBadge}>⭐ VIP ({vipDaysLeft} дн.)</span>}
+            </div>
             <div style={styles.metaRow}>
               <span style={styles.metaItem}>
                 <Star size={14} color={theme.colors.accent} fill={theme.colors.accent} />
@@ -651,6 +662,18 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     color: '#fff',
     marginBottom: '12px',
+  },
+  vipBadge: {
+    display: 'inline-block',
+    background: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 50%, #fbbf24 100%)',
+    borderRadius: '4px',
+    padding: '4px 10px',
+    fontSize: '12px',
+    fontWeight: 600,
+    color: '#1f2937',
+    marginBottom: '12px',
+    marginLeft: '8px',
+    boxShadow: '0 0 10px rgba(251, 191, 36, 0.5)',
   },
   metaRow: {
     display: 'flex',

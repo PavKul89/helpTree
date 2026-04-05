@@ -72,4 +72,15 @@ export const walletApi = {
     );
     return response.data;
   },
+
+  spend: async (userId: number, type: string, description: string): Promise<{ success: boolean; newBalance: number }> => {
+    const prices: Record<string, number> = { 'VIP': 50, 'BOOST': 5, 'UNBLOCK': 100 };
+    const price = prices[type] || 0;
+    const response = await api.post<{ success: boolean; newBalance: number }>(
+      `/api/users/${userId}/wallet/spend`,
+      null,
+      { params: { amount: price, type, description } }
+    );
+    return response.data;
+  },
 };

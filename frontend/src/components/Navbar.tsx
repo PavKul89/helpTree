@@ -16,6 +16,7 @@ export const Navbar: React.FC = () => {
   const [daysUntilBlock, setDaysUntilBlock] = useState<number | null>(null);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [helpCoins, setHelpCoins] = useState<number>(0);
+  const [isVip, setIsVip] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -78,6 +79,12 @@ export const Navbar: React.FC = () => {
           
           if (userData.helpCoins !== undefined) {
             setHelpCoins(userData.helpCoins);
+          }
+          
+          if (userData.vipUntil && new Date(userData.vipUntil) > new Date()) {
+            setIsVip(true);
+          } else {
+            setIsVip(false);
           }
         })
         .catch(console.error);
@@ -166,7 +173,8 @@ export const Navbar: React.FC = () => {
                   onClick={() => toggleDropdown('profile')}
                   onMouseEnter={() => setOpenDropdown('profile')}
                 >
-                  <User size={16} style={{ marginRight: 6 }} /> Профиль ▾
+                  <User size={16} style={{ marginRight: 6 }} /> 
+                  {isVip ? <span style={{color: '#fbbf24', marginRight: 4}}>⭐</span> : null} Профиль ▾
                 </button>
                 {openDropdown === 'profile' && (
                   <div style={styles.dropdown}>

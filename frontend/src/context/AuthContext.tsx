@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import type { User } from '../types';
 import { authApi } from '../api/authApi';
+import { walletApi } from '../api/walletApi';
 
 interface AuthContextType {
   user: User | null;
@@ -23,7 +24,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (savedToken) {
       setToken(savedToken);
       authApi.getCurrentUser()
-        .then(setUser)
+        .then((userData) => {
+          setUser(userData);
+          walletApi.claimDailyBonus(userData.id).catch(() => {});
+        })
         .catch(() => {
           localStorage.removeItem('accessToken');
           setToken(null);
@@ -38,6 +42,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     localStorage.setItem('accessToken', newToken);
     setToken(newToken);
     setUser(newUser);
+    walletApi.claimDailyBonus(newUser.id).catch(() => {});
   };
 
   const logout = () => {

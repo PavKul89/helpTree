@@ -25,6 +25,7 @@ public class WalletService {
 
     private final UserRepository userRepository;
     private final CoinTransactionRepository transactionRepository;
+    private final UserService userService;
 
     private static final long COINS_PER_HELP = 10L;
     private static final long COINS_PER_REVIEW = 2L;
@@ -38,7 +39,7 @@ public class WalletService {
         
         return WalletDto.builder()
                 .userId(userId)
-                .balance(user.getHelpCoins())
+                .balance(user.getHelpCoins() != null ? user.getHelpCoins() : 0L)
                 .totalEarned(totalEarned != null ? totalEarned : 0L)
                 .totalSpent(totalSpent != null ? totalSpent : 0L)
                 .build();
@@ -55,7 +56,8 @@ public class WalletService {
         log.info("Начисление монет за помощь: helper={}, receiver={}", helperId, receiverId);
         
         User helper = getUserOrThrow(helperId);
-        helper.setHelpCoins(helper.getHelpCoins() + COINS_PER_HELP);
+        Long current = helper.getHelpCoins();
+        helper.setHelpCoins((current != null ? current : 0L) + COINS_PER_HELP);
         userRepository.save(helper);
         
         CoinTransaction transaction = CoinTransaction.builder()
@@ -75,7 +77,8 @@ public class WalletService {
         log.info("Начисление монет за полученную помощь: receiver={}", receiverId);
         
         User receiver = getUserOrThrow(receiverId);
-        receiver.setHelpCoins(receiver.getHelpCoins() + COINS_PER_HELP);
+        Long current = receiver.getHelpCoins();
+        receiver.setHelpCoins((current != null ? current : 0L) + COINS_PER_HELP);
         userRepository.save(receiver);
         
         CoinTransaction transaction = CoinTransaction.builder()
@@ -95,7 +98,8 @@ public class WalletService {
         log.info("Начисление монет за отзыв пользователю {}", userId);
         
         User user = getUserOrThrow(userId);
-        user.setHelpCoins(user.getHelpCoins() + COINS_PER_REVIEW);
+        Long current = user.getHelpCoins();
+        user.setHelpCoins((current != null ? current : 0L) + COINS_PER_REVIEW);
         userRepository.save(user);
         
         CoinTransaction transaction = CoinTransaction.builder()
@@ -123,7 +127,11 @@ public class WalletService {
         }
         
         User user = getUserOrThrow(userId);
-        user.setHelpCoins(user.getHelpCoins() + COINS_PER_DAILY_LOGIN);
+        Long currentCoins = user.getHelpCoins();
+        if (currentCoins == null) {
+            currentCoins = 0L;
+        }
+        user.setHelpCoins(currentCoins + COINS_PER_DAILY_LOGIN);
         userRepository.save(user);
         
         CoinTransaction transaction = CoinTransaction.builder()
@@ -145,11 +153,33 @@ public class WalletService {
         }
         
         User user = getUserOrThrow(userId);
-        if (user.getHelpCoins() < amount) {
-            throw new BadRequestException("Недостаточно монет. Доступно: " + user.getHelpCoins());
+        Long currentCoins = user.getHelpCoins();
+        if (currentCoins == null) {
+            currentCoins = 0L;
+        }
+        if (currentCoins < amount) {
+            throw new BadRequestException("Недостаточно монет. Доступно: " + currentCoins);
         }
         
-        user.setHelpCoins(user.getHelpCoins() - amount);
+        user.setHelpCoins(currentCoins - amount);
+        
+        if (type == TransactionType.ACCOUNT_UNBLOCK) {
+            user.setBlockedAt(null);
+            user.setDebtCount(0);
+            userService.unblockUser(userId);
+        }
+        
+        if (type == TransactionType.VIP_STATUS) {
+            LocalDateTime now = LocalDateTime.now();
+            LocalDateTime currentVip = user.getVipUntil();
+            if (currentVip != null && currentVip.isAfter(now)) {
+                user.setVipUntil(currentVip.plusDays(30));
+            } else {
+                user.setVipUntil(now.plusDays(30));
+            }
+            log.info("VIP статус активирован до {} для пользователя {}", user.getVipUntil(), userId);
+        }
+        
         userRepository.save(user);
         
         CoinTransaction transaction = CoinTransaction.builder()
@@ -167,7 +197,8 @@ public class WalletService {
         log.info("Админ: начисление {} монет пользователю {}", amount, userId);
         
         User user = getUserOrThrow(userId);
-        user.setHelpCoins(user.getHelpCoins() + amount);
+        Long current = user.getHelpCoins();
+        user.setHelpCoins((current != null ? current : 0L) + amount);
         userRepository.save(user);
         
         CoinTransaction transaction = CoinTransaction.builder()
