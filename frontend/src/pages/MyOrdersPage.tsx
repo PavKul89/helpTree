@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { FileText, HandHeart } from 'lucide-react';
+import { FileText, HandHeart, Zap } from 'lucide-react';
 import { postsApi } from '../api/postsApi';
 import { helpApi } from '../api/helpApi';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../components/Toast';
 import { Card, Button, Spinner, Modal } from '../components';
 import { theme } from '../theme';
 import { getRelativeTime } from '../utils/dateUtils';
@@ -16,6 +17,8 @@ export const MyOrdersPage = () => {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'posts' | 'helps'>('posts');
   const [deletePostId, setDeletePostId] = useState<number | null>(null);
+  const [boostingPostId, setBoostingPostId] = useState<number | null>(null);
+  const { showToast } = useToast();
 
   useEffect(() => {
     if (user) {
@@ -46,6 +49,38 @@ export const MyOrdersPage = () => {
     } catch (err) {
       console.error(err);
     }
+  };
+
+  const handleBoostPost = async (postId: number) => {
+    setBoostingPostId(postId);
+    try {
+      const result = await postsApi.boost(postId);
+      showToast(result.message, 'success');
+      loadData();
+    } catch (err: any) {
+      console.error(err);
+      const message = err.response?.data?.message || 'Не удалось поднять пост';
+      showToast(message, 'error');
+    } finally {
+      setBoostingPostId(null);
+    }
+  };
+
+  const isBoosted = (post: Post) => {
+    if (!post.boostedUntil) return false;
+    return new Date(post.boostedUntil) > new Date();
+  };
+
+  const getBoostTimeRemaining = (post: Post) => {
+    if (!post.boostedUntil) return '';
+    const end = new Date(post.boostedUntil);
+    const now = new Date();
+    const diff = end.getTime() - now.getTime();
+    if (diff <= 0) return '';
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    if (hours > 0) return `${hours}ч ${minutes}мин`;
+    return `${minutes}мин`;
   };
 
   const formatDate = (dateString: string) => {
@@ -156,6 +191,11 @@ export const MyOrdersPage = () => {
                           backgroundColor: getStatusColor(post.status)
                         }} />
                         <span style={styles.statusText}>{getStatusLabel(post.status)}</span>
+                        {isBoosted(post) && (
+                          <span style={styles.boostedBadge}>
+                            <Zap size={12} /> В топе {getBoostTimeRemaining(post)}
+                          </span>
+                        )}
                       </div>
                       <div style={styles.itemTitle}>{post.title}</div>
                       <div style={styles.itemDesc}>
@@ -167,6 +207,16 @@ export const MyOrdersPage = () => {
                     <div style={styles.itemSide}>
                       <span style={styles.itemCategory}>{post.category}</span>
                       <span style={styles.itemDate}>{getRelativeTime(post.createdAt)}</span>
+                      {post.status === 'OPEN' && (
+                        <Button 
+                          onClick={(e) => { e.preventDefault(); handleBoostPost(post.id); }}
+                          style={styles.boostBtn}
+                          disabled={boostingPostId === post.id}
+                        >
+                          <Zap size={14} style={{ marginRight: 4 }} /> 
+                          {boostingPostId === post.id ? '...' : isBoosted(post) ? '+24ч' : 'В топ'}
+                        </Button>
+                      )}
                       <Button 
                         variant="danger" 
                         onClick={(e) => { e.preventDefault(); confirmDeletePost(post.id); }}
@@ -364,6 +414,18 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     gap: '8px',
     marginBottom: '8px',
+    flexWrap: 'wrap',
+  },
+  boostedBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+    color: '#fff',
+    fontSize: '11px',
+    fontWeight: 600,
+    padding: '3px 8px',
+    borderRadius: '10px',
   },
   statusDot: {
     width: '8px',
@@ -418,5 +480,11 @@ const styles: Record<string, React.CSSProperties> = {
   deleteBtn: {
     padding: '8px 14px',
     fontSize: '13px',
+  },
+  boostBtn: {
+    padding: '8px 14px',
+    fontSize: '13px',
+    background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+    border: 'none',
   },
 };

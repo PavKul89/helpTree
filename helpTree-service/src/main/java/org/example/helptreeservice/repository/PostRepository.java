@@ -2,6 +2,8 @@ package org.example.helptreeservice.repository;
 
 import org.example.helptreeservice.entity.Post;
 import org.example.helptreeservice.enums.PostStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
@@ -32,4 +34,12 @@ public interface PostRepository extends JpaRepository<Post, Long>, JpaSpecificat
 
     @Query("SELECT COUNT(p) FROM Post p WHERE p.status = :status AND (p.deleted = false OR p.deleted IS NULL)")
     long countByStatus(@Param("status") PostStatus status);
+
+    @Query("SELECT p FROM Post p LEFT JOIN FETCH p.user LEFT JOIN FETCH p.helper WHERE p.deleted = false ORDER BY CASE WHEN p.boostedUntil > CURRENT_TIMESTAMP THEN 1 ELSE 0 END DESC, p.createdAt DESC")
+    List<Post> findAllNotDeletedOrderByBoostedFirst();
+
+    @Query(value = "SELECT * FROM posts p WHERE p.deleted = false ORDER BY CASE WHEN p.boosted_until > CURRENT_TIMESTAMP THEN 1 ELSE 0 END DESC, p.created_at DESC",
+           countQuery = "SELECT COUNT(*) FROM posts p WHERE p.deleted = false",
+           nativeQuery = true)
+    Page<Post> findAllNotDeletedPaginated(Pageable pageable);
 }

@@ -28,4 +28,6 @@ public class PostDto {
     private PostStatus status;
     private List<String> imageUrls;
     private LocalDateTime authorBlockedAt;
+    private LocalDateTime boostedUntil;
+    private boolean boosted;
 }

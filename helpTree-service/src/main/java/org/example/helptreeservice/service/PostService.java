@@ -142,7 +142,7 @@ public class PostService {
         log.info("Запрос списка всех активных постов");
 
         try {
-            List<PostDto> posts = postRepository.findAllNotDeleted().stream()
+            List<PostDto> posts = postRepository.findAllNotDeletedOrderByBoostedFirst().stream()
                     .map(postMapper::toDto)
                     .collect(Collectors.toList());
 
@@ -164,7 +164,16 @@ public class PostService {
 
         try {
             Specification<Post> spec = PostSpecification.filter(userId, status, title, authorName, category, city);
-            Page<PostDto> postsPage = postRepository.findAll(spec, pageable).map(postMapper::toDto);
+            
+            Specification<Post> boostedSpec = (root, query, cb) -> {
+                query.orderBy(
+                    cb.desc(root.get("boostedUntil")),
+                    cb.desc(root.get("createdAt"))
+                );
+                return spec.toPredicate(root, query, cb);
+            };
+            
+            Page<PostDto> postsPage = postRepository.findAll(boostedSpec, pageable).map(postMapper::toDto);
 
             log.info("Найдено постов с фильтрацией: {}, всего страниц: {}",
                     postsPage.getTotalElements(), postsPage.getTotalPages());
@@ -349,5 +358,24 @@ public class PostService {
         }
         
         return posts.stream().map(postMapper::toDto).collect(Collectors.toList());
+    }
+
+    public PostDto boostPost(Long id) {
+        log.info("Запрос на поднятие поста в топ, ID: {}", id);
+        
+        Post post = getPostEntityById(id);
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime newBoostTime = now.plusHours(24);
+        
+        if (post.getBoostedUntil() != null && post.getBoostedUntil().isAfter(now)) {
+            post.setBoostedUntil(post.getBoostedUntil().plusHours(24));
+            log.info("Пост {} уже бустится, продлеваем до {}", id, post.getBoostedUntil());
+        } else {
+            post.setBoostedUntil(newBoostTime);
+            log.info("Пост {} поднят в топ до {}", id, newBoostTime);
+        }
+        
+        Post saved = postRepository.save(post);
+        return postMapper.toDto(saved);
     }
 }

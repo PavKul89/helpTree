@@ -56,4 +56,11 @@ public class Post {
 
     private Double latitude;
     private Double longitude;
+
+    @Column(name = "boosted_until")
+    private LocalDateTime boostedUntil;
+
+    public boolean isBoosted() {
+        return boostedUntil != null && boostedUntil.isAfter(LocalDateTime.now());
+    }
 }

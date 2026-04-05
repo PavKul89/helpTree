@@ -48,6 +48,8 @@ export interface Post {
   createdAt: string;
   updatedAt: string;
   authorBlockedAt?: string;
+  boostedUntil?: string;
+  boosted: boolean;
 }
 
 export interface Review {

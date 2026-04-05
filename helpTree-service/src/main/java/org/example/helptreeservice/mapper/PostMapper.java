@@ -20,5 +20,6 @@ public interface PostMapper {
     @Mapping(source = "helper.id", target = "helperId")
     @Mapping(source = "helper.name", target = "helperName")
     @Mapping(source = "status", target = "status")
+    @Mapping(target = "boosted", expression = "java(post.isBoosted())")
     PostDto toDto(Post post);
 }

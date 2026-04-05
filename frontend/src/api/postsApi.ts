@@ -61,4 +61,9 @@ export const postsApi = {
     const response = await api.get<Post[]>('/api/posts/map');
     return response.data;
   },
+
+  boost: async (postId: number): Promise<{ success: boolean; post: Post; message: string }> => {
+    const response = await api.post<{ success: boolean; post: Post; message: string }>(`/api/posts/${postId}/boost`);
+    return response.data;
+  },
 };

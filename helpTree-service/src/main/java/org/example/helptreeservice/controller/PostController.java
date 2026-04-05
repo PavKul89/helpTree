@@ -4,10 +4,13 @@ import org.example.helptreeservice.dto.posts.CreatePostRequest;
 import org.example.helptreeservice.dto.posts.PostDto;
 import org.example.helptreeservice.dto.posts.UpdatePostRequest;
 import org.example.helptreeservice.enums.PostStatus;
+import org.example.helptreeservice.enums.TransactionType;
+import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.ForbiddenException;
 import org.example.helptreeservice.service.AuthorizationService;
 import org.example.helptreeservice.service.PostService;
 import org.example.helptreeservice.service.UserService;
+import org.example.helptreeservice.service.WalletService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -19,6 +22,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/posts")
@@ -28,6 +32,9 @@ public class PostController {
     private final PostService postService;
     private final AuthorizationService authService;
     private final UserService userService;
+    private final WalletService walletService;
+    
+    private static final long BOOST_PRICE = 5L;
 
     @PostMapping
     public ResponseEntity<PostDto> createPost(@Valid @RequestBody CreatePostRequest request) {
@@ -112,5 +119,36 @@ public class PostController {
             @RequestParam(required = false) String status
     ) {
         return ResponseEntity.ok(postService.getPostsOnMap(latitude, longitude, radius, status));
+    }
+
+    @PostMapping("/{id}/boost")
+    public ResponseEntity<Map<String, Object>> boostPost(@PathVariable Long id) {
+        var currentUser = authService.getCurrentUser();
+        if (currentUser == null) {
+            throw new ForbiddenException("Необходимо авторизоваться");
+        }
+        
+        PostDto post = postService.getPostById(id);
+        if (!authService.canManagePost(post.getUserId())) {
+            throw new ForbiddenException("Вы можете поднять только свои посты");
+        }
+        
+        if (post.getStatus() != PostStatus.OPEN) {
+            throw new BadRequestException("Можно поднять только открытый пост");
+        }
+        
+        try {
+            walletService.spendCoins(currentUser.getUserId(), BOOST_PRICE, TransactionType.POST_BOOST, "Поднятие поста #" + id);
+            PostDto boosted = postService.boostPost(id);
+            return ResponseEntity.ok(Map.of(
+                "success", true,
+                "post", boosted,
+                "message", "Пост поднят в топ на 24 часа!"
+            ));
+        } catch (BadRequestException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new BadRequestException("Не удалось поднять пост: " + e.getMessage());
+        }
     }
 }

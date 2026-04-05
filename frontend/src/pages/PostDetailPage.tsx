@@ -16,7 +16,7 @@ import { Modal } from '../components/Modal';
 import { Avatar } from '../components/Avatar';
 import { PostDetailSkeleton } from '../components/Skeleton';
 import { theme } from '../theme';
-import { MapPin, Star, MessageCircle, Ban, HandHeart } from 'lucide-react';
+import { MapPin, Star, MessageCircle, Ban, HandHeart, Zap } from 'lucide-react';
 
 export const PostDetailPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -38,6 +38,7 @@ export const PostDetailPage = () => {
   const [showDeletePostModal, setShowDeletePostModal] = useState(false);
   const [showDeleteImageModal, setShowDeleteImageModal] = useState<string | null>(null);
   const [showFavoriteModal, setShowFavoriteModal] = useState(false);
+  const [isBoosting, setIsBoosting] = useState(false);
   const { user } = useAuth();
   const { showToast } = useToast();
 
@@ -148,6 +149,38 @@ export const PostDetailPage = () => {
     } catch (err) {
       console.error(err);
     }
+  };
+
+  const handleBoostPost = async () => {
+    setIsBoosting(true);
+    try {
+      const result = await postsApi.boost(Number(id));
+      showToast(result.message, 'success');
+      loadData();
+    } catch (err: any) {
+      console.error(err);
+      const message = err.response?.data?.message || 'Не удалось поднять пост';
+      showToast(message, 'error');
+    } finally {
+      setIsBoosting(false);
+    }
+  };
+
+  const isPostBoosted = () => {
+    if (!post?.boostedUntil) return false;
+    return new Date(post.boostedUntil) > new Date();
+  };
+
+  const getBoostTimeRemaining = () => {
+    if (!post?.boostedUntil) return '';
+    const end = new Date(post.boostedUntil);
+    const now = new Date();
+    const diff = end.getTime() - now.getTime();
+    if (diff <= 0) return '';
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    if (hours > 0) return `${hours}ч ${minutes}мин`;
+    return `${minutes}мин`;
   };
 
   const startEdit = () => {
@@ -392,6 +425,22 @@ export const PostDetailPage = () => {
 
         {isAuthor && (
           <div style={styles.authorActions}>
+            {post.status === 'OPEN' && (
+              <Button 
+                onClick={handleBoostPost} 
+                disabled={isBoosting}
+                style={{ 
+                  marginRight: 10,
+                  background: isPostBoosted() 
+                    ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' 
+                    : 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)',
+                  border: 'none',
+                }}
+              >
+                <Zap size={16} style={{ marginRight: 6 }} /> 
+                {isBoosting ? 'Поднятие...' : isPostBoosted() ? `В топе (${getBoostTimeRemaining()})` : 'Поднять в топ (5 HC)'}
+              </Button>
+            )}
             <Button onClick={startEdit} style={{ marginRight: 10 }}>Редактировать</Button>
             <Button variant="danger" onClick={handleDeletePostClick}>Удалить пост</Button>
           </div>
