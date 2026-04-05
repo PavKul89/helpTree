@@ -15,6 +15,7 @@ import { HelpGraphPage } from './pages/HelpGraphPage';
 import { AchievementsPage } from './pages/AchievementsPage';
 import { ActivityPage } from './pages/ActivityPage';
 import { MapPage } from './pages/MapPage';
+import { WalletPage } from './pages/WalletPage';
 import { Navbar } from './components/Navbar';
 import { Layout } from './components/Layout';
 import { ToastProvider } from './components/Toast';
@@ -74,6 +75,14 @@ const AppLayout = () => {
               </ProtectedRoute>
             } />
             <Route path="/profile/:userId" element={<ProfilePage key={window.location.pathname} />} />
+            <Route 
+              path="/wallet" 
+              element={
+                <ProtectedRoute>
+                  <WalletPage />
+                </ProtectedRoute>
+              } 
+            />
             <Route 
               path="/chats" 
               element={

@@ -183,11 +183,12 @@ export const Navbar: React.FC = () => {
                       <MessageCircle size={16} style={{marginRight: 8}} /> Чаты
                       {unreadChats > 0 && <span style={styles.dropdownBadge}>{unreadChats}</span>}
                     </Link>
-                    <div style={{...styles.dropdownItem, ...styles.walletDisplay}}>
+                    <Link to="/wallet" style={{...styles.dropdownItem, ...styles.walletItem}} onClick={closeDropdown}>
                       <Coins size={16} style={{marginRight: 8, color: '#fbbf24'}} /> 
                       <span style={{color: '#fbbf24', fontWeight: 700}}>{helpCoins}</span>
                       <span style={{color: 'rgba(255,255,255,0.6)', fontSize: '12px', marginLeft: 4}}>HC</span>
-                    </div>
+                      <span style={{marginLeft: 'auto', color: theme.colors.textMuted, fontSize: '12px'}}>Кошелёк →</span>
+                    </Link>
                   </div>
                 )}
               </div>
@@ -317,11 +318,10 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     boxShadow: '0 2px 8px rgba(239, 68, 68, 0.4)',
   },
-  walletDisplay: {
+  walletItem: {
     marginTop: '8px',
     paddingTop: '12px',
     borderTop: '1px solid rgba(255,255,255,0.1)',
-    cursor: 'default',
   } as React.CSSProperties,
   loginBtn: {
     background: theme.gradients.button,

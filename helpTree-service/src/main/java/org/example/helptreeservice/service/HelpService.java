@@ -39,6 +39,7 @@ public class HelpService {
     private final HelpMapper helpMapper;
     private final KafkaProducerService kafkaProducerService;
     private final AchievementService achievementService;
+    private final WalletService walletService;
 
     /**
      * 1. Помощник откликается на пост
@@ -294,6 +295,10 @@ public class HelpService {
 
             userService.incrementHelpedCount(help.getReceiver().getId());
             userService.userHelpedSomeone(help.getHelper().getId());
+
+            // Начисляем HelpCoins за помощь
+            walletService.addCoinsForHelp(help.getHelper().getId(), help.getReceiver().getId(), post.getId());
+            walletService.addCoinsForReceivedHelp(help.getReceiver().getId(), help.getHelper().getId(), post.getId());
 
             achievementService.checkAndAwardAchievements(help.getHelper(), help);
 
