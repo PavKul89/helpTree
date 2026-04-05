@@ -18,6 +18,7 @@ export interface User {
   debtStartedAt?: string;
   helpCoins?: number;
   vipUntil?: string;
+  nicknameColor?: string;
 }
 
 export interface UserPublic {

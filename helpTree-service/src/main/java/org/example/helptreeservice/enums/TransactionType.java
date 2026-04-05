@@ -10,5 +10,7 @@ public enum TransactionType {
     ACCOUNT_UNBLOCK,
     GIFT_SENT,
     GIFT_RECEIVED,
-    ADMIN_BONUS
+    ADMIN_BONUS,
+    FIRST_HELP,
+    NICKNAME_COLOR
 }

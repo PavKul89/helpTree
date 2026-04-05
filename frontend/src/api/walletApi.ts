@@ -83,4 +83,13 @@ export const walletApi = {
     );
     return response.data;
   },
+
+  changeNicknameColor: async (userId: number, color: string): Promise<{ success: boolean; newBalance: number; color: string }> => {
+    const response = await api.post<{ success: boolean; newBalance: number; color: string }>(
+      `/api/users/${userId}/wallet/nickname-color`,
+      null,
+      { params: { color } }
+    );
+    return response.data;
+  },
 };

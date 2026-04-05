@@ -17,8 +17,11 @@ public interface CoinTransactionRepository extends JpaRepository<CoinTransaction
     
     List<CoinTransaction> findTop10ByUserIdOrderByCreatedAtDesc(Long userId);
     
-    @Query("SELECT COALESCE(SUM(ct.amount), 0) FROM CoinTransaction ct WHERE ct.userId = :userId AND ct.type IN ('HELP_GIVEN', 'HELP_RECEIVED', 'REVIEW_BONUS', 'DAILY_LOGIN', 'ADMIN_BONUS', 'GIFT_RECEIVED')")
+    @Query("SELECT COALESCE(SUM(ct.amount), 0) FROM CoinTransaction ct WHERE ct.userId = :userId AND ct.type IN ('HELP_GIVEN', 'HELP_RECEIVED', 'REVIEW_BONUS', 'DAILY_LOGIN', 'ADMIN_BONUS', 'GIFT_RECEIVED', 'FIRST_HELP')")
     Long getTotalEarned(@Param("userId") Long userId);
+    
+    @Query("SELECT COUNT(ct) FROM CoinTransaction ct WHERE ct.userId = :userId AND ct.type = 'FIRST_HELP'")
+    Long countFirstHelpBonuses(@Param("userId") Long userId);
     
     @Query("SELECT COALESCE(SUM(ABS(ct.amount)), 0) FROM CoinTransaction ct WHERE ct.userId = :userId AND ct.amount < 0")
     Long getTotalSpent(@Param("userId") Long userId);

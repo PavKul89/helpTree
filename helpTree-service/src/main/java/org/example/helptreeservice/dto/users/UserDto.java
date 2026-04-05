@@ -32,4 +32,5 @@ public class UserDto {
     private LocalDateTime debtStartedAt;
     private Long helpCoins;
     private LocalDateTime vipUntil;
+    private String nicknameColor;
 }

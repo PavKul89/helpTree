@@ -110,6 +110,10 @@ public class User {
     @Column(name = "vip_until")
     private LocalDateTime vipUntil;
 
+    @Size(max = 20)
+    @Column(name = "nickname_color")
+    private String nicknameColor;
+
     public boolean isVip() {
         return vipUntil != null && vipUntil.isAfter(LocalDateTime.now());
     }

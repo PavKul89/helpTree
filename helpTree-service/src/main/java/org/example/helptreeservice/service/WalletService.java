@@ -31,6 +31,9 @@ public class WalletService {
     private static final long COINS_PER_HELP_RECEIVED = 2L;
     private static final long COINS_PER_REVIEW = 2L;
     private static final long COINS_PER_DAILY_LOGIN = 1L;
+    private static final long COINS_PER_FIRST_HELP = 3L;
+    private static final int MAX_FIRST_HELP_BONUSES = 3;
+    private static final long COST_NICKNAME_COLOR = 20L;
 
     @Transactional(readOnly = true)
     public WalletDto getWallet(Long userId) {
@@ -58,7 +61,24 @@ public class WalletService {
         
         User helper = getUserOrThrow(helperId);
         Long current = helper.getHelpCoins();
-        helper.setHelpCoins((current != null ? current : 0L) + COINS_PER_HELP);
+        long totalCoins = (current != null ? current : 0L) + COINS_PER_HELP;
+        
+        Long firstHelpCount = transactionRepository.countFirstHelpBonuses(helperId);
+        if (firstHelpCount != null && firstHelpCount < MAX_FIRST_HELP_BONUSES) {
+            totalCoins += COINS_PER_FIRST_HELP;
+            CoinTransaction firstHelpTx = CoinTransaction.builder()
+                    .userId(helperId)
+                    .type(TransactionType.FIRST_HELP)
+                    .amount(COINS_PER_FIRST_HELP)
+                    .description("Бонус новичка")
+                    .relatedUserId(receiverId)
+                    .relatedPostId(postId)
+                    .build();
+            transactionRepository.save(firstHelpTx);
+            log.info("Начислен бонус новичка {} монет пользователю {}", COINS_PER_FIRST_HELP, helperId);
+        }
+        
+        helper.setHelpCoins(totalCoins);
         userRepository.save(helper);
         
         CoinTransaction transaction = CoinTransaction.builder()
@@ -193,7 +213,34 @@ public class WalletService {
         
         log.info("Списано {} монет у пользователя {}. Новый баланс: {}", amount, userId, user.getHelpCoins());
     }
-
+    
+    public void changeNicknameColor(Long userId, String color) {
+        log.info("Смена цвета ника на {} для пользователя {}", color, userId);
+        
+        User user = getUserOrThrow(userId);
+        Long currentCoins = user.getHelpCoins();
+        if (currentCoins == null) {
+            currentCoins = 0L;
+        }
+        if (currentCoins < COST_NICKNAME_COLOR) {
+            throw new BadRequestException("Недостаточно монет. Нужно: " + COST_NICKNAME_COLOR + ", у вас: " + currentCoins);
+        }
+        
+        user.setHelpCoins(currentCoins - COST_NICKNAME_COLOR);
+        user.setNicknameColor(color);
+        userRepository.save(user);
+        
+        CoinTransaction transaction = CoinTransaction.builder()
+                .userId(userId)
+                .type(TransactionType.NICKNAME_COLOR)
+                .amount(-COST_NICKNAME_COLOR)
+                .description("Смена цвета ника: " + color)
+                .build();
+        transactionRepository.save(transaction);
+        
+        log.info("Цвет ника изменён на {} для пользователя {}", color, userId);
+    }
+    
     public void adminAddCoins(Long userId, long amount, String description) {
         log.info("Админ: начисление {} монет пользователю {}", amount, userId);
         

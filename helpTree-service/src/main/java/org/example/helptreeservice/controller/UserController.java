@@ -311,4 +311,20 @@ public class UserController {
             "spentAmount", amount
         ));
     }
+
+    @PostMapping("/{id}/wallet/nickname-color")
+    public ResponseEntity<Map<String, Object>> changeNicknameColor(
+            @PathVariable Long id,
+            @RequestParam String color) {
+        if (!authService.canManageUser(id)) {
+            throw new ForbiddenException("Вы можете менять цвет ника только своего аккаунта");
+        }
+        walletService.changeNicknameColor(id, color);
+        WalletDto wallet = walletService.getWallet(id);
+        return ResponseEntity.ok(Map.of(
+            "success", true,
+            "newBalance", wallet.getBalance(),
+            "color", color
+        ));
+    }
 }
