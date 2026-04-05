@@ -5,7 +5,7 @@ import {
   ChefHat, Flower2, Car, Dog, Baby, Laptop, Scissors, Pill, Scale, BookOpen, 
   GraduationCap, CarFront, Home, Sparkles, Package, Heart, Brain, Wifi, Camera, 
   Music, Palette, Trophy, Plane, Bird, Plug, Shirt, Apple, Syringe, CreditCard,
-  Shield, Building, Pin, CircleDot, User
+  Shield, Building, Pin, CircleDot, User, Zap
 } from 'lucide-react';
 import { postsApi } from '../api/postsApi';
 import { authApi } from '../api/authApi';
@@ -631,8 +631,9 @@ export const PostsPage = () => {
                   </div>
                   <div style={styles.metaRight}>
                     {post.userCity && <span style={styles.city}><MapPin size={12} style={{marginRight: 4}} />{post.userCity}</span>}
-                    <span style={styles.date}>
-                      {getRelativeTime(post.createdAt)}
+                    <span style={post.boosted ? styles.boostedDate : styles.date}>
+                      {post.boosted && <Zap size={12} style={{marginRight: 4}} />}
+                      {post.boosted ? 'В топе' : getRelativeTime(post.createdAt)}
                     </span>
                   </div>
                 </div>
@@ -1115,6 +1116,13 @@ const styles: Record<string, React.CSSProperties> = {
   date: {
     color: theme.colors.textMuted,
     fontSize: '12px',
+  },
+  boostedDate: {
+    color: '#f59e0b',
+    fontSize: '12px',
+    fontWeight: 600,
+    display: 'flex',
+    alignItems: 'center',
   },
   pagination: {
     display: 'flex',

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, Circle } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { MapPin, Navigation, Target, X, ChevronRight, Clock, Filter } from 'lucide-react';
+import { MapPin, Navigation, Target, X, ChevronRight, Clock, Filter, Zap } from 'lucide-react';
 import { postsApi } from '../api/postsApi';
 import { authApi } from '../api/authApi';
 import { useAuth } from '../context/AuthContext';
@@ -398,8 +398,17 @@ export const MapPage = () => {
                     <span>{selectedPost.userCity || 'Город не указан'}</span>
                   </div>
                   <div style={styles.metaItem}>
-                    <Clock size={14} color={theme.colors.textMuted} />
-                    <span>{getRelativeTime(selectedPost.createdAt)}</span>
+                    {selectedPost.boosted ? (
+                      <>
+                        <Zap size={14} color="#f59e0b" />
+                        <span style={{color: '#f59e0b', fontWeight: 600}}>В топе</span>
+                      </>
+                    ) : (
+                      <>
+                        <Clock size={14} color={theme.colors.textMuted} />
+                        <span>{getRelativeTime(selectedPost.createdAt)}</span>
+                      </>
+                    )}
                   </div>
                   {selectedPost.distance && (
                     <div style={styles.metaItem}>

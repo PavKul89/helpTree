@@ -375,7 +375,8 @@ public class PostService {
             log.info("Пост {} уже бустится, продлеваем до {}", id, post.getBoostedUntil());
         } else {
             post.setBoostedUntil(newBoostTime);
-            log.info("Пост {} поднят в топ до {}", id, newBoostTime);
+            post.setCreatedAt(now);
+            log.info("Пост {} поднят в топ до {}, перемещён наверх", id, newBoostTime);
         }
         
         Post saved = postRepository.save(post);
