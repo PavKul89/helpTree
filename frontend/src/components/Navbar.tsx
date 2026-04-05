@@ -113,7 +113,16 @@ export const Navbar: React.FC = () => {
   };
 
   const toggleDropdown = (name: string) => {
-    setOpenDropdown(openDropdown === name ? null : name);
+    if (openDropdown === name) {
+      setOpenDropdown(null);
+    } else {
+      setOpenDropdown(name);
+      if (name === 'profile' && user) {
+        walletApi.getWallet(user.id)
+          .then(wallet => setHelpCoins(wallet.balance))
+          .catch(console.error);
+      }
+    }
   };
 
   const closeDropdown = () => {
@@ -171,7 +180,12 @@ export const Navbar: React.FC = () => {
                 <button 
                   style={styles.dropdownTrigger}
                   onClick={() => toggleDropdown('profile')}
-                  onMouseEnter={() => setOpenDropdown('profile')}
+                  onMouseEnter={() => {
+                    setOpenDropdown('profile');
+                    walletApi.getWallet(user.id)
+                      .then(wallet => setHelpCoins(wallet.balance))
+                      .catch(console.error);
+                  }}
                 >
                   <User size={16} style={{ marginRight: 6 }} /> 
                   {isVip ? <span style={{color: '#fbbf24', marginRight: 4}}>⭐</span> : null} Профиль ▾
