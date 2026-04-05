@@ -507,7 +507,7 @@ export const PostDetailPage = () => {
         </Card>
       )}
 
-      {helps.some(h => h.status === 'CONFIRMED') && (
+      {helps.some(h => h.status === 'CONFIRMED' && (h.helperId === user?.id || post.userId === user?.id)) && (
         <Card style={{ marginBottom: 20 }}>
           <h3 style={styles.sectionTitle}>Отзывы</h3>
           {reviews.length > 0 ? reviews.map((review) => (
@@ -521,8 +521,8 @@ export const PostDetailPage = () => {
             <div style={styles.reviewForm}>
               <h4>Оставить отзыв</h4>
               {(() => {
-                const confirmedHelps = helps.filter(h => h.status === 'CONFIRMED');
-                if (confirmedHelps.length === 0) return <p>Нет подтверждённых услуг для отзыва</p>;
+                const confirmedHelps = helps.filter(h => h.status === 'CONFIRMED' && (h.helperId === user.id || post.userId === user.id));
+                if (confirmedHelps.length === 0) return null;
                 
                 return confirmedHelps.map(help => {
                   const existingReview = reviews.find(r => 
