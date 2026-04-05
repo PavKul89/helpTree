@@ -42,9 +42,9 @@ export const UsersPage = () => {
           <div style={styles.grid}>
             {users.map((user) => (
               <Link key={user.id} to={`/profile/${user.id}`} style={styles.userCard}>
-                <Avatar name={user.name} avatarUrl={user.avatarUrl} size="large" />
+                <Avatar name={user.name} avatarUrl={user.avatarUrl} size="large" nicknameColor={user.nicknameColor} />
                 <div style={styles.userInfo}>
-                  <div style={styles.userName}>{user.name}</div>
+                  <div style={{...styles.userName, color: user.nicknameColor || styles.userName.color}}>{user.name}</div>
                   <div style={styles.userStats}>
                     <span style={styles.statItem}>
                       <Star size={14} color={theme.colors.accent} fill={theme.colors.accent} />

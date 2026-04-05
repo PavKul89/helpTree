@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, Circle } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { MapPin, Navigation, Target, X, ChevronRight, Clock, Filter, Zap } from 'lucide-react';
+import { MapPin, Navigation, Target, X, ChevronRight, Clock, Filter, Zap, User } from 'lucide-react';
 import { postsApi } from '../api/postsApi';
 import { authApi } from '../api/authApi';
 import { useAuth } from '../context/AuthContext';
@@ -393,6 +393,14 @@ export const MapPage = () => {
                 <h3 style={styles.postTitle}>{selectedPost.title}</h3>
                 
                 <div style={styles.postMeta}>
+                  <div style={styles.metaItem}>
+                    <User size={14} color={theme.colors.accentLight} />
+                    <span style={{color: selectedPost.authorNicknameColor || theme.colors.accentLight}}>{selectedPost.authorName}</span>
+                  </div>
+                  <div style={styles.metaItem}>
+                    <MapPin size={14} color={theme.colors.accentLight} />
+                    <span>{selectedPost.userCity || 'Город не указан'}</span>
+                  </div>
                   <div style={styles.metaItem}>
                     <MapPin size={14} color={theme.colors.accentLight} />
                     <span>{selectedPost.userCity || 'Город не указан'}</span>

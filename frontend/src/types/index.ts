@@ -28,6 +28,7 @@ export interface UserPublic {
   helpedCount: number;
   debtCount: number;
   avatarUrl?: string;
+  nicknameColor?: string;
 }
 
 export interface Post {

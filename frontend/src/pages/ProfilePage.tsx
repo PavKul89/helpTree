@@ -303,7 +303,7 @@ export const ProfilePage = () => {
             style={{ display: 'none' }}
           />
           <div style={styles.headerInfo}>
-            <h1 style={styles.name}>{profileUser.name}</h1>
+            <h1 style={{...styles.name, color: (profileUser as any).nicknameColor || styles.name.color}}>{profileUser.name}</h1>
             <div>
               {isAdmin && <span style={styles.adminBadge}>Администратор</span>}
               {isVip && <span style={styles.vipBadge}>⭐ VIP ({vipDaysLeft} дн.)</span>}
