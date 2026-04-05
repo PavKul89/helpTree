@@ -120,7 +120,7 @@ public class WalletService {
         var recentTransactions = transactionRepository.findTop10ByUserIdOrderByCreatedAtDesc(userId);
         boolean alreadyClaimed = recentTransactions.stream()
                 .anyMatch(t -> t.getType() == TransactionType.DAILY_LOGIN 
-                        && t.getCreatedAt().isAfter(LocalDateTime.now().minusHours(20)));
+                        && t.getCreatedAt().isAfter(LocalDateTime.now().minusHours(24)));
         
         if (alreadyClaimed) {
             log.info("Ежедневный бонус уже получен пользователем {}", userId);

@@ -166,8 +166,11 @@ public class PostService {
             Specification<Post> spec = PostSpecification.filter(userId, status, title, authorName, category, city);
             
             Specification<Post> boostedSpec = (root, query, cb) -> {
+                var boostedOrder = cb.selectCase()
+                    .when(cb.isNotNull(root.get("boostedUntil")), 1)
+                    .otherwise(0);
                 query.orderBy(
-                    cb.desc(root.get("boostedUntil")),
+                    cb.desc(boostedOrder),
                     cb.desc(root.get("createdAt"))
                 );
                 return spec.toPredicate(root, query, cb);
