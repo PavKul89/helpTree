@@ -21,7 +21,6 @@
 	<modules>
 		<module>helpTree-service</module>
 		<module>rating-service</module>
-		<module>notification-service</module>
 	</modules>
 
 	<properties>
