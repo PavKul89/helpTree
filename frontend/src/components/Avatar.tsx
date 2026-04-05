@@ -115,7 +115,7 @@ export const Avatar: React.FC<AvatarProps> = ({
   };
 
   const ratingStyle: React.CSSProperties = {
-    color: nicknameColor || '#fbbf24',
+    color: '#fbbf24',
     fontSize: '12px',
     fontWeight: 600,
     marginLeft: '2px',
