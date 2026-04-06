@@ -3,10 +3,12 @@ package org.example.helptreeservice.service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.helptreeservice.entity.RatingHistory;
+import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.entity.UserRatingStats;
 import org.example.helptreeservice.repository.HelpRepository;
 import org.example.helptreeservice.repository.RatingHistoryRepository;
 import org.example.helptreeservice.repository.UserRatingStatsRepository;
+import org.example.helptreeservice.repository.UserRepository;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -19,6 +21,7 @@ public class RatingCalculationService {
     private final UserRatingStatsRepository statsRepository;
     private final RatingHistoryRepository historyRepository;
     private final HelpRepository helpRepository;
+    private final UserRepository userRepository;
 
     public Double calculateUserRating(Long userId) {
         log.info("Расчет рейтинга для пользователя ID: {}", userId);
@@ -49,6 +52,12 @@ public class RatingCalculationService {
         
         statsRepository.save(stats);
         
+        userRepository.findById(userId).ifPresent(user -> {
+            user.setRating(newRating);
+            userRepository.save(user);
+            log.info("Рейтинг пользователя {} в таблице users обновлен на {}", userId, newRating);
+        });
+        
         RatingHistory history = RatingHistory.builder()
                 .userId(userId)
                 .oldRating(oldRating)
@@ -65,18 +74,12 @@ public class RatingCalculationService {
     }
 
     private Double calculateRating(UserRatingStats stats) {
-        long successful = stats.getSuccessfulHelps();
-        long cancelled = stats.getCancelledHelps();
-        long total = successful + cancelled;
+        long helpedCount = stats.getTotalHelpsGiven();
         
-        if (total == 0) {
-            return 3.0;
-        }
+        double rating = 3.0 + (helpedCount * 0.1);
+        rating = Math.min(rating, 5.0);
         
-        double successRate = (double) successful / total;
-        double baseRating = 1.0 + (successRate * 4.0);
-        
-        return Math.round(baseRating * 10.0) / 10.0;
+        return Math.round(rating * 10.0) / 10.0;
     }
 
     private String determineTrend(Double oldRating, Double newRating) {
@@ -89,8 +92,7 @@ public class RatingCalculationService {
     }
 
     private String buildComponentsString(UserRatingStats stats) {
-        long total = stats.getSuccessfulHelps() + stats.getCancelledHelps();
-        double successRate = total > 0 ? (double) stats.getSuccessfulHelps() / total * 100 : 0;
-        return String.format("{\"successRate\":%.1f,\"totalHelps\":%d}", successRate, stats.getTotalHelpsGiven());
+        return String.format("{\"helpedCount\":%d,\"baseRating\":3.0,\"bonus\":%.1f}", 
+            stats.getTotalHelpsGiven(), stats.getTotalHelpsGiven() * 0.1);
     }
 }

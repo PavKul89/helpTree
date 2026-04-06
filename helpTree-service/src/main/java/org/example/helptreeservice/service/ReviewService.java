@@ -79,8 +79,6 @@ public class ReviewService {
         walletService.addCoinsForReview(toUser.getId());
         log.info("Начислено 2 HC пользователю {} за отзыв", toUser.getId());
 
-        updateUserRating(toUser);
-
         return reviewMapper.toResponse(savedReview);
     }
 
@@ -117,23 +115,7 @@ public class ReviewService {
             }
         }
 
-        User toUser = review.getToUser();
         reviewRepository.delete(review);
         log.info("Отзыв {} удалён", reviewId);
-        
-        updateUserRating(toUser);
-    }
-    
-    private void updateUserRating(User user) {
-        List<Review> reviews = reviewRepository.findByToUserWithFromUser(user);
-        if (reviews.isEmpty()) {
-            userService.updateUserRating(user.getId(), 0.0);
-        } else {
-            double avgRating = reviews.stream()
-                    .mapToInt(r -> r.getRating() != null ? r.getRating() : 0)
-                    .average()
-                    .orElse(0.0);
-            userService.updateUserRating(user.getId(), Math.round(avgRating * 10.0) / 10.0);
-        }
     }
 }
