@@ -308,7 +308,8 @@ public class UserService {
             User user = userRepository.findById(receiverId).orElse(null);
             if (user != null) {
                 int newDebtCount = user.getDebtCount() + 2;
-                userRepository.updateDebtCount(receiverId, 2);
+                user.setDebtCount(newDebtCount);
+                userRepository.saveAndFlush(user);
                 if (newDebtCount > 2 && user.getDebtStartedAt() == null) {
                     user.setDebtStartedAt(LocalDateTime.now());
                     userRepository.save(user);
@@ -325,21 +326,19 @@ public class UserService {
         log.info("Обработка помощи от пользователя с ID: {}", helperId);
         try {
             User user = userRepository.findById(helperId).orElse(null);
-            userRepository.incrementHelpedCount(helperId);
-            userRepository.updateDebtCount(helperId, -1);
-            
             if (user != null) {
-                user = userRepository.findById(helperId).orElse(null);
-                if (user != null) {
-                    if (user.getDebtCount() <= 2 && user.getDebtStartedAt() != null) {
-                        user.setDebtStartedAt(null);
-                    }
-                    if (user.getDebtCount() < 5 && user.getBlockedAt() != null) {
-                        user.setBlockedAt(null);
-                        log.info("Пользователь {} автоматически разблокирован (debtCount: {})", helperId, user.getDebtCount());
-                    }
-                    userRepository.save(user);
+                user.setHelpedCount(user.getHelpedCount() + 1);
+                user.setDebtCount(user.getDebtCount() - 1);
+                
+                if (user.getDebtCount() <= 2 && user.getDebtStartedAt() != null) {
+                    user.setDebtStartedAt(null);
                 }
+                if (user.getDebtCount() <= 5 && user.getBlockedAt() != null) {
+                    user.setBlockedAt(null);
+                    user.setBlockedUntil(null);
+                    log.info("Пользователь {} автоматически разблокирован (debtCount: {})", helperId, user.getDebtCount());
+                }
+                userRepository.saveAndFlush(user);
             }
             log.info("Данные помощника ID {} успешно обновлены", helperId);
         } catch (Exception e) {
@@ -513,8 +512,8 @@ public class UserService {
     @Transactional
     public void blockUsersWithDebt() {
         log.info("Запуск проверки блокировки пользователей за долг");
-        LocalDateTime sevenDaysAgo = LocalDateTime.now().minusDays(7);
-        List<User> usersToBlock = userRepository.findUsersWithDebtToBlock(sevenDaysAgo);
+        LocalDateTime now = LocalDateTime.now();
+        List<User> usersToBlock = userRepository.findUsersWithDebtToBlock(now);
         
         for (User user : usersToBlock) {
             if (user.getBlockedUntil() == null || user.getBlockedUntil().isBefore(LocalDateTime.now())) {

@@ -270,7 +270,8 @@ export const PostDetailPage = () => {
 
   const isAuthor = user?.id === post.userId;
   const isAuthorBlocked = post.authorBlockedAt != null;
-  const canOfferHelp = user && !isAuthor && post.status === 'OPEN' && (!('blockedAt' in user) || !user.blockedAt) && !isAuthorBlocked;
+  const isUserBlocked = user && (user.blockedUntil ? new Date(user.blockedUntil) > new Date() : user.blockedAt != null);
+  const canOfferHelp = user && !isAuthor && post.status === 'OPEN' && !isUserBlocked && !isAuthorBlocked;
 
   return (
     <div style={styles.container} className="page-content">
@@ -476,7 +477,13 @@ export const PostDetailPage = () => {
         cancelText=""
       />
 
-      {!canOfferHelp && user && !isAuthor && post.status === 'OPEN' && isAuthorBlocked && (
+      {!canOfferHelp && user && !isAuthor && post.status === 'OPEN' && isUserBlocked && (
+        <div style={{ ...styles.errorBanner, marginBottom: 20 }}>
+          <Ban size={18} style={{ marginRight: 8, verticalAlign: 'middle' }} /> Ваш аккаунт заблокирован. Невозможно откликнуться на пост.
+        </div>
+      )}
+
+      {!canOfferHelp && user && !isAuthor && post.status === 'OPEN' && isAuthorBlocked && !isUserBlocked && (
         <div style={{ ...styles.errorBanner, marginBottom: 20 }}>
           <Ban size={18} style={{ marginRight: 8, verticalAlign: 'middle' }} /> Автор поста заблокирован за долг. Невозможно откликнуться на пост.
         </div>

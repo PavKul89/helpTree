@@ -143,7 +143,6 @@ export const WalletPage: React.FC = () => {
     setSpending('BOOST');
     try {
       await postsApi.boost(postId);
-      await walletApi.spend(user.id, 'BOOST', 'Поднятие поста #' + postId);
       showToast('Пост поднят в топ!', 'success');
       loadWallet();
       loadTransactions();

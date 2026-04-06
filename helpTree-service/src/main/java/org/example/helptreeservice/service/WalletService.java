@@ -185,8 +185,6 @@ public class WalletService {
         user.setHelpCoins(currentCoins - amount);
         
         if (type == TransactionType.ACCOUNT_UNBLOCK) {
-            user.setBlockedAt(null);
-            user.setDebtCount(0);
             userService.unblockUser(userId);
         }
         

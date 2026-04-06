@@ -346,17 +346,27 @@ export const ProfilePage = () => {
           {'debtCount' in profileUser && (
             <div style={{ 
               ...styles.statBox, 
-              background: (profileUser.debtCount || 0) > 3 
-                ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)' 
-                : (profileUser.debtCount || 0) > 0 
-                  ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
-                  : 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)'
+              background: (() => {
+                const isBlocked = profileUser.blockedUntil 
+                  ? new Date(profileUser.blockedUntil) > new Date()
+                  : profileUser.blockedAt != null;
+                if (isBlocked) return 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)';
+                if ((profileUser.debtCount || 0) > 3) return 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)';
+                if ((profileUser.debtCount || 0) > 0) return 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)';
+                return 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)';
+              })()
             }}>
               <div style={styles.statValue}>{profileUser.debtCount}</div>
               <div style={styles.statLabel}>
-                {profileUser.debtCount === 0 ? 'долг = 0' : 
-                 (profileUser.debtCount || 0) > 5 ? 'ЗАБЛОКИРОВАН' : 
-                 (profileUser.debtCount || 0) > 3 ? 'риск блокировки' : 'долг помогать'}
+                {(() => {
+                  const isBlocked = profileUser.blockedUntil 
+                    ? new Date(profileUser.blockedUntil) > new Date()
+                    : profileUser.blockedAt != null;
+                  return isBlocked ? 'ЗАБЛОКИРОВАН' 
+                    : profileUser.debtCount === 0 ? 'долг = 0' 
+                    : (profileUser.debtCount || 0) > 3 ? 'риск блокировки' 
+                    : 'долг помогать';
+                })()}
               </div>
             </div>
           )}

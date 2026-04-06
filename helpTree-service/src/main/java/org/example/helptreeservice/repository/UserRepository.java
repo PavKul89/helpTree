@@ -31,6 +31,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query(value = "SELECT post_id FROM user_favorites WHERE user_id = :userId", nativeQuery = true)
     List<Long> findFavoritePostIds(@Param("userId") Long userId);
 
-    @Query("SELECT u FROM User u WHERE u.deleted = false AND u.debtCount > 5 AND (u.blockedAt IS NULL OR u.blockedAt < :sevenDaysAgo)")
-    List<User> findUsersWithDebtToBlock(@Param("sevenDaysAgo") LocalDateTime sevenDaysAgo);
+    @Query("SELECT u FROM User u WHERE u.deleted = false AND u.debtCount > 5 AND (u.blockedUntil IS NULL OR u.blockedUntil < :now)")
+    List<User> findUsersWithDebtToBlock(@Param("now") LocalDateTime now);
 }

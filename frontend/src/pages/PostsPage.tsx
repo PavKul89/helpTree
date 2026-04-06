@@ -350,15 +350,6 @@ export const PostsPage = () => {
       <div style={styles.stickyContainer}>
         <header className="page-header" style={styles.header}>
           <h1 className="page-title" style={styles.title}>Посты о помощи</h1>
-          {user && 'blockedAt' in user && user.blockedAt ? (
-            <Button onClick={() => showToast('Ваш аккаунт заблокирован за долг. Помогите другим пользователям!', 'error')} disabled>
-              + Создать пост
-            </Button>
-          ) : (
-            <Link to="/posts/new">
-              <Button>+ Создать пост</Button>
-            </Link>
-          )}
         </header>
 
         <div style={styles.filters}>
@@ -388,6 +379,15 @@ export const PostsPage = () => {
             Фильтры
             {hasActiveFilters && <span style={styles.filterCount}>{activeFilterCount}</span>}
           </button>
+          {user && 'blockedAt' in user && user.blockedAt ? (
+            <Button onClick={() => showToast('Ваш аккаунт заблокирован за долг. Помогите другим пользователям!', 'error')} disabled>
+              + Создать пост
+            </Button>
+          ) : (
+            <Link to="/posts/new">
+              <Button>+ Создать пост</Button>
+            </Link>
+          )}
         </div>
 
         <div style={{
@@ -755,25 +755,31 @@ const styles: Record<string, React.CSSProperties> = {
     position: 'sticky',
     top: 0,
     zIndex: 100,
-    background: 'linear-gradient(180deg, rgba(6, 95, 70, 0.97) 0%, rgba(2, 44, 34, 0.98) 100%)',
-    backdropFilter: 'blur(20px)',
-    padding: '20px 24px 16px',
-    margin: '0 0 24px',
-    borderRadius: theme.borderRadius.lg,
-    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(6, 182, 212, 0.1)',
+    background: 'linear-gradient(180deg, rgba(6, 95, 70, 0.98) 0%, rgba(2, 44, 34, 0.99) 100%)',
+    backdropFilter: 'blur(24px)',
+    padding: '24px 28px 20px',
+    margin: '0 0 28px',
+    borderRadius: '16px',
+    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
   },
   header: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: '20px',
+    flexWrap: 'wrap',
+    gap: '16px',
   },
   title: {
     color: theme.colors.text,
-    fontSize: '26px',
+    fontSize: '28px',
     fontWeight: 700,
     margin: 0,
     letterSpacing: '-0.5px',
+    background: 'linear-gradient(135deg, #fff 0%, rgba(6, 182, 212, 0.9) 100%)',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
+    backgroundClip: 'text',
   },
   filters: {
     display: 'flex',

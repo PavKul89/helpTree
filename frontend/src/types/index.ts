@@ -28,6 +28,8 @@ export interface UserPublic {
   helpedCount: number;
   debtCount: number;
   avatarUrl?: string;
+  blockedAt?: string;
+  blockedUntil?: string;
 }
 
 export interface Post {
