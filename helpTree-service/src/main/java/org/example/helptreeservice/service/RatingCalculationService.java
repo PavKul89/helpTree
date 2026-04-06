@@ -76,9 +76,8 @@ public class RatingCalculationService {
     private Double calculateRating(UserRatingStats stats, Long userId) {
         double rating = 3.0;
         
-        rating += stats.getSuccessfulHelps() * 0.1;
-        rating -= stats.getCancelledHelps() * 0.2;
-        rating -= stats.getTotalHelpsReceived() * 0.05;
+        rating += stats.getSuccessfulHelps() * 0.5;
+        rating -= stats.getCancelledHelps() * 0.3;
         
         var userOpt = userRepository.findById(userId);
         if (userOpt.isPresent()) {
@@ -107,7 +106,7 @@ public class RatingCalculationService {
     }
 
     private String buildComponentsString(UserRatingStats stats) {
-        return String.format("{\"successful\":%d,\"cancelled\":%d,\"received\":%d}", 
-            stats.getSuccessfulHelps(), stats.getCancelledHelps(), stats.getTotalHelpsReceived());
+        return String.format("{\"successful\":%d,\"cancelled\":%d}", 
+            stats.getSuccessfulHelps(), stats.getCancelledHelps());
     }
 }
