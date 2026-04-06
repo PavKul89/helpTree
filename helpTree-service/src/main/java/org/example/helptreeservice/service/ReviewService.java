@@ -32,6 +32,7 @@ public class ReviewService {
     private final UserRepository userRepository;
     private final ReviewMapper reviewMapper;
     private final UserService userService;
+    private final WalletService walletService;
 
     @Transactional
     public ReviewResponse createReview(CreateReviewRequest request, Long currentUserId) {
@@ -74,6 +75,9 @@ public class ReviewService {
 
         Review savedReview = reviewRepository.save(review);
         log.info("Отзыв {} успешно создан", savedReview.getId());
+
+        walletService.addCoinsForReview(toUser.getId());
+        log.info("Начислено 2 HC пользователю {} за отзыв", toUser.getId());
 
         updateUserRating(toUser);
 

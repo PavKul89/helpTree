@@ -26,7 +26,6 @@ export const PostDetailPage = () => {
   const [helps, setHelps] = useState<Help[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [newComment, setNewComment] = useState('');
-  const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState('');
   const [replyingTo, setReplyingTo] = useState<number | null>(null);
   const [replyContent, setReplyContent] = useState('');
@@ -218,23 +217,23 @@ export const PostDetailPage = () => {
     }
   };
 
+  const handleSubmitReview = async (helpId: number, toUserId: number) => {
+    try {
+      await reviewApi.create({ helpId, rating: 5, comment: reviewComment });
+      setReviewComment('');
+      loadData();
+      showToast('Отзыв отправлен! +2 HC', 'success');
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const handleReply = async (parentCommentId: number) => {
     if (!replyContent.trim()) return;
     try {
       await postsApi.addComment(Number(id), { content: replyContent, parentCommentId });
       setReplyContent('');
       setReplyingTo(null);
-      loadData();
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleSubmitReview = async (helpId: number, toUserId: number) => {
-    try {
-      await reviewApi.create({ helpId, rating: reviewRating, comment: reviewComment });
-      setReviewRating(5);
-      setReviewComment('');
       loadData();
     } catch (err) {
       console.error(err);
@@ -413,9 +412,9 @@ export const PostDetailPage = () => {
         </div>
 
         <div style={styles.authorCard}>
-          <Avatar name={post.authorName} avatarUrl={post.authorAvatarUrl} size="large" clickable userId={post.userId} nicknameColor={post.authorNicknameColor} />
+          <Avatar name={post.authorName} avatarUrl={post.authorAvatarUrl} size="large" clickable userId={post.userId} />
           <div style={styles.authorInfo}>
-            <div style={{...styles.authorName, color: post.authorNicknameColor || undefined}}>{post.authorName}</div>
+            <div style={styles.authorName}>{post.authorName}</div>
             <div style={styles.authorMeta}>
               {post.userCity && <span><MapPin size={14} style={{marginRight: 4}} />{post.userCity}</span>}
               <span><Star size={14} style={{marginRight: 4}} />{post.authorRating ? post.authorRating.toFixed(1) : '0.0'}</span>
@@ -512,7 +511,7 @@ export const PostDetailPage = () => {
           <h3 style={styles.sectionTitle}>Отзывы</h3>
           {reviews.length > 0 ? reviews.map((review) => (
             <div key={review.id} style={styles.reviewItem}>
-              <strong>{review.fromUserName}</strong> оценил <strong>{review.toUserName}</strong> на {review.rating} звёзд
+              <strong>{review.fromUserName}</strong> оставил отзыв для <strong>{review.toUserName}</strong>
               {review.comment && <p style={styles.reviewComment}>{review.comment}</p>}
             </div>
           )) : <p style={styles.emptyText}>Отзывов пока нет</p>}
@@ -536,20 +535,12 @@ export const PostDetailPage = () => {
                   
                   return (
                     <div key={help.id} style={{ marginBottom: 12 }}>
-                      <p>Оценить: <strong>{toUserName}</strong></p>
-                      <select 
-                        value={reviewRating} 
-                        onChange={(e) => setReviewRating(Number(e.target.value))}
-                        style={styles.select}
-                      >
-                        {[1,2,3,4,5].map(r => <option key={r} value={r}>{r} звёзд</option>)}
-                      </select>
-                      <input
-                        type="text"
+                      <p>Оставить отзыв для: <strong>{toUserName}</strong></p>
+                      <textarea
                         value={reviewComment}
                         onChange={(e) => setReviewComment(e.target.value)}
                         placeholder="Комментарий (необязательно)"
-                        style={styles.inputSmall}
+                        style={styles.textareaSmall}
                       />
                       <Button onClick={() => handleSubmitReview(help.id, toUserId)}>Отправить</Button>
                     </div>
@@ -969,6 +960,19 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop: '16px',
     paddingTop: '16px',
     borderTop: `1px solid ${theme.colors.border}`,
+  },
+  textareaSmall: {
+    width: '100%',
+    padding: '10px',
+    borderRadius: theme.borderRadius.md,
+    border: `1px solid ${theme.colors.border}`,
+    backgroundColor: theme.colors.backgroundCard,
+    color: theme.colors.text,
+    fontSize: '14px',
+    marginBottom: '8px',
+    minHeight: '60px',
+    resize: 'vertical',
+    outline: 'none',
   },
   divider: {
     height: '1px',

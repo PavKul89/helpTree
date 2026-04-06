@@ -190,7 +190,7 @@ public class WalletService {
             userService.unblockUser(userId);
         }
         
-        if (type == TransactionType.VIP_STATUS) {
+        if (type == TransactionType.VIP_STATUS || type == TransactionType.VIP) {
             LocalDateTime now = LocalDateTime.now();
             LocalDateTime currentVip = user.getVipUntil();
             if (currentVip != null && currentVip.isAfter(now)) {

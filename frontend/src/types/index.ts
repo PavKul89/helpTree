@@ -18,7 +18,6 @@ export interface User {
   debtStartedAt?: string;
   helpCoins?: number;
   vipUntil?: string;
-  nicknameColor?: string;
 }
 
 export interface UserPublic {
@@ -28,7 +27,6 @@ export interface UserPublic {
   helpedCount: number;
   debtCount: number;
   avatarUrl?: string;
-  nicknameColor?: string;
 }
 
 export interface Post {
@@ -52,7 +50,6 @@ export interface Post {
   authorBlockedAt?: string;
   boostedUntil?: string;
   boosted: boolean;
-  authorNicknameColor?: string;
 }
 
 export interface Review {

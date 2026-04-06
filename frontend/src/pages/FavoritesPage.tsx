@@ -140,7 +140,7 @@ export const FavoritesPage = () => {
               </p>
               <div style={styles.postFooter}>
                 <div style={styles.author}>
-                  <Avatar name={post.authorName} avatarUrl={post.authorAvatarUrl} size="small" showName withRating={post.authorRating} clickable userId={post.userId} nicknameColor={post.authorNicknameColor} />
+                  <Avatar name={post.authorName} avatarUrl={post.authorAvatarUrl} size="small" showName withRating={post.authorRating} clickable userId={post.userId} />
                 </div>
                 <span style={styles.date}>
                   {getRelativeTime(post.createdAt)}

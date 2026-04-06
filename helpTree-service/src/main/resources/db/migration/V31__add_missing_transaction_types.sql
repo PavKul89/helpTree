@@ -14,6 +14,7 @@ BEGIN
             'REVIEW_BONUS',
             'DAILY_LOGIN',
             'POST_BOOST',
+            'BOOST',
             'VIP_STATUS',
             'ACCOUNT_UNBLOCK',
             'GIFT_SENT',

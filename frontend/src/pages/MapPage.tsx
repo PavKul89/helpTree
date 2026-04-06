@@ -395,7 +395,7 @@ export const MapPage = () => {
                 <div style={styles.postMeta}>
                   <div style={styles.metaItem}>
                     <User size={14} color={theme.colors.accentLight} />
-                    <span style={{color: selectedPost.authorNicknameColor || theme.colors.accentLight}}>{selectedPost.authorName}</span>
+                    <span style={{color: theme.colors.accentLight}}>{selectedPost.authorName}</span>
                   </div>
                   <div style={styles.metaItem}>
                     <MapPin size={14} color={theme.colors.accentLight} />

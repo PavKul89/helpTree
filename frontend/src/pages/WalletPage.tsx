@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { walletApi, WalletDto, CoinTransactionDto } from '../api/walletApi';
+import { authApi } from '../api/authApi';
 import { theme } from '../theme';
-import { Coins, ArrowUpRight, ArrowDownLeft, Gift, Star, Calendar, TrendingUp, History, Gift as GiftIcon, Sparkles, Crown, Zap, Unlock, CreditCard, Palette, Award } from 'lucide-react';
+import { Coins, ArrowUpRight, ArrowDownLeft, Gift, Star, Calendar, TrendingUp, History, Gift as GiftIcon, Sparkles, Crown, Zap, Unlock, CreditCard, Award } from 'lucide-react';
 import { Button } from '../components';
 import { useToast } from '../components/Toast';
 import { getRelativeTime } from '../utils/dateUtils';
@@ -21,8 +22,6 @@ const getTransactionIcon = (type: string) => {
       return <TrendingUp size={18} color="#f472b6" />;
     case 'FIRST_HELP':
       return <Award size={18} color="#f97316" />;
-    case 'NICKNAME_COLOR':
-      return <Palette size={18} color="#ec4899" />;
     default:
       return <Coins size={18} color="#9ca3af" />;
   }
@@ -52,8 +51,6 @@ const getTransactionLabel = (type: string) => {
       return 'Подарок получен';
     case 'FIRST_HELP':
       return 'Бонус новичка';
-    case 'NICKNAME_COLOR':
-      return 'Смена цвета ника';
     default:
       return 'Транзакция';
   }
@@ -73,7 +70,6 @@ const getTransactionColor = (type: string) => {
     case 'VIP_STATUS':
     case 'ACCOUNT_UNBLOCK':
     case 'GIFT_SENT':
-    case 'NICKNAME_COLOR':
       return '#f87171';
     default:
       return '#9ca3af';
@@ -81,25 +77,12 @@ const getTransactionColor = (type: string) => {
 };
 
 export const WalletPage: React.FC = () => {
-  const { user } = useAuth();
+  const { user, setUser } = useAuth();
   const [wallet, setWallet] = useState<WalletDto | null>(null);
   const [transactions, setTransactions] = useState<CoinTransactionDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [spending, setSpending] = useState<string | null>(null);
-  const [showColorPicker, setShowColorPicker] = useState(false);
   const { showToast } = useToast();
-
-  const COLORS = [
-    { name: 'Красный', value: '#ef4444' },
-    { name: 'Оранжевый', value: '#f97316' },
-    { name: 'Жёлтый', value: '#eab308' },
-    { name: 'Зелёный', value: '#22c55e' },
-    { name: 'Голубой', value: '#06b6d4' },
-    { name: 'Синий', value: '#3b82f6' },
-    { name: 'Фиолетовый', value: '#a855f7' },
-    { name: 'Розовый', value: '#ec4899' },
-    { name: 'Белый', value: '#ffffff' },
-  ];
 
   const loadWallet = async () => {
     if (!user) return;
@@ -129,26 +112,6 @@ export const WalletPage: React.FC = () => {
       }
     } catch (err) {
       console.error('Error loading transactions:', err);
-    }
-  };
-
-  const handleChangeColor = async (color: string) => {
-    if (!user || !wallet) return;
-    if (wallet.balance < 20) {
-      showToast('Недостаточно HC. Нужно 20, у вас ' + wallet.balance, 'error');
-      return;
-    }
-    setSpending('COLOR');
-    try {
-      await walletApi.changeNicknameColor(user.id, color);
-      showToast('Цвет ника изменён!', 'success');
-      loadWallet();
-      loadTransactions();
-      setShowColorPicker(false);
-    } catch (err: any) {
-      showToast(err.response?.data?.message || 'Ошибка при смене цвета', 'error');
-    } finally {
-      setSpending(null);
     }
   };
 
@@ -411,6 +374,9 @@ export const WalletPage: React.FC = () => {
       showToast(`Вы потратили ${price} HC на ${names[type]}`, 'success');
       loadWallet();
       loadTransactions();
+      
+      const updatedUser = await authApi.getCurrentUser();
+      setUser(updatedUser);
     } catch (err: any) {
       showToast(err.response?.data?.message || 'Ошибка при покупке', 'error');
     } finally {
@@ -510,15 +476,6 @@ export const WalletPage: React.FC = () => {
             <div style={styles.spendPrice}>50 HC</div>
           </div>
           
-          <div style={{...styles.spendItem}} onClick={() => setShowColorPicker(!showColorPicker)}>
-            <div style={{...styles.spendIcon, background: 'linear-gradient(135deg, rgba(236, 72, 153, 0.2) 0%, rgba(236, 72, 153, 0.1) 100%)'}}>
-              <Palette size={24} color="#ec4899" />
-            </div>
-            <div style={styles.spendTitle}>Цвет ника</div>
-            <div style={styles.spendDesc}>Выбрать цвет для ника</div>
-            <div style={styles.spendPrice}>20 HC</div>
-          </div>
-          
           <div style={styles.spendItem} onClick={() => handleSpend('BOOST')}>
             <div style={{...styles.spendIcon, background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.2) 0%, rgba(6, 182, 212, 0.1) 100%)'}}>
               <Zap size={24} color="#06b6d4" />
@@ -538,38 +495,6 @@ export const WalletPage: React.FC = () => {
           </div>
         </div>
       </div>
-
-      {showColorPicker && (
-        <div style={styles.section}>
-          <div style={styles.sectionTitle}>
-            <Palette size={20} color={theme.colors.accent} />
-            Выберите цвет ника
-          </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', justifyContent: 'center' }}>
-            {COLORS.map((color) => (
-              <button
-                key={color.value}
-                onClick={() => handleChangeColor(color.value)}
-                disabled={spending === 'COLOR'}
-                style={{
-                  width: '60px',
-                  height: '60px',
-                  borderRadius: '12px',
-                  background: color.value,
-                  border: user?.nicknameColor === color.value ? '3px solid #fff' : '3px solid transparent',
-                  cursor: spending === 'COLOR' ? 'not-allowed' : 'pointer',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-                  opacity: spending === 'COLOR' ? 0.5 : 1,
-                }}
-                title={color.name}
-              />
-            ))}
-          </div>
-          <div style={{ textAlign: 'center', marginTop: '16px', color: theme.colors.textSecondary, fontSize: '14px' }}>
-            {spending === 'COLOR' ? 'Смена цвета...' : 'Нажмите на цвет для покупки'}
-          </div>
-        </div>
-      )}
 
       <div style={styles.section}>
         <div style={styles.sectionTitle}>

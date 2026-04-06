@@ -10,7 +10,6 @@ interface AvatarProps {
   withRating?: number;
   clickable?: boolean;
   userId?: number;
-  nicknameColor?: string;
 }
 
 const SIZES = {
@@ -51,8 +50,7 @@ export const Avatar: React.FC<AvatarProps> = ({
   showName = false,
   withRating,
   clickable = false,
-  userId,
-  nicknameColor
+  userId
 }) => {
   const navigate = useNavigate();
   const sizeConfig = SIZES[size];
@@ -107,7 +105,7 @@ export const Avatar: React.FC<AvatarProps> = ({
       };
 
   const nameStyle: React.CSSProperties = {
-    color: nicknameColor || theme.colors.text,
+    color: theme.colors.text,
     fontSize: size === 'small' ? '13px' : '15px',
     fontWeight: 500,
     cursor: clickable ? 'pointer' : 'default',
