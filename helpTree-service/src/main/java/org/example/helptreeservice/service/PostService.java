@@ -35,6 +35,7 @@ public class PostService {
     private final UserRepository userRepository;
     private final PostMapper postMapper;
     private final GeocodingService geocodingService;
+    private final UserService userService;
 
     @BusinessMetric(
             value = "post.created",
@@ -47,9 +48,8 @@ public class PostService {
             User user = userRepository.findById(authorId)
                     .orElseThrow(() -> new NotFoundException("Пользователь не найден с id: " + authorId));
 
-            boolean isInGoodStanding = user.getHelpedCount() >= user.getDebtCount();
-            if (user.getDebtCount() > 3 && !isInGoodStanding) {
-                throw new BadRequestException("Сначала помогите другим! Ваш долг: " + user.getDebtCount() + ", помогли: " + user.getHelpedCount());
+            if (userService.isUserBlocked(authorId)) {
+                throw new BadRequestException("Ваш аккаунт заблокирован. Невозможно создать пост.");
             }
 
             log.debug("Найден пользователь для создания поста: email={}", user.getEmail());
