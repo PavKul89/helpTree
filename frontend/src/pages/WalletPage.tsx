@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { walletApi, WalletDto, CoinTransactionDto } from '../api/walletApi';
+import { postsApi } from '../api/postsApi';
 import { authApi } from '../api/authApi';
 import { theme } from '../theme';
 import { Coins, ArrowUpRight, ArrowDownLeft, Gift, Star, Calendar, TrendingUp, History, Gift as GiftIcon, Sparkles, Crown, Zap, Unlock, CreditCard, Award } from 'lucide-react';
 import { Button } from '../components';
 import { useToast } from '../components/Toast';
 import { getRelativeTime } from '../utils/dateUtils';
+import type { Post } from '../types';
 
 const getTransactionIcon = (type: string) => {
   switch (type) {
@@ -82,6 +84,8 @@ export const WalletPage: React.FC = () => {
   const [transactions, setTransactions] = useState<CoinTransactionDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [spending, setSpending] = useState<string | null>(null);
+  const [showBoostModal, setShowBoostModal] = useState(false);
+  const [userPosts, setUserPosts] = useState<Post[]>([]);
   const { showToast } = useToast();
 
   const loadWallet = async () => {
@@ -112,6 +116,42 @@ export const WalletPage: React.FC = () => {
       }
     } catch (err) {
       console.error('Error loading transactions:', err);
+    }
+  };
+
+  const loadUserPosts = async () => {
+    if (!user) return;
+    try {
+      const posts = await postsApi.getByUser(user.id);
+      setUserPosts(posts);
+    } catch (err) {
+      console.error('Error loading user posts:', err);
+    }
+  };
+
+  const handleBoostClick = () => {
+    if (!wallet || wallet.balance < 5) {
+      showToast('Недостаточно HC. Нужно 5 HC', 'error');
+      return;
+    }
+    loadUserPosts();
+    setShowBoostModal(true);
+  };
+
+  const handleBoostPost = async (postId: number) => {
+    if (!user) return;
+    setSpending('BOOST');
+    try {
+      await postsApi.boost(postId);
+      await walletApi.spend(user.id, 'BOOST', 'Поднятие поста #' + postId);
+      showToast('Пост поднят в топ!', 'success');
+      loadWallet();
+      loadTransactions();
+      setShowBoostModal(false);
+    } catch (err: any) {
+      showToast(err.response?.data?.message || 'Ошибка при поднятии поста', 'error');
+    } finally {
+      setSpending(null);
     }
   };
 
@@ -268,6 +308,37 @@ export const WalletPage: React.FC = () => {
       textAlign: 'center',
       padding: '40px',
       color: theme.colors.textSecondary,
+    },
+    modalOverlay: {
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      background: 'rgba(0, 0, 0, 0.8)',
+      backdropFilter: 'blur(8px)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 1000,
+    },
+    modalContent: {
+      background: 'linear-gradient(160deg, #0e7490 0%, #065F46 50%, #164e63 100%)',
+      borderRadius: '20px',
+      padding: '24px',
+      maxWidth: '500px',
+      width: '90%',
+      maxHeight: '80vh',
+      overflow: 'hidden',
+      display: 'flex',
+      flexDirection: 'column',
+    },
+    modalTitle: {
+      color: '#fff',
+      fontSize: '18px',
+      fontWeight: 700,
+      margin: '0 0 16px 0',
+      textAlign: 'center' as const,
     },
     howToEarn: {
       display: 'grid',
@@ -476,7 +547,7 @@ export const WalletPage: React.FC = () => {
             <div style={styles.spendPrice}>50 HC</div>
           </div>
           
-          <div style={styles.spendItem} onClick={() => handleSpend('BOOST')}>
+          <div style={styles.spendItem} onClick={handleBoostClick}>
             <div style={{...styles.spendIcon, background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.2) 0%, rgba(6, 182, 212, 0.1) 100%)'}}>
               <Zap size={24} color="#06b6d4" />
             </div>
@@ -532,6 +603,52 @@ export const WalletPage: React.FC = () => {
           ))
         )}
       </div>
+
+      {showBoostModal && (
+        <div style={styles.modalOverlay} onClick={() => setShowBoostModal(false)}>
+          <div style={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+            <h3 style={styles.modalTitle}>Выберите пост для поднятия</h3>
+            {userPosts.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '20px', color: theme.colors.textSecondary }}>
+                У вас пока нет постов
+              </div>
+            ) : (
+              <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                {userPosts.map((post) => (
+                  <div
+                    key={post.id}
+                    onClick={() => handleBoostPost(post.id)}
+                    style={{
+                      padding: '12px',
+                      marginBottom: '8px',
+                      background: theme.colors.backgroundCard,
+                      borderRadius: theme.borderRadius.md,
+                      cursor: 'pointer',
+                      border: post.boosted ? '2px solid #fbbf24' : '1px solid ' + theme.colors.border,
+                    }}
+                  >
+                    <div style={{ fontWeight: 600, marginBottom: '4px' }}>{post.title}</div>
+                    <div style={{ fontSize: '12px', color: theme.colors.textSecondary }}>
+                      {post.boosted ? (
+                        <span style={{ color: '#fbbf24' }}>★ Уже в топе до {new Date(post.boostedUntil!).toLocaleString()}</span>
+                      ) : (
+                        <span>Статус: {post.status}</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <Button 
+              variant="outline" 
+              onClick={() => setShowBoostModal(false)}
+              style={{ marginTop: '16px', width: '100%' }}
+            >
+              Отмена
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
