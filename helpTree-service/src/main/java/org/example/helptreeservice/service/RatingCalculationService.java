@@ -77,19 +77,19 @@ public class RatingCalculationService {
         double rating = 3.0;
         
         rating += stats.getSuccessfulHelps() * 0.1;
-        
         rating -= stats.getCancelledHelps() * 0.2;
-        
         rating -= stats.getTotalHelpsReceived() * 0.05;
         
-        userRepository.findById(userId).ifPresent(user -> {
+        var userOpt = userRepository.findById(userId);
+        if (userOpt.isPresent()) {
+            var user = userOpt.get();
             if (user.getDebtCount() != null && user.getDebtCount() > 5) {
                 rating -= 0.5;
             }
             if (user.getBlockedAt() != null || (user.getBlockedUntil() != null && user.getBlockedUntil().isAfter(java.time.LocalDateTime.now()))) {
                 rating -= 1.0;
             }
-        });
+        }
         
         rating = Math.max(rating, 1.0);
         rating = Math.min(rating, 5.0);

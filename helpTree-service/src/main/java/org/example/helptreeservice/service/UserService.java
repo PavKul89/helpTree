@@ -63,7 +63,7 @@ public class UserService {
         }
         user.setHelpedCount(0);
         user.setDebtCount(0);
-        user.setRating(0.0);
+        user.setRating(3.0);
         user.setStatus(UserStatus.NEWBIE);
         user.setRole(role);
         user.setCreatedAt(LocalDateTime.now());
@@ -328,7 +328,9 @@ public class UserService {
             User user = userRepository.findById(helperId).orElse(null);
             if (user != null) {
                 user.setHelpedCount(user.getHelpedCount() + 1);
-                user.setDebtCount(user.getDebtCount() - 1);
+                if (user.getDebtCount() > 0) {
+                    user.setDebtCount(user.getDebtCount() - 1);
+                }
                 
                 if (user.getDebtCount() <= 2 && user.getDebtStartedAt() != null) {
                     user.setDebtStartedAt(null);

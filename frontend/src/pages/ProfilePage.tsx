@@ -343,53 +343,52 @@ export const ProfilePage = () => {
               <div style={styles.statLabel}>помог людям</div>
             </div>
           )}
-          {'debtCount' in profileUser && (
-            <div style={{ 
-              ...styles.statBox, 
-              background: (() => {
-                const isBlocked = profileUser.blockedUntil 
-                  ? new Date(profileUser.blockedUntil) > new Date()
-                  : profileUser.blockedAt != null;
-                if (isBlocked) return 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)';
-                if ((profileUser.debtCount || 0) > 3) return 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)';
-                if ((profileUser.debtCount || 0) > 0) return 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)';
-                return 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)';
-              })()
-            }}>
-              <div style={styles.statValue}>{profileUser.debtCount}</div>
-              <div style={styles.statLabel}>
-                {(() => {
-                  const isBlocked = profileUser.blockedUntil 
-                    ? new Date(profileUser.blockedUntil) > new Date()
-                    : profileUser.blockedAt != null;
-                  return isBlocked ? 'ЗАБЛОКИРОВАН' 
-                    : profileUser.debtCount === 0 ? 'долг = 0' 
-                    : (profileUser.debtCount || 0) > 3 ? 'риск блокировки' 
-                    : 'долг помогать';
-                })()}
-              </div>
-            </div>
-          )}
+          <div style={{ 
+            ...styles.statBox, 
+            background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' 
+          }}>
+            <div style={styles.statValue}>{Math.floor((profileUser.debtCount || 0) / 2)}</div>
+            <div style={styles.statLabel}>мне помогли</div>
+          </div>
           <div style={styles.statBox}>
             <div style={styles.statValue}>{userPosts.length}</div>
-            <div style={styles.statLabel}>публикаций</div>
+            <div style={styles.statLabel}>мои посты</div>
           </div>
         </div>
 
-        {'helpedCount' in profileUser && 'debtCount' in profileUser && (
-          <div style={styles.balanceRow}>
-            <span style={styles.balanceLabel}>Баланс: </span>
-            <span style={{
-              ...styles.balanceValue,
-              color: (profileUser.helpedCount || 0) >= (profileUser.debtCount || 0) ? '#10b981' : '#f59e0b'
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(124, 58, 237, 0.1) 100%)',
+          border: '1px solid rgba(139, 92, 246, 0.3)',
+          borderRadius: '16px',
+          padding: '16px 20px',
+          marginBottom: '20px',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+            <div style={{
+              background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+              borderRadius: '10px',
+              padding: '8px 14px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
             }}>
-              {(profileUser.helpedCount || 0) >= (profileUser.debtCount || 0) 
-                ? `+${profileUser.helpedCount! - profileUser.debtCount!} в плюсе`
-                : `${profileUser.debtCount! - profileUser.helpedCount!} в долгу`
-              }
-            </span>
+              <span style={{ fontSize: '18px', fontWeight: 700 }}>{profileUser.debtCount || 0}</span>
+              <span style={{ fontSize: '12px', opacity: 0.9 }}>долг</span>
+            </div>
+          <div style={{ fontSize: '14px', color: 'rgba(255,255,255,0.8)', fontWeight: 500 }}>
+            {(profileUser.debtCount || 0) === 0 
+                ? 'Отлично! Вы в балансе' 
+                : (profileUser.debtCount || 0) > 5 
+                  ? 'Внимание! Вы заблокированы' 
+                  : `Вам помогли на ${Math.floor((profileUser.debtCount || 0) / 2)} раз больше чем вы`}
           </div>
-        )}
+          <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', lineHeight: 1.5 }}>
+            💡 Правило: за каждую полученную помощь +2 к долгу, за помощь другим -1. 
+            Если долг &gt; 5 — аккаунт заблокирован на 7 дней. 
+            {(profileUser.debtCount || 0) > 0 ? `Помогите ${profileUser.debtCount} людям чтобы снизить долг.` : 'Продолжайте помогать!'}
+          </div>
+          </div>
+        </div>
 
         <div style={styles.tabs}>
           <button 
