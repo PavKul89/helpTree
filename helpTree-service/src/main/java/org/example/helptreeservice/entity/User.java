@@ -97,6 +97,9 @@ public class User {
     @Column(name = "blocked_at")
     private LocalDateTime blockedAt;
 
+    @Column(name = "blocked_until")
+    private LocalDateTime blockedUntil;
+
     @Column(name = "debt_started_at")
     private LocalDateTime debtStartedAt;
 

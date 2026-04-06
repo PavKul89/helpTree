@@ -327,9 +327,19 @@ public class UserService {
             User user = userRepository.findById(helperId).orElse(null);
             userRepository.incrementHelpedCount(helperId);
             userRepository.updateDebtCount(helperId, -1);
-            if (user != null && user.getDebtCount() <= 2 && user.getDebtStartedAt() != null) {
-                user.setDebtStartedAt(null);
-                userRepository.save(user);
+            
+            if (user != null) {
+                user = userRepository.findById(helperId).orElse(null);
+                if (user != null) {
+                    if (user.getDebtCount() <= 2 && user.getDebtStartedAt() != null) {
+                        user.setDebtStartedAt(null);
+                    }
+                    if (user.getDebtCount() < 5 && user.getBlockedAt() != null) {
+                        user.setBlockedAt(null);
+                        log.info("Пользователь {} автоматически разблокирован (debtCount: {})", helperId, user.getDebtCount());
+                    }
+                    userRepository.save(user);
+                }
             }
             log.info("Данные помощника ID {} успешно обновлены", helperId);
         } catch (Exception e) {
@@ -341,12 +351,18 @@ public class UserService {
     public boolean canReceiveHelp(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new NotFoundException("User not found"));
+        if (isUserBlocked(userId)) {
+            return false;
+        }
         return user.getDebtCount() <= 5;
     }
 
     public boolean canCreatePost(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new NotFoundException("User not found"));
+        if (isUserBlocked(userId)) {
+            return false;
+        }
         return user.getDebtCount() <= 3;
     }
 
@@ -501,10 +517,12 @@ public class UserService {
         List<User> usersToBlock = userRepository.findUsersWithDebtToBlock(sevenDaysAgo);
         
         for (User user : usersToBlock) {
-            if (user.getBlockedAt() == null) {
+            if (user.getBlockedUntil() == null || user.getBlockedUntil().isBefore(LocalDateTime.now())) {
                 user.setBlockedAt(LocalDateTime.now());
+                user.setBlockedUntil(LocalDateTime.now().plusDays(7));
                 userRepository.save(user);
-                log.info("Пользователь {} заблокирован за долг (debtCount: {})", user.getId(), user.getDebtCount());
+                log.info("Пользователь {} заблокирован за долг на 7 дней (debtCount: {}, blockedUntil: {})", 
+                    user.getId(), user.getDebtCount(), user.getBlockedUntil());
             }
         }
         
@@ -518,7 +536,7 @@ public class UserService {
         if (user == null) {
             return false;
         }
-        return user.getBlockedAt() != null;
+        return user.getBlockedUntil() != null && user.getBlockedUntil().isAfter(LocalDateTime.now());
     }
 
     @Transactional
@@ -526,7 +544,28 @@ public class UserService {
         log.info("Разблокировка пользователя {}", userId);
         User user = getUserEntityById(userId);
         user.setBlockedAt(null);
+        user.setBlockedUntil(null);
         userRepository.save(user);
         log.info("Пользователь {} разблокирован", userId);
+    }
+
+    @Transactional
+    public void unblockExpiredBlocks() {
+        log.info("Запуск авто-разблокировки пользователей с истёкшим сроком");
+        LocalDateTime now = LocalDateTime.now();
+        List<User> usersToUnblock = userRepository.findAll().stream()
+                .filter(u -> !u.getDeleted() && u.getBlockedUntil() != null && u.getBlockedUntil().isBefore(now))
+                .collect(Collectors.toList());
+
+        for (User user : usersToUnblock) {
+            user.setBlockedAt(null);
+            user.setBlockedUntil(null);
+            userRepository.save(user);
+            log.info("Авто-разблокировка пользователя {} (истёк срок)", user.getId());
+        }
+
+        if (!usersToUnblock.isEmpty()) {
+            log.info("Авто-разблокировано {} пользователей", usersToUnblock.size());
+        }
     }
 }

@@ -29,6 +29,7 @@ public class UserDto {
     private String avatarUrl;
     private LocalDateTime birthDate;
     private LocalDateTime blockedAt;
+    private LocalDateTime blockedUntil;
     private LocalDateTime debtStartedAt;
     private Long helpCoins;
     private LocalDateTime vipUntil;

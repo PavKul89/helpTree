@@ -15,6 +15,7 @@ export interface User {
   debtCount?: number;
   birthDate?: string;
   blockedAt?: string;
+  blockedUntil?: string;
   debtStartedAt?: string;
   helpCoins?: number;
   vipUntil?: string;

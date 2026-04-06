@@ -61,7 +61,12 @@ export const Navbar: React.FC = () => {
 
       authApi.getCurrentUser()
         .then(userData => {
-          if ('blockedAt' in userData && userData.blockedAt) {
+          if (userData.blockedUntil) {
+            setIsBlocked(true);
+            setDebtWarning(null);
+            const hoursLeft = (new Date(userData.blockedUntil).getTime() - Date.now()) / (1000 * 60 * 60);
+            setDaysUntilBlock(Math.max(0, hoursLeft));
+          } else if ('blockedAt' in userData && userData.blockedAt) {
             setIsBlocked(true);
             setDebtWarning(null);
             const hoursBlocked = (Date.now() - new Date(userData.blockedAt).getTime()) / (1000 * 60 * 60);
@@ -230,7 +235,7 @@ export const Navbar: React.FC = () => {
       </div>
       {isBlocked && (
         <div style={styles.blockedBanner}>
-          <Ban size={16} style={{ marginRight: 6 }} /> Ваш аккаунт заблокирован за долг. Помогите другим пользователям, чтобы разблокировать аккаунт.
+          <Ban size={16} style={{ marginRight: 6 }} /> Ваш аккаунт заблокирован за долг. Помогите другим или разблокируйте за 100 HC.
           {daysUntilBlock !== null && daysUntilBlock > 0 && (
             daysUntilBlock >= 24 
               ? ` Осталось ${Math.floor(daysUntilBlock / 24)} дней и ${Math.floor(daysUntilBlock % 24)} часов.`

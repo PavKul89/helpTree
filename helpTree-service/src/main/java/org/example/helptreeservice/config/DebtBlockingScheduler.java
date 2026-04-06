@@ -17,6 +17,7 @@ public class DebtBlockingScheduler {
     public void checkAndBlockUsersWithDebt() {
         log.info("Запуск планировщика проверки блокировки пользователей за долг");
         try {
+            userService.unblockExpiredBlocks();
             userService.blockUsersWithDebt();
         } catch (Exception e) {
             log.error("Ошибка при блокировке пользователей за долг: {}", e.getMessage(), e);
