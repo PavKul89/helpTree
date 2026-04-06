@@ -42,7 +42,7 @@ public class RatingCalculationService {
                 });
 
         Double oldRating = stats.getCurrentRating();
-        Double newRating = calculateRating(stats);
+        Double newRating = calculateRating(stats, userId);
         
         stats.setCurrentRating(newRating);
         stats.setLastCalculated(LocalDateTime.now());
@@ -73,10 +73,25 @@ public class RatingCalculationService {
         return newRating;
     }
 
-    private Double calculateRating(UserRatingStats stats) {
-        long helpedCount = stats.getTotalHelpsGiven();
+    private Double calculateRating(UserRatingStats stats, Long userId) {
+        double rating = 3.0;
         
-        double rating = 3.0 + (helpedCount * 0.1);
+        rating += stats.getSuccessfulHelps() * 0.1;
+        
+        rating -= stats.getCancelledHelps() * 0.2;
+        
+        rating -= stats.getTotalHelpsReceived() * 0.05;
+        
+        userRepository.findById(userId).ifPresent(user -> {
+            if (user.getDebtCount() != null && user.getDebtCount() > 5) {
+                rating -= 0.5;
+            }
+            if (user.getBlockedAt() != null || (user.getBlockedUntil() != null && user.getBlockedUntil().isAfter(java.time.LocalDateTime.now()))) {
+                rating -= 1.0;
+            }
+        });
+        
+        rating = Math.max(rating, 1.0);
         rating = Math.min(rating, 5.0);
         
         return Math.round(rating * 10.0) / 10.0;
@@ -92,7 +107,7 @@ public class RatingCalculationService {
     }
 
     private String buildComponentsString(UserRatingStats stats) {
-        return String.format("{\"helpedCount\":%d,\"baseRating\":3.0,\"bonus\":%.1f}", 
-            stats.getTotalHelpsGiven(), stats.getTotalHelpsGiven() * 0.1);
+        return String.format("{\"successful\":%d,\"cancelled\":%d,\"received\":%d}", 
+            stats.getSuccessfulHelps(), stats.getCancelledHelps(), stats.getTotalHelpsReceived());
     }
 }
