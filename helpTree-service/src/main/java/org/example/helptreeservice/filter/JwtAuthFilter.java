@@ -12,11 +12,15 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -108,6 +112,10 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             request.setAttribute("X-User-Id", userId.toString());
             request.setAttribute("X-User-Role", role != null ? role : "USER");
             request.setAttribute("X-User-Email", email != null ? email : "");
+
+            var authorities = List.of(new SimpleGrantedAuthority("ROLE_" + (role != null ? role : "USER")));
+            var auth = new UsernamePasswordAuthenticationToken(userId, null, authorities);
+            SecurityContextHolder.getContext().setAuthentication(auth);
 
         } catch (Exception e) {
             sendError(response, HttpStatus.UNAUTHORIZED, "Невалидный или истёкший токен");
