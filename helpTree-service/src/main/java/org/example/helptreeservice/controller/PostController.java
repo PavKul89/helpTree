@@ -14,6 +14,7 @@ import org.example.helptreeservice.service.UserService;
 import org.example.helptreeservice.service.WalletService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -25,6 +26,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Map;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/posts")
 @RequiredArgsConstructor
@@ -73,6 +75,9 @@ public class PostController {
             @PathVariable Long id,
             @Valid @RequestBody UpdatePostRequest request) {
         PostDto post = postService.getPostById(id);
+        var currentUser = authService.getCurrentUser();
+        log.debug("updatePost: postUserId={}, currentUserId={}, currentUser={}", 
+                post.getUserId(), currentUser != null ? currentUser.getUserId() : null, currentUser);
         if (!authService.canManagePost(post.getUserId())) {
             throw new ForbiddenException("Вы можете редактировать только свои посты");
         }

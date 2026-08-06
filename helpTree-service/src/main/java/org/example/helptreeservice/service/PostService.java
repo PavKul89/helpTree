@@ -36,6 +36,14 @@ public class PostService {
     private final PostMapper postMapper;
     private final GeocodingService geocodingService;
     private final UserService userService;
+    private final ImageService imageService;
+
+    private PostDto toDto(Post post) {
+        PostDto dto = postMapper.toDto(post);
+        dto.setImageUrls(imageService.refreshUrls(post.getImageUrls()));
+        dto.setAuthorAvatarUrl(imageService.refreshUrl(dto.getAuthorAvatarUrl()));
+        return dto;
+    }
 
     @BusinessMetric(
             value = "post.created",
@@ -83,7 +91,7 @@ public class PostService {
             log.info("Пост успешно создан с ID: {}, пользователь ID: {}", savedPost.getId(), user.getId());
             log.debug("Созданный пост: title={}, status={}", savedPost.getTitle(), savedPost.getStatus());
 
-            return postMapper.toDto(savedPost);
+            return toDto(savedPost);
 
         } catch (NotFoundException e) {
             log.warn("Не удалось создать пост: пользователь с ID {} не найден", authorId);
@@ -100,7 +108,7 @@ public class PostService {
 
         try {
             List<PostDto> posts = postRepository.findByUserId(userId).stream()
-                    .map(postMapper::toDto)
+                    .map(this::toDto)
                     .collect(Collectors.toList());
 
             log.info("Найдено {} постов для пользователя с ID: {}", posts.size(), userId);
@@ -124,7 +132,7 @@ public class PostService {
         log.info("Запрос поста по ID: {}", id);
 
         try {
-            PostDto postDto = postMapper.toDto(getPostEntityById(id));
+            PostDto postDto = toDto(getPostEntityById(id));
             log.info("Пост с ID {} найден: title={}, автор={}", id, postDto.getTitle(), postDto.getAuthorName());
             return postDto;
 
@@ -143,7 +151,7 @@ public class PostService {
 
         try {
             List<PostDto> posts = postRepository.findAllNotDeletedOrderByBoostedFirst().stream()
-                    .map(postMapper::toDto)
+                    .map(this::toDto)
                     .collect(Collectors.toList());
 
             log.info("Получен список всех активных постов, количество: {}", posts.size());
@@ -176,7 +184,7 @@ public class PostService {
                 return spec.toPredicate(root, query, cb);
             };
             
-            Page<PostDto> postsPage = postRepository.findAll(boostedSpec, pageable).map(postMapper::toDto);
+            Page<PostDto> postsPage = postRepository.findAll(boostedSpec, pageable).map(this::toDto);
 
             log.info("Найдено постов с фильтрацией: {}, всего страниц: {}",
                     postsPage.getTotalElements(), postsPage.getTotalPages());
@@ -238,10 +246,10 @@ public class PostService {
                 Post updatedPost = postRepository.saveAndFlush(post);
                 log.info("Пост с ID {} успешно обновлен", id);
                 log.debug("Обновленный пост: title={}, status={}", updatedPost.getTitle(), updatedPost.getStatus());
-                return postMapper.toDto(updatedPost);
+                return toDto(updatedPost);
             } else {
                 log.info("Нет изменений для обновления поста с ID: {}", id);
-                return postMapper.toDto(post);
+                return toDto(post);
             }
 
         } catch (NotFoundException e) {
@@ -341,7 +349,7 @@ public class PostService {
     public List<PostDto> getPostsByIds(List<Long> ids) {
         log.info("Запрос постов по списку ID: {}", ids);
         return postRepository.findByIdsWithUser(ids).stream()
-                .map(postMapper::toDto)
+                .map(this::toDto)
                 .collect(Collectors.toList());
     }
 
@@ -360,7 +368,7 @@ public class PostService {
             }
         }
         
-        return posts.stream().map(postMapper::toDto).collect(Collectors.toList());
+        return posts.stream().map(this::toDto).collect(Collectors.toList());
     }
 
     public PostDto boostPost(Long id) {
@@ -380,6 +388,6 @@ public class PostService {
         }
         
         Post saved = postRepository.save(post);
-        return postMapper.toDto(saved);
+        return toDto(saved);
     }
 }

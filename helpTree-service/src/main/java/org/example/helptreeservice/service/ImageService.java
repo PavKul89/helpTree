@@ -86,6 +86,30 @@ public class ImageService {
         }
     }
 
+    public String refreshUrl(String storedUrl) {
+        if (storedUrl == null || !storedUrl.contains("/")) {
+            return storedUrl;
+        }
+        try {
+            String filename = extractFilename(storedUrl);
+            return minioClient.getPresignedObjectUrl(
+                    GetPresignedObjectUrlArgs.builder()
+                            .method(Method.GET)
+                            .bucket(bucket)
+                            .object(filename)
+                            .expiry(7, TimeUnit.DAYS)
+                            .build());
+        } catch (Exception e) {
+            log.warn("Не удалось обновить URL изображения: {}", storedUrl);
+            return storedUrl;
+        }
+    }
+
+    public List<String> refreshUrls(List<String> urls) {
+        if (urls == null) return urls;
+        return urls.stream().map(this::refreshUrl).toList();
+    }
+
     private void validateFile(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new BadRequestException("Файл не выбран");

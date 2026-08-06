@@ -9,6 +9,7 @@ import { authApi } from '../api/authApi';
 import type { Post, Comment, Help, Review } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/Toast';
+import { StatusBadge, getStatusColor, getStatusLabel } from '../components/StatusBadge';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { Spinner } from '../components/Spinner';
@@ -238,26 +239,6 @@ export const PostDetailPage = () => {
     } catch (err) {
       console.error(err);
     }
-  };
-
-  const getStatusColor = (status: string) => {
-    const colors: Record<string, string> = {
-      OPEN: '#10B981',
-      IN_PROGRESS: '#38bdf8',
-      COMPLETED: '#F59E0B',
-      CANCELLED: '#EF4444',
-    };
-    return colors[status] || '#6B7280';
-  };
-
-  const getStatusLabel = (status: string) => {
-    const labels: Record<string, string> = {
-      OPEN: 'Открыт',
-      IN_PROGRESS: 'В работе',
-      COMPLETED: 'Завершён',
-      CANCELLED: 'Отменён',
-    };
-    return labels[status] || status;
   };
 
   if (loading) return (

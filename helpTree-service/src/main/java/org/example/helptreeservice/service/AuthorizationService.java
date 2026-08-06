@@ -1,25 +1,31 @@
 package org.example.helptreeservice.service;
 
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
+@Slf4j
 @Service
 public class AuthorizationService {
 
     public UserContext getCurrentUser() {
         ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
         if (attributes == null) {
+            log.warn("AuthorizationService: no RequestAttributes");
             return null;
         }
         
         HttpServletRequest request = attributes.getRequest();
-        String userIdStr = request.getHeader("X-User-Id");
-        String role = request.getHeader("X-User-Role");
-        String email = request.getHeader("X-User-Email");
+        String userIdStr = (String) request.getAttribute("X-User-Id");
+        String role = (String) request.getAttribute("X-User-Role");
+        String email = (String) request.getAttribute("X-User-Email");
+
+        log.debug("AuthorizationService: X-User-Id={}, X-User-Role={}, X-User-Email={}", userIdStr, role, email);
 
         if (userIdStr == null) {
+            log.warn("AuthorizationService: userId is null");
             return null;
         }
 

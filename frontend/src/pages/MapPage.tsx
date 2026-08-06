@@ -9,6 +9,7 @@ import { authApi } from '../api/authApi';
 import { useAuth } from '../context/AuthContext';
 import type { Post } from '../types';
 import { Button, Spinner } from '../components';
+import { getStatusLabel } from '../components/StatusBadge';
 import { theme } from '../theme';
 import { getRelativeTime } from '../utils/dateUtils';
 import { geocodeCity } from '../utils/geocoding';
@@ -254,16 +255,6 @@ export const MapPage = () => {
         setLoading(false);
       }
     );
-  };
-
-  const getStatusLabel = (status: string) => {
-    const labels: Record<string, string> = {
-      OPEN: 'Открыт',
-      IN_PROGRESS: 'В работе',
-      COMPLETED: 'Завершён',
-      CANCELLED: 'Отменён',
-    };
-    return labels[status] || status;
   };
 
   const openPostsCount = posts.filter(p => p.status === 'OPEN').length;

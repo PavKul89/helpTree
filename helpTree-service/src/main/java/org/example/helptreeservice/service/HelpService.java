@@ -41,6 +41,7 @@ public class HelpService {
     private final RatingService ratingService;
     private final AchievementService achievementService;
     private final WalletService walletService;
+    private final ImageService imageService;
 
     /**
      * 1. Помощник откликается на пост
@@ -554,7 +555,7 @@ public class HelpService {
             nodesMap.put(userId, org.example.helptreeservice.dto.graph.HelpGraphDto.Node.builder()
                     .id(userId)
                     .name(currentUser.getName())
-                    .avatarUrl(currentUser.getAvatarUrl())
+                    .avatarUrl(imageService.refreshUrl(currentUser.getAvatarUrl()))
                     .helpedCount(currentUser.getHelpedCount())
                     .debtCount(currentUser.getDebtCount())
                     .rating(currentUser.getRating())
@@ -569,7 +570,7 @@ public class HelpService {
                 nodesMap.put(id, org.example.helptreeservice.dto.graph.HelpGraphDto.Node.builder()
                         .id(id)
                         .name(user.getName())
-                        .avatarUrl(user.getAvatarUrl())
+                        .avatarUrl(imageService.refreshUrl(user.getAvatarUrl()))
                         .helpedCount(user.getHelpedCount())
                         .debtCount(user.getDebtCount())
                         .rating(user.getRating())
@@ -688,7 +689,7 @@ public class HelpService {
                 nodesMap.put(helperId, org.example.helptreeservice.dto.graph.HelpGraphDto.Node.builder()
                         .id(helperId)
                         .name(help.getHelper().getName())
-                        .avatarUrl(help.getHelper().getAvatarUrl())
+                        .avatarUrl(imageService.refreshUrl(help.getHelper().getAvatarUrl()))
                         .helpedCount(help.getHelper().getHelpedCount())
                         .debtCount(help.getHelper().getDebtCount())
                         .rating(help.getHelper().getRating())
@@ -700,7 +701,7 @@ public class HelpService {
                 nodesMap.put(receiverId, org.example.helptreeservice.dto.graph.HelpGraphDto.Node.builder()
                         .id(receiverId)
                         .name(help.getReceiver().getName())
-                        .avatarUrl(help.getReceiver().getAvatarUrl())
+                        .avatarUrl(imageService.refreshUrl(help.getReceiver().getAvatarUrl()))
                         .helpedCount(help.getReceiver().getHelpedCount())
                         .debtCount(help.getReceiver().getDebtCount())
                         .rating(help.getReceiver().getRating())

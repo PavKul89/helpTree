@@ -8,6 +8,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -19,6 +20,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.Set;
 
+@Slf4j
 @Component
 public class JwtAuthFilter extends OncePerRequestFilter {
 
@@ -60,7 +62,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         String path = request.getRequestURI();
         String method = request.getMethod();
 
-        if (isPublicPath(path)) {
+        if (isPublicPath(path, method)) {
             filterChain.doFilter(request, response);
             return;
         }
@@ -85,7 +87,10 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             String role = claims.get("role", String.class);
             String email = claims.getSubject();
 
+            log.debug("JWT parsed: userId={}, role={}, email={}, claims={}", userId, role, email, claims);
+
             if (userId == null) {
+                log.warn("JWT userId is null, all claims: {}", claims);
                 sendError(response, HttpStatus.UNAUTHORIZED, "Требуется авторизация");
                 return;
             }
@@ -112,9 +117,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         filterChain.doFilter(request, response);
     }
 
-    private boolean isPublicPath(String path) {
+    private boolean isPublicPath(String path, String method) {
         for (String publicPath : PUBLIC_PATHS) {
-            if (path.equals(publicPath) || path.startsWith(publicPath)) {
+            if (path.equals(publicPath)) {
                 return true;
             }
         }
@@ -131,6 +136,18 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             return true;
         }
         if (path.startsWith("/ws/")) {
+            return true;
+        }
+        if ("GET".equals(method) && path.matches("/api/posts(/\\d+)?")) {
+            return true;
+        }
+        if ("GET".equals(method) && path.matches("/api/reviews/help/\\d+")) {
+            return true;
+        }
+        if ("GET".equals(method) && path.matches("/api/reviews/user/\\d+")) {
+            return true;
+        }
+        if ("GET".equals(method) && path.matches("/api/ratings/.*")) {
             return true;
         }
         return false;

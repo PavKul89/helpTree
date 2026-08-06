@@ -396,7 +396,7 @@ public class UserService {
                 .rating(user.getRating())
                 .helpedCount(user.getHelpedCount())
                 .debtCount(user.getDebtCount())
-                .avatarUrl(user.getAvatarUrl())
+                .avatarUrl(imageService.refreshUrl(user.getAvatarUrl()))
                 .build();
     }
 
@@ -425,7 +425,7 @@ public class UserService {
                         .rating(u.getRating())
                         .helpedCount(u.getHelpedCount())
                         .debtCount(u.getDebtCount())
-                        .avatarUrl(u.getAvatarUrl())
+                        .avatarUrl(imageService.refreshUrl(u.getAvatarUrl()))
                         .build())
                 .collect(Collectors.toList());
     }

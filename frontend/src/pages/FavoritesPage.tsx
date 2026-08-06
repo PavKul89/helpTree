@@ -4,6 +4,7 @@ import { postsApi } from '../api/postsApi';
 import { authApi } from '../api/authApi';
 import type { Post } from '../types';
 import { Card, Button, Spinner, EmptyState, Avatar, Modal } from '../components';
+import { StatusBadge, getStatusColor, getStatusLabel } from '../components/StatusBadge';
 import { theme } from '../theme';
 import { getRelativeTime } from '../utils/dateUtils';
 
@@ -65,26 +66,6 @@ export const FavoritesPage = () => {
       console.error('Error clearing favorites:', err);
     } finally {
       setShowClearModal(false);
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'OPEN': return '#22c55e';
-      case 'IN_PROGRESS': return '#f59e0b';
-      case 'COMPLETED': return '#06b6d4';
-      case 'CANCELLED': return '#ef4444';
-      default: return '#6b7280';
-    }
-  };
-
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case 'OPEN': return 'Открыт';
-      case 'IN_PROGRESS': return 'В работе';
-      case 'COMPLETED': return 'Завершён';
-      case 'CANCELLED': return 'Отменён';
-      default: return status;
     }
   };
 
