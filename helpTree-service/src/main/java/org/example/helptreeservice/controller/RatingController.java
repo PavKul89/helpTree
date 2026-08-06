@@ -4,6 +4,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.helptreeservice.dto.RatingResponse;
 import org.example.helptreeservice.entity.RatingHistory;
+import org.example.helptreeservice.exception.ForbiddenException;
+import org.example.helptreeservice.exception.UnauthorizedException;
+import org.example.helptreeservice.service.AuthorizationService;
+import org.example.helptreeservice.service.AuthorizationService.UserContext;
 import org.example.helptreeservice.service.RatingService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -19,6 +23,7 @@ import org.springframework.web.bind.annotation.*;
 public class RatingController {
 
     private final RatingService ratingService;
+    private final AuthorizationService authService;
 
     @GetMapping("/user/{userId}")
     public ResponseEntity<RatingResponse> getUserRating(@PathVariable Long userId) {
@@ -35,7 +40,14 @@ public class RatingController {
 
     @PostMapping("/user/{userId}/recalculate")
     public ResponseEntity<RatingResponse> recalculateUserRating(@PathVariable Long userId) {
-        log.info("POST /api/ratings/user/{}/recalculate", userId);
+        UserContext user = authService.getCurrentUser();
+        if (user == null) {
+            throw new UnauthorizedException("Требуется авторизация");
+        }
+        if (!"ADMIN".equals(user.getRole())) {
+            throw new ForbiddenException("Только администратор может пересчитывать рейтинг");
+        }
+        log.info("POST /api/ratings/user/{}/recalculate (by admin {})", userId, user.getUserId());
         return ResponseEntity.ok(ratingService.recalculateUserRating(userId));
     }
 
