@@ -1,12 +1,8 @@
 import { useState, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { 
-  Axe, Trash2, Wrench, Truck, ShoppingCart, ChefHat, Flower2, 
-  Car, Dog, Baby, Laptop, Scissors, Pill, Scale, BookOpen, GraduationCap,
-  CarFront, Home, Sparkles, Package, Heart, Brain, Wifi, Camera, Music,
-  Palette, Trophy, Plane, Bird, Plug, Shirt, Apple, Syringe, CreditCard,
-  Shield, Building, Star, FileText, Image, FolderOpen, AlertTriangle,
-  Loader2, Send
+  Star, FileText, Image, FolderOpen, AlertTriangle,
+  Loader2, Send, Sparkles
 } from 'lucide-react';
 import { postsApi } from '../api/postsApi';
 import { imagesApi } from '../api/imagesApi';
@@ -14,51 +10,7 @@ import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { theme } from '../theme';
 import { useToast } from '../components/Toast';
-
-const CATEGORY_ICONS: Record<string, React.ElementType> = {
-  'Дрова': Axe,
-  'Уборка': Trash2,
-  'Ремонт': Wrench,
-  'Доставка': Truck,
-  'Покупки': ShoppingCart,
-  'Готовка': ChefHat,
-  'Садоводство': Flower2,
-  'Перевозка': Car,
-  'Уход за животными': Dog,
-  'Помощь с детьми': Baby,
-  'Компьютерная помощь': Laptop,
-  'Стрижка': Scissors,
-  'Медицинская помощь': Pill,
-  'Юридическая консультация': Scale,
-  'Обучение': BookOpen,
-  'Репетитор': GraduationCap,
-  'Транспорт': CarFront,
-  'Строительство': Home,
-  'Клининг': Sparkles,
-  'Курьер': Package,
-  'Волонтёрство': Heart,
-  'Психологическая помощь': Brain,
-  'Интернет и связь': Wifi,
-  'Фото и видео': Camera,
-  'Музыка': Music,
-  'Искусство': Palette,
-  'Спорт': Trophy,
-  'Путешествия': Plane,
-  'Питомцы': Bird,
-  'Бытовая техника': Plug,
-  'Одежда и обувь': Shirt,
-  'Продукты': Apple,
-  'Аптека': Syringe,
-  'Банковские услуги': CreditCard,
-  'Страхование': Shield,
-  'Недвижимость': Building,
-  'Другое': Star,
-};
-
-const CATEGORIES = Object.keys(CATEGORY_ICONS).map(value => ({
-  value,
-  label: value,
-}));
+import { CATEGORY_ICONS, CATEGORIES } from '../utils/categoryIcons';
 
 export const CreatePostPage = () => {
   const [title, setTitle] = useState('');
@@ -182,10 +134,10 @@ export const CreatePostPage = () => {
               style={styles.select}
             >
               {CATEGORIES.map((cat) => {
-                const IconComponent = CATEGORY_ICONS[cat.value];
+                const IconComponent = CATEGORY_ICONS[cat];
                 return (
-                  <option key={cat.value} value={cat.value}>
-                    {cat.label}
+                  <option key={cat} value={cat}>
+                    {cat}
                   </option>
                 );
               })}

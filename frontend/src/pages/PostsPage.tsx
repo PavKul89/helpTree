@@ -1,16 +1,13 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { 
-  MapPin, Star, Settings, Search, X, Axe, Trash2, Wrench, Truck, ShoppingCart, 
-  ChefHat, Flower2, Car, Dog, Baby, Laptop, Scissors, Pill, Scale, BookOpen, 
-  GraduationCap, CarFront, Home, Sparkles, Package, Heart, Brain, Wifi, Camera, 
-  Music, Palette, Trophy, Plane, Bird, Plug, Shirt, Apple, Syringe, CreditCard,
-  Shield, Building, Pin, CircleDot, User, Zap
-} from 'lucide-react';
+import { MapPin, Star, Search, X, CircleDot, User, Zap, Settings, Pin, Sparkles } from 'lucide-react';
 import { postsApi } from '../api/postsApi';
 import { authApi } from '../api/authApi';
 import type { Post } from '../types';
 import { Card, Button, Spinner, EmptyState, Avatar, PostCardSkeleton } from '../components';
+import { StatusBadge, getStatusLabel } from '../components/StatusBadge';
+import { Pagination } from '../components/Pagination';
+import { CATEGORY_ICONS, CATEGORIES } from '../utils/categoryIcons';
 import { useToast } from '../components/Toast';
 import { useAuth } from '../context/AuthContext';
 import { theme } from '../theme';
@@ -51,86 +48,8 @@ const FavoriteButton = ({
   );
 };
 
-const CATEGORIES = [
-  'Все',
-  'Дрова',
-  'Уборка',
-  'Ремонт',
-  'Доставка',
-  'Покупки',
-  'Готовка',
-  'Садоводство',
-  'Перевозка',
-  'Уход за животными',
-  'Помощь с детьми',
-  'Компьютерная помощь',
-  'Стрижка',
-  'Медицинская помощь',
-  'Юридическая консультация',
-  'Обучение',
-  'Репетитор',
-  'Транспорт',
-  'Строительство',
-  'Клининг',
-  'Курьер',
-  'Волонтёрство',
-  'Психологическая помощь',
-  'Интернет и связь',
-  'Фото и видео',
-  'Музыка',
-  'Искусство',
-  'Спорт',
-  'Путешествия',
-  'Питомцы',
-  'Бытовая техника',
-  'Одежда и обувь',
-  'Продукты',
-  'Аптека',
-  'Банковские услуги',
-  'Страхование',
-  'Недвижимость',
-  'Другое',
-];
+const CATEGORY_FILTERS = ['Все', ...CATEGORIES];
 
-const CATEGORY_ICON_COMPONENTS: Record<string, React.ElementType> = {
-  'Дрова': Axe,
-  'Уборка': Trash2,
-  'Ремонт': Wrench,
-  'Доставка': Truck,
-  'Покупки': ShoppingCart,
-  'Готовка': ChefHat,
-  'Садоводство': Flower2,
-  'Перевозка': Car,
-  'Уход за животными': Dog,
-  'Помощь с детьми': Baby,
-  'Компьютерная помощь': Laptop,
-  'Стрижка': Scissors,
-  'Медицинская помощь': Pill,
-  'Юридическая консультация': Scale,
-  'Обучение': BookOpen,
-  'Репетитор': GraduationCap,
-  'Транспорт': CarFront,
-  'Строительство': Home,
-  'Клининг': Sparkles,
-  'Курьер': Package,
-  'Волонтёрство': Heart,
-  'Психологическая помощь': Brain,
-  'Интернет и связь': Wifi,
-  'Фото и видео': Camera,
-  'Музыка': Music,
-  'Искусство': Palette,
-  'Спорт': Trophy,
-  'Путешествия': Plane,
-  'Питомцы': Bird,
-  'Бытовая техника': Plug,
-  'Одежда и обувь': Shirt,
-  'Продукты': Apple,
-  'Аптека': Syringe,
-  'Банковские услуги': CreditCard,
-  'Страхование': Shield,
-  'Недвижимость': Building,
-  'Другое': Pin,
-};
 const STATUSES = ['Все', 'OPEN', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'Избранное'];
 
 export const PostsPage = () => {
@@ -318,16 +237,6 @@ export const PostsPage = () => {
     loadPosts(newPage);
   };
 
-  const getStatusLabel = (status: string) => {
-    const labels: Record<string, string> = {
-      OPEN: 'Открыт',
-      IN_PROGRESS: 'В работе',
-      COMPLETED: 'Завершён',
-      CANCELLED: 'Отменён',
-    };
-    return labels[status] || status;
-  };
-
   if (loading) return (
     <>
       <div style={styles.container} className="page-content">
@@ -405,7 +314,7 @@ export const PostsPage = () => {
               Категория
             </div>
             <div style={styles.chipContainer}>
-              {CATEGORIES.map((cat) => (
+              {CATEGORY_FILTERS.map((cat) => (
                 <button
                   key={cat}
                   onClick={() => handleCategoryChange(cat)}
@@ -598,7 +507,7 @@ export const PostsPage = () => {
                     {getStatusLabel(post.status)}
                   </div>
                   {(() => {
-                    const IconComp = CATEGORY_ICON_COMPONENTS[post.category];
+                    const IconComp = CATEGORY_ICONS[post.category];
                     return IconComp ? <IconComp size={48} color={theme.colors.accent} style={{ opacity: 0.3 }} /> : <Pin size={48} color={theme.colors.accent} style={{ opacity: 0.3 }} />;
                   })()}
                 </div>
@@ -607,7 +516,7 @@ export const PostsPage = () => {
                 <div style={styles.postHeader}>
                   <div style={styles.categoryRow}>
                     {(() => {
-                      const IconComp = CATEGORY_ICON_COMPONENTS[post.category];
+                      const IconComp = CATEGORY_ICONS[post.category];
                       return IconComp ? <IconComp size={16} color={theme.colors.accent} /> : <Pin size={16} color={theme.colors.accent} />;
                     })()}
                     <span style={styles.category}>{post.category}</span>

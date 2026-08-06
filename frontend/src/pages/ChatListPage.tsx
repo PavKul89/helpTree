@@ -8,6 +8,7 @@ import { Modal } from '../components/Modal';
 import { Spinner } from '../components/Spinner';
 import { theme } from '../theme';
 import { useAuth } from '../context/AuthContext';
+import { getRelativeTime } from '../utils/dateUtils';
 import type { Chat } from '../types';
 
 export const ChatListPage = () => {
@@ -64,22 +65,6 @@ export const ChatListPage = () => {
     } catch (err) {
       console.error(err);
     }
-  };
-
-  const formatTime = (dateString?: string) => {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-    
-    if (diffMins < 1) return 'только что';
-    if (diffMins < 60) return `${diffMins} мин`;
-    if (diffHours < 24) return `${diffHours} ч`;
-    if (diffDays < 7) return `${diffDays} дн`;
-    return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
   };
 
   const totalUnread = chats.reduce((sum, chat) => sum + (chat.unreadCount || 0), 0);
@@ -142,7 +127,7 @@ export const ChatListPage = () => {
                     ...styles.chatTime,
                     color: chat.unreadCount > 0 ? theme.colors.accentLight : theme.colors.textMuted,
                   }}>
-                    {formatTime(chat.lastMessageAt)}
+                    {chat.lastMessageAt ? getRelativeTime(chat.lastMessageAt) : ''}
                   </span>
                 </div>
                 

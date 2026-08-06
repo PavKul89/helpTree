@@ -8,6 +8,7 @@ import type { Message, User } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/Button';
 import { Spinner } from '../components/Spinner';
+import { formatTime, formatChatDate } from '../utils/dateUtils';
 import { Avatar } from '../components/Avatar';
 import { Card } from '../components/Card';
 import { theme } from '../theme';
@@ -118,28 +119,8 @@ export const ChatPage = () => {
     sendMessage(chatId, tempMessage.content);
   };
 
-  const formatTime = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-
-    if (date.toDateString() === today.toDateString()) {
-      return 'Сегодня';
-    } else if (date.toDateString() === yesterday.toDateString()) {
-      return 'Вчера';
-    } else {
-      return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
-    }
-  };
-
   const groupedMessages = messages.reduce((groups: { date: string; messages: Message[] }[], msg) => {
-    const date = formatDate(msg.createdAt);
+    const date = formatChatDate(msg.createdAt);
     const lastGroup = groups[groups.length - 1];
     if (lastGroup && lastGroup.date === date) {
       lastGroup.messages.push(msg);

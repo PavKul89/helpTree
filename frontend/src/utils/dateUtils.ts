@@ -25,3 +25,32 @@ export const getRelativeTime = (dateString: string): string => {
     return date.toLocaleDateString('ru-RU');
   }
 };
+
+export const formatDate = (dateString: string): string => {
+  const date = new Date(dateString);
+  return date.toLocaleDateString('ru-RU', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+};
+
+export const formatTime = (dateString: string): string => {
+  const date = new Date(dateString);
+  return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+};
+
+export const formatChatDate = (dateString: string): string => {
+  const date = new Date(dateString);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  if (date.toDateString() === today.toDateString()) {
+    return 'Сегодня';
+  } else if (date.toDateString() === yesterday.toDateString()) {
+    return 'Вчера';
+  } else {
+    return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+  }
+};

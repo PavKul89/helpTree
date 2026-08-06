@@ -10,7 +10,10 @@ import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { Spinner } from '../components/Spinner';
 import { useToast } from '../components/Toast';
+import { StatusBadge, getStatusColor, getStatusLabel } from '../components/StatusBadge';
+import { Tabs } from '../components/Tabs';
 import { theme } from '../theme';
+import { formatDate } from '../utils/dateUtils';
 import type { User, UserPublic, Post } from '../types';
 import { geocodeCity } from '../utils/geocoding';
 
@@ -212,37 +215,8 @@ export const ProfilePage = () => {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('ru-RU', { 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
-    });
-  };
-
   const getInitials = (name: string) => {
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'OPEN': return '#22c55e';
-      case 'IN_PROGRESS': return '#f59e0b';
-      case 'COMPLETED': return '#06b6d4';
-      case 'CANCELLED': return '#ef4444';
-      default: return '#6b7280';
-    }
-  };
-
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case 'OPEN': return 'Открыт';
-      case 'IN_PROGRESS': return 'В работе';
-      case 'COMPLETED': return 'Завершён';
-      case 'CANCELLED': return 'Отменён';
-      default: return status;
-    }
   };
 
   const getRarityColor = (rarity: string) => {
@@ -390,26 +364,15 @@ export const ProfilePage = () => {
           </div>
         </div>
 
-        <div style={styles.tabs}>
-          <button 
-            style={activeTab === 'info' ? styles.tabActive : styles.tab}
-            onClick={() => setActiveTab('info')}
-          >
-            Информация
-          </button>
-          <button 
-            style={activeTab === 'posts' ? styles.tabActive : styles.tab}
-            onClick={() => setActiveTab('posts')}
-          >
-            Публикации ({userPosts.length})
-          </button>
-          <button 
-            style={activeTab === 'achievements' ? styles.tabActive : styles.tab}
-            onClick={() => setActiveTab('achievements')}
-          >
-            Достижения ({achievements.length})
-          </button>
-        </div>
+        <Tabs
+          tabs={[
+            { key: 'info', label: 'Информация' },
+            { key: 'posts', label: 'Публикации', count: userPosts.length },
+            { key: 'achievements', label: 'Достижения', count: achievements.length },
+          ]}
+          activeTab={activeTab}
+          onChange={(key) => setActiveTab(key as 'info' | 'posts' | 'achievements')}
+        />
 
         {activeTab === 'info' && (
           <div style={styles.content}>

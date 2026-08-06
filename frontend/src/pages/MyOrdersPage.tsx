@@ -5,7 +5,10 @@ import { postsApi } from '../api/postsApi';
 import { helpApi } from '../api/helpApi';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/Toast';
+import { StatusBadge, getStatusColor, getStatusLabel } from '../components/StatusBadge';
+import { Tabs } from '../components/Tabs';
 import { Card, Button, Spinner, Modal } from '../components';
+import { formatDate } from '../utils/dateUtils';
 import { theme } from '../theme';
 import { getRelativeTime } from '../utils/dateUtils';
 import type { Post, Help } from '../types';
@@ -83,35 +86,6 @@ export const MyOrdersPage = () => {
     return `${minutes}мин`;
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('ru-RU', { 
-      year: 'numeric', 
-      month: 'short', 
-      day: 'numeric' 
-    });
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'OPEN': return '#22c55e';
-      case 'IN_PROGRESS': return '#38bdf8';
-      case 'COMPLETED': return '#f59e0b';
-      case 'CANCELLED': return '#ef4444';
-      default: return '#6b7280';
-    }
-  };
-
-  const getStatusLabel = (status: string) => {
-    const labels: Record<string, string> = {
-      OPEN: 'Открыт',
-      IN_PROGRESS: 'В работе',
-      COMPLETED: 'Завершён',
-      CANCELLED: 'Отменён',
-    };
-    return labels[status] || status;
-  };
-
   if (loading) return <Spinner message="Загрузка заказов..." />;
 
   const openPosts = myPosts.filter(p => p.status === 'OPEN').length;
@@ -154,20 +128,14 @@ export const MyOrdersPage = () => {
           </div>
         </div>
 
-        <div style={styles.tabs}>
-          <button 
-            style={activeTab === 'posts' ? styles.tabActive : styles.tab}
-            onClick={() => setActiveTab('posts')}
-          >
-            Мои посты ({myPosts.length})
-          </button>
-          <button 
-            style={activeTab === 'helps' ? styles.tabActive : styles.tab}
-            onClick={() => setActiveTab('helps')}
-          >
-            Мои отклики ({myHelps.length})
-          </button>
-        </div>
+        <Tabs
+          tabs={[
+            { key: 'posts', label: 'Мои посты', count: myPosts.length },
+            { key: 'helps', label: 'Мои отклики', count: myHelps.length },
+          ]}
+          activeTab={activeTab}
+          onChange={(key) => setActiveTab(key as 'posts' | 'helps')}
+        />
 
         <div style={styles.content}>
           {activeTab === 'posts' && (
