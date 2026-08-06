@@ -10,6 +10,9 @@ import org.example.helptreeservice.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -78,19 +81,23 @@ public class HelpController {
     }
 
     @GetMapping("/helper/{helperId}")
-    public ResponseEntity<List<HelpResponse>> getHelpsByHelper(@PathVariable Long helperId) {
+    public ResponseEntity<Page<HelpResponse>> getHelpsByHelper(
+            @PathVariable Long helperId,
+            @PageableDefault(page = 0, size = 20) Pageable pageable) {
         if (!authService.canAccessHelp(helperId, null)) {
             throw new ForbiddenException("Вы можете просматривать только свои записи");
         }
-        return ResponseEntity.ok(helpService.getHelpsByHelper(helperId));
+        return ResponseEntity.ok(helpService.getHelpsByHelper(helperId, pageable));
     }
 
     @GetMapping("/receiver/{receiverId}")
-    public ResponseEntity<List<HelpResponse>> getHelpsByReceiver(@PathVariable Long receiverId) {
+    public ResponseEntity<Page<HelpResponse>> getHelpsByReceiver(
+            @PathVariable Long receiverId,
+            @PageableDefault(page = 0, size = 20) Pageable pageable) {
         if (!authService.canAccessHelp(null, receiverId)) {
             throw new ForbiddenException("Вы можете просматривать только свои записи");
         }
-        return ResponseEntity.ok(helpService.getHelpsByReceiver(receiverId));
+        return ResponseEntity.ok(helpService.getHelpsByReceiver(receiverId, pageable));
     }
 
     @GetMapping("/graph")

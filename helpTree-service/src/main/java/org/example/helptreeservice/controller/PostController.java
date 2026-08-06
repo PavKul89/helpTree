@@ -1,5 +1,6 @@
 package org.example.helptreeservice.controller;
 
+import org.example.helptreeservice.config.EconomyConfig;
 import org.example.helptreeservice.dto.posts.CreatePostRequest;
 import org.example.helptreeservice.dto.posts.PostDto;
 import org.example.helptreeservice.dto.posts.UpdatePostRequest;
@@ -33,8 +34,7 @@ public class PostController {
     private final AuthorizationService authService;
     private final UserService userService;
     private final WalletService walletService;
-    
-    private static final long BOOST_PRICE = 5L;
+    private final EconomyConfig economyConfig;
 
     @PostMapping
     public ResponseEntity<PostDto> createPost(@Valid @RequestBody CreatePostRequest request) {
@@ -138,12 +138,12 @@ public class PostController {
         }
         
         try {
-            walletService.spendCoins(currentUser.getUserId(), BOOST_PRICE, TransactionType.POST_BOOST, "Поднятие поста #" + id);
+            walletService.spendCoins(currentUser.getUserId(), economyConfig.getBoostPrice(), TransactionType.POST_BOOST, "Поднятие поста #" + id);
             PostDto boosted = postService.boostPost(id);
             return ResponseEntity.ok(Map.of(
                 "success", true,
                 "post", boosted,
-                "message", "Пост поднят в топ на 24 часа!"
+                "message", "Пост поднят в топ на " + economyConfig.getBoostHours() + " часов!"
             ));
         } catch (BadRequestException e) {
             throw e;

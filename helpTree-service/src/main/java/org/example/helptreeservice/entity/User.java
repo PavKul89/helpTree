@@ -83,7 +83,7 @@ public class User {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
-    @ElementCollection(fetch = FetchType.EAGER)
+    @ElementCollection(fetch = FetchType.LAZY)
     @CollectionTable(name = "user_favorites", joinColumns = @JoinColumn(name = "user_id"))
     @Column(name = "post_id", nullable = false)
     private List<Long> favoritePostIds = new ArrayList<>();

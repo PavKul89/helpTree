@@ -140,6 +140,14 @@ export interface CreateMessageRequest {
   content: string;
 }
 
+export interface WsMessageEnvelope {
+  type: 'NEW_MESSAGE' | 'MESSAGE_DELETED' | 'MESSAGES_READ' | 'CHAT_DELETED' | 'CHAT_UPDATED';
+  message?: Message;
+  chat?: Chat;
+  chatId?: number;
+  timestamp?: string;
+}
+
 export interface Help {
   id: number;
   postId: number;

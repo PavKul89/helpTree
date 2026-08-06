@@ -15,8 +15,10 @@ import org.example.helptreeservice.mapper.ChatMapper;
 import org.example.helptreeservice.repository.ChatRepository;
 import org.example.helptreeservice.repository.MessageRepository;
 import org.example.helptreeservice.repository.UserRepository;
+import org.example.helptreeservice.dto.chat.WsMessageEnvelope;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,6 +35,7 @@ public class ChatService {
     private final MessageRepository messageRepository;
     private final UserRepository userRepository;
     private final ChatMapper chatMapper;
+    private final SimpMessagingTemplate messagingTemplate;
 
     @Transactional
     public ChatResponse createChat(CreateChatRequest request, Long currentUserId) {
@@ -92,7 +95,20 @@ public class ChatService {
         chatRepository.save(chat);
 
         log.info("Пользователь {} отправил сообщение в чат {}", currentUserId, chatId);
-        return chatMapper.toMessageResponse(saved);
+        MessageResponse response = chatMapper.toMessageResponse(saved);
+
+        Long otherUserId = chat.getUser1().getId().equals(currentUserId)
+                ? chat.getUser2().getId()
+                : chat.getUser1().getId();
+
+        ChatResponse chatResponse = chatMapper.toResponse(chat, currentUserId);
+        ChatResponse otherChatResponse = chatMapper.toResponse(chat, otherUserId);
+
+        messagingTemplate.convertAndSend("/topic/chat/" + chatId, WsMessageEnvelope.newMessage(response));
+        messagingTemplate.convertAndSend("/topic/user/" + currentUserId, WsMessageEnvelope.chatUpdated(chatResponse));
+        messagingTemplate.convertAndSend("/topic/user/" + otherUserId, WsMessageEnvelope.chatUpdated(otherChatResponse));
+
+        return response;
     }
 
     @Transactional(readOnly = true)
@@ -119,6 +135,8 @@ public class ChatService {
 
         messageRepository.markMessagesAsRead(chatId, currentUserId);
         log.info("Пользователь {} прочитал сообщения в чате {}", currentUserId, chatId);
+
+        messagingTemplate.convertAndSend("/topic/chat/" + chatId, WsMessageEnvelope.messagesRead(chatId));
     }
 
     @Transactional
@@ -130,8 +148,15 @@ public class ChatService {
             throw new BadRequestException("Вы не участник этого чата");
         }
 
+        Long otherUserId = chat.getUser1().getId().equals(currentUserId) 
+                ? chat.getUser2().getId() 
+                : chat.getUser1().getId();
+
         chatRepository.delete(chat);
         log.info("Пользователь {} удалил чат {}", currentUserId, chatId);
+
+        messagingTemplate.convertAndSend("/topic/user/" + currentUserId, WsMessageEnvelope.chatDeleted(chatId));
+        messagingTemplate.convertAndSend("/topic/user/" + otherUserId, WsMessageEnvelope.chatDeleted(chatId));
     }
 
     @Transactional
@@ -152,5 +177,7 @@ public class ChatService {
 
         messageRepository.delete(message);
         log.info("Пользователь {} удалил сообщение {} из чата {}", currentUserId, messageId, chatId);
+
+        messagingTemplate.convertAndSend("/topic/chat/" + chatId, WsMessageEnvelope.messageDeleted(chatId, messageId));
     }
 }

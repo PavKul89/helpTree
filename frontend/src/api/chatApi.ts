@@ -1,5 +1,5 @@
 import api from './axios';
-import type { Chat, Message, CreateChatRequest, CreateMessageRequest } from '../types';
+import type { Chat, Message, CreateChatRequest } from '../types';
 
 interface MessagesResponse {
   content: Message[];
@@ -27,11 +27,6 @@ export const chatApi = {
     const response = await api.get<MessagesResponse>(`/api/chats/${chatId}/messages`, {
       params: { page, size },
     });
-    return response.data;
-  },
-
-  sendMessage: async (chatId: number, data: CreateMessageRequest): Promise<Message> => {
-    const response = await api.post<Message>(`/api/chats/${chatId}/messages`, data);
     return response.data;
   },
 

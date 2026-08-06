@@ -1,5 +1,6 @@
 package org.example.helptreeservice.service;
 
+import org.example.helptreeservice.config.EconomyConfig;
 import org.example.helptreeservice.dto.wallet.CoinTransactionDto;
 import org.example.helptreeservice.dto.wallet.WalletDto;
 import org.example.helptreeservice.entity.CoinTransaction;
@@ -26,12 +27,8 @@ public class WalletService {
     private final UserRepository userRepository;
     private final CoinTransactionRepository transactionRepository;
     private final UserService userService;
+    private final EconomyConfig economyConfig;
 
-    private static final long COINS_PER_HELP = 10L;
-    private static final long COINS_PER_HELP_RECEIVED = 2L;
-    private static final long COINS_PER_REVIEW = 2L;
-    private static final long COINS_PER_DAILY_LOGIN = 1L;
-    private static final long COINS_PER_FIRST_HELP = 3L;
     private static final int MAX_FIRST_HELP_BONUSES = 3;
     private static final long COST_NICKNAME_COLOR = 20L;
 
@@ -61,21 +58,21 @@ public class WalletService {
         
         User helper = getUserOrThrow(helperId);
         Long current = helper.getHelpCoins();
-        long totalCoins = (current != null ? current : 0L) + COINS_PER_HELP;
+        long totalCoins = (current != null ? current : 0L) + economyConfig.getCoinsPerHelp();
         
         Long firstHelpCount = transactionRepository.countFirstHelpBonuses(helperId);
         if (firstHelpCount != null && firstHelpCount < MAX_FIRST_HELP_BONUSES) {
-            totalCoins += COINS_PER_FIRST_HELP;
+            totalCoins += economyConfig.getFirstHelpBonus();
             CoinTransaction firstHelpTx = CoinTransaction.builder()
                     .userId(helperId)
                     .type(TransactionType.FIRST_HELP)
-                    .amount(COINS_PER_FIRST_HELP)
+                    .amount(economyConfig.getFirstHelpBonus())
                     .description("Бонус новичка")
                     .relatedUserId(receiverId)
                     .relatedPostId(postId)
                     .build();
             transactionRepository.save(firstHelpTx);
-            log.info("Начислен бонус новичка {} монет пользователю {}", COINS_PER_FIRST_HELP, helperId);
+            log.info("Начислен бонус новичка {} монет пользователю {}", economyConfig.getFirstHelpBonus(), helperId);
         }
         
         helper.setHelpCoins(totalCoins);
@@ -84,14 +81,14 @@ public class WalletService {
         CoinTransaction transaction = CoinTransaction.builder()
                 .userId(helperId)
                 .type(TransactionType.HELP_GIVEN)
-                .amount(COINS_PER_HELP)
+                .amount(economyConfig.getCoinsPerHelp())
                 .description("Помощь пользователю")
                 .relatedUserId(receiverId)
                 .relatedPostId(postId)
                 .build();
         transactionRepository.save(transaction);
         
-        log.info("Начислено {} монет пользователю {}", COINS_PER_HELP, helperId);
+        log.info("Начислено {} монет пользователю {}", economyConfig.getCoinsPerHelp(), helperId);
     }
 
     public void addCoinsForReceivedHelp(Long receiverId, Long helperId, Long postId) {
@@ -99,20 +96,20 @@ public class WalletService {
         
         User receiver = getUserOrThrow(receiverId);
         Long current = receiver.getHelpCoins();
-        receiver.setHelpCoins((current != null ? current : 0L) + COINS_PER_HELP_RECEIVED);
+        receiver.setHelpCoins((current != null ? current : 0L) + economyConfig.getCoinsPerHelpReceived());
         userRepository.save(receiver);
         
         CoinTransaction transaction = CoinTransaction.builder()
                 .userId(receiverId)
                 .type(TransactionType.HELP_RECEIVED)
-                .amount(COINS_PER_HELP_RECEIVED)
+                .amount(economyConfig.getCoinsPerHelpReceived())
                 .description("Получена помощь")
                 .relatedUserId(helperId)
                 .relatedPostId(postId)
                 .build();
         transactionRepository.save(transaction);
         
-        log.info("Начислено {} монет пользователю {}", COINS_PER_HELP_RECEIVED, receiverId);
+        log.info("Начислено {} монет пользователю {}", economyConfig.getCoinsPerHelpReceived(), receiverId);
     }
 
     public void addCoinsForReview(Long userId) {
@@ -120,18 +117,18 @@ public class WalletService {
         
         User user = getUserOrThrow(userId);
         Long current = user.getHelpCoins();
-        user.setHelpCoins((current != null ? current : 0L) + COINS_PER_REVIEW);
+        user.setHelpCoins((current != null ? current : 0L) + economyConfig.getCoinsPerReview());
         userRepository.save(user);
         
         CoinTransaction transaction = CoinTransaction.builder()
                 .userId(userId)
                 .type(TransactionType.REVIEW_BONUS)
-                .amount(COINS_PER_REVIEW)
+                .amount(economyConfig.getCoinsPerReview())
                 .description("Бонус за отзыв")
                 .build();
         transactionRepository.save(transaction);
         
-        log.info("Начислено {} монет за отзыв пользователю {}", COINS_PER_REVIEW, userId);
+        log.info("Начислено {} монет за отзыв пользователю {}", economyConfig.getCoinsPerReview(), userId);
     }
 
     public void addDailyLoginBonus(Long userId) {
@@ -152,18 +149,18 @@ public class WalletService {
         if (currentCoins == null) {
             currentCoins = 0L;
         }
-        user.setHelpCoins(currentCoins + COINS_PER_DAILY_LOGIN);
+        user.setHelpCoins(currentCoins + economyConfig.getCoinsPerDailyLogin());
         userRepository.save(user);
         
         CoinTransaction transaction = CoinTransaction.builder()
                 .userId(userId)
                 .type(TransactionType.DAILY_LOGIN)
-                .amount(COINS_PER_DAILY_LOGIN)
+                .amount(economyConfig.getCoinsPerDailyLogin())
                 .description("Ежедневный вход")
                 .build();
         transactionRepository.save(transaction);
         
-        log.info("Начислен ежедневный бонус {} монет пользователю {}", COINS_PER_DAILY_LOGIN, userId);
+        log.info("Начислен ежедневный бонус {} монет пользователю {}", economyConfig.getCoinsPerDailyLogin(), userId);
     }
 
     public void spendCoins(Long userId, long amount, TransactionType type, String description) {

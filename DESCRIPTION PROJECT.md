@@ -16,8 +16,7 @@
 
 | Сервис | Порт | Назначение |
 |--------|------|------------|
-| **gateway-service** | 8080 | API Gateway (единая точка входа) |
-| **helpTree-service** | 8081 | Пользователи, посты, помощь |
+| **helpTree-service** | 8080 | Пользователи, посты, помощь, авторизация |
 | **rating-service** | 8085 | Рейтинги и статистика |
 | **notification-service** | 8087 | Telegram уведомления |
 
@@ -28,7 +27,8 @@
 - Автоматический расчет рейтинга пользователей
 - История изменений рейтинга
 - Топ пользователей по рейтингу
-- API Gateway как единая точка входа
+- Авторизация и JWT токены встроены в helpTree-service
+- Rate limiting (Resilience4j) встроен в helpTree-service
 - Асинхронное взаимодействие через Kafka
 - Загрузка изображений в посты (MinIO/S3)
 - Telegram уведомления о событиях помощи
@@ -45,10 +45,10 @@
 | Категория | Технологии |
 |-----------|------------|
 | Язык | Java 21 |
-| Фреймворки | Spring Boot 3.4.3, Spring Cloud 2024.0.0 |
+| Фреймворки | Spring Boot 3.4.3 |
 | База данных | PostgreSQL 16, Flyway (миграции) |
-| Брокер сообщений | Apache Kafka |
 | Хранилище файлов | MinIO (S3-совместимое) |
+| Rate Limiting | Resilience4j |
 | Контейнеризация | Docker, Docker Compose |
 | Утилиты | Lombok |
 
@@ -58,7 +58,6 @@
 
 | Сервис | URL | Данные для входа |
 |--------|-----|------------------|
-| Kafka UI | http://localhost:8082 | — |
 | MinIO Console | http://localhost:9001 | minioadmin / minioadmin |
 | Prometheus | http://localhost:9090 | — |
 | Grafana | http://localhost:3000 | admin/admin |
@@ -179,7 +178,7 @@ Authorization: Bearer {token}
 ### Создание комментария
 
 ```http
-POST http://localhost:8081/api/posts/1/comments
+POST http://localhost:8080/api/posts/1/comments
 Content-Type: application/json
 X-User-Id: 2
 
@@ -191,7 +190,7 @@ X-User-Id: 2
 ### Создание вложенного комментария (ответа)
 
 ```http
-POST http://localhost:8081/api/posts/1/comments
+POST http://localhost:8080/api/posts/1/comments
 Content-Type: application/json
 X-User-Id: 2
 
@@ -246,7 +245,7 @@ X-User-Id: 2
 ### Создание чата
 
 ```http
-POST http://localhost:8081/api/chats
+POST http://localhost:8080/api/chats
 Content-Type: application/json
 Authorization: Bearer {token}
 
@@ -271,7 +270,7 @@ Authorization: Bearer {token}
 ### Отправка сообщения
 
 ```http
-POST http://localhost:8081/api/chats/1/messages
+POST http://localhost:8080/api/chats/1/messages
 Content-Type: application/json
 Authorization: Bearer {token}
 
@@ -283,7 +282,7 @@ Authorization: Bearer {token}
 ### Получение сообщений
 
 ```http
-GET http://localhost:8081/api/chats/1/messages?page=0&size=20
+GET http://localhost:8080/api/chats/1/messages?page=0&size=20
 Authorization: Bearer {token}
 ```
 
@@ -448,7 +447,7 @@ Authorization: Bearer {token}
 .\mvnw.cmd spring-boot:run
 ```
 
-### Docker Compose (вся инфраструктура)
+### Docker Compose (инфраструктура)
 
 ```powershell
 docker-compose up -d
@@ -459,7 +458,7 @@ docker-compose up -d
 
 ## Вход администратора (создаётся автоматически)
 ```json
-POST http: //localhost:8081/api/auth/login
+POST http://localhost:8080/api/auth/login
 Content-Type: application/json
 
 {
@@ -519,11 +518,9 @@ app:
 ## Устранение неполадок
 
 ```powershell
-# Kafka #
+# PostgreSQL #
 docker-compose down
-docker volume rm helpTree_kafka_data
-docker volume ls | findstr kafka
-docker volume prune -f
+docker volume rm helpTree_postgres_data
 docker-compose up -d
 ```
 ---

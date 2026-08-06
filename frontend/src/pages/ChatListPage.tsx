@@ -1,19 +1,44 @@
-import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { MessageSquare, Search, Plus, ChevronRight } from 'lucide-react';
+import { useEffect, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { MessageSquare, ChevronRight } from 'lucide-react';
 import { chatApi } from '../api/chatApi';
+import { useWebSocketChat } from '../hooks/useWebSocketChat';
 import { Avatar } from '../components/Avatar';
 import { Modal } from '../components/Modal';
 import { Spinner } from '../components/Spinner';
 import { theme } from '../theme';
+import { useAuth } from '../context/AuthContext';
 import type { Chat } from '../types';
 
 export const ChatListPage = () => {
   const [chats, setChats] = useState<Chat[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleteChatId, setDeleteChatId] = useState<number | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
   const navigate = useNavigate();
+  const { user } = useAuth();
+
+  const handleChatUpdated = useCallback((updatedChat: Chat) => {
+    setChats((prev) => {
+      const existing = prev.find((c) => c.id === updatedChat.id);
+      if (existing) {
+        return prev.map((c) => (c.id === updatedChat.id ? updatedChat : c));
+      }
+      return [updatedChat, ...prev];
+    });
+  }, []);
+
+  const handleChatDeleted = useCallback((chatId: number) => {
+    setChats((prev) => prev.filter((c) => c.id !== chatId));
+  }, []);
+
+  useWebSocketChat({
+    userId: user?.id ?? null,
+    onNewMessage: () => {},
+    onMessageDeleted: () => {},
+    onMessagesRead: () => {},
+    onChatDeleted: handleChatDeleted,
+    onChatUpdated: handleChatUpdated,
+  });
 
   useEffect(() => {
     loadChats();
@@ -57,17 +82,12 @@ export const ChatListPage = () => {
     return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
   };
 
-  const filteredChats = chats.filter(chat => 
-    chat.participantName.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
   const totalUnread = chats.reduce((sum, chat) => sum + (chat.unreadCount || 0), 0);
 
   if (loading) return <Spinner message="Загрузка чатов..." />;
 
   return (
     <div style={styles.container}>
-      {/* Header */}
       <div style={styles.header}>
         <div style={styles.headerLeft}>
           <div style={styles.headerIcon}>
@@ -80,48 +100,19 @@ export const ChatListPage = () => {
             )}
           </div>
         </div>
-        <Link to="/" style={styles.backButton}>
-          <Plus size={20} />
-          <span>Новый чат</span>
-        </Link>
       </div>
 
-      {/* Search */}
-      <div style={styles.searchContainer}>
-        <Search size={18} style={styles.searchIcon} />
-        <input
-          type="text"
-          placeholder="Поиск по сообщениям..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          style={styles.searchInput}
-        />
-      </div>
-
-      {/* Chat List */}
-      {filteredChats.length === 0 ? (
+      {chats.length === 0 ? (
         <div style={styles.empty}>
           <div style={styles.emptyIcon}>
             <MessageSquare size={64} color={theme.colors.accent} />
           </div>
-          <h3 style={styles.emptyTitle}>
-            {searchQuery ? 'Ничего не найдено' : 'Чатов пока нет'}
-          </h3>
-          <p style={styles.emptyText}>
-            {searchQuery 
-              ? 'Попробуйте изменить поисковый запрос'
-              : 'Начните общение с другими пользователями!'
-            }
-          </p>
-          {!searchQuery && (
-            <Link to="/" style={styles.emptyLink}>
-              Найти пользователей
-            </Link>
-          )}
+          <h3 style={styles.emptyTitle}>Чатов пока нет</h3>
+          <p style={styles.emptyText}>Начните общение с другими пользователями!</p>
         </div>
       ) : (
         <div style={styles.chatList}>
-          {filteredChats.map((chat) => (
+          {chats.map((chat) => (
             <div 
               key={chat.id} 
               style={{
@@ -238,42 +229,6 @@ const styles: Record<string, React.CSSProperties> = {
     color: theme.colors.accentLight,
     fontSize: '13px',
     fontWeight: 500,
-  },
-  backButton: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    padding: '12px 20px',
-    background: theme.gradients.button,
-    borderRadius: '12px',
-    color: theme.colors.text,
-    textDecoration: 'none',
-    fontSize: '14px',
-    fontWeight: 600,
-    boxShadow: theme.shadows.button,
-    transition: 'all 0.2s ease',
-  },
-  searchContainer: {
-    position: 'relative',
-    marginBottom: '20px',
-  },
-  searchIcon: {
-    position: 'absolute',
-    left: '16px',
-    top: '50%',
-    transform: 'translateY(-50%)',
-    color: theme.colors.textMuted,
-  },
-  searchInput: {
-    width: '100%',
-    padding: '14px 16px 14px 48px',
-    fontSize: '15px',
-    background: 'rgba(255,255,255,0.08)',
-    border: '1px solid rgba(255,255,255,0.12)',
-    borderRadius: '14px',
-    color: theme.colors.text,
-    outline: 'none',
-    boxSizing: 'border-box',
   },
   chatList: {
     display: 'flex',
@@ -403,15 +358,5 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '14px',
     margin: 0,
     maxWidth: '300px',
-  },
-  emptyLink: {
-    marginTop: '20px',
-    padding: '12px 24px',
-    background: theme.gradients.button,
-    borderRadius: '12px',
-    color: theme.colors.text,
-    textDecoration: 'none',
-    fontSize: '14px',
-    fontWeight: 600,
   },
 };

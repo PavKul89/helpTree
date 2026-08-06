@@ -36,40 +36,6 @@ services:
       timeout: 5s
       retries: 5
 
-  kafka:
-    image: confluentinc/cp-kafka:7.4.0
-    container_name: kafka
-    restart: unless-stopped
-    depends_on:
-      zookeeper:
-        condition: service_healthy
-    ports:
-      - "9092:9092"
-      - "9093:9093"
-    environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      # ВАЖНО: Правильная настройка listeners
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:9093
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9093
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      # Настройки топиков
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
-      # КРИТИЧЕСКИ ВАЖНО: Очищаем meta.properties при запуске
-      KAFKA_CLEANUP_POLICY: "delete"
-      KAFKA_LOG_DIRS: /var/lib/kafka/data
-
-    volumes:
-      - kafka_data:/var/lib/kafka/data
-    networks:
-      - helpTree-network
-    command: >
-      bash -c "
-        rm -f /var/lib/kafka/data/meta.properties
-        /etc/confluent/docker/run
-      "
   kafka-ui:
       image: provectuslabs/kafka-ui:latest
       container_name: kafka-ui
@@ -104,7 +70,6 @@ services:
       - helpTree-network
     depends_on:
       - postgres
-      - kafka
 
   grafana:
     image: grafana/grafana:10.2.2
@@ -175,8 +140,6 @@ volumes:
     name: helpTree_zookeeper_data
   zookeeper_log:
     name: helpTree_zookeeper_log
-  kafka_data:
-    name: helpTree_kafka_data
   prometheus_data:
     name: helpTree_prometheus_data
   grafana_data:

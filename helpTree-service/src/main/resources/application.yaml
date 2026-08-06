@@ -1,5 +1,5 @@
 server:
-  port: 8081
+  port: 8080
 
 spring:
   application:
@@ -21,8 +21,8 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: update
-    show-sql: true
+      ddl-auto: ${JPA_DDL_AUTO:validate}
+    show-sql: false
     open-in-view: false
     properties:
       hibernate:
@@ -36,16 +36,6 @@ spring:
   flyway:
     enabled: true
     baseline-on-migrate: true
-
-  kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9093}
-    producer:
-      key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
-      properties:
-        spring.json.type.mapping: helpEvent:org.example.helptreeservice.dto.HelpEvent
-    template:
-      default-topic: help-events
 
 # ======================================================
 # ТРАССИРОВКА (по аналогии с gateway)
@@ -102,11 +92,29 @@ logging:
 
 
 app:
-  jwtSecret: mySecretKeyForJWTGenerationWithAtLeast64CharactersLong12345678901234567890123456789012
+  jwtSecret: ${JWT_SECRET:mySecretKeyForJWTGenerationWithAtLeast64CharactersLong12345678901234567890123456789012}
   jwtExpirationMs: 86400000
   admin:
-    email: Admin@test.com
-    password: 123456
+    email: ${ADMIN_EMAIL:Admin@test.com}
+    password: ${ADMIN_PASSWORD:123456}
+  economy:
+    coins-per-help: 10
+    coins-per-help-received: 2
+    coins-per-review: 2
+    coins-per-daily-login: 1
+    first-help-bonus: 3
+    boost-price: 5
+    boost-hours: 24
+    refresh-token-days: 7
+    debt-block-threshold: 5
+    debt-warning-threshold: 3
+    debt-create-post-threshold: 2
+  rate-limit:
+    enabled: false
+    default-limit: 1000
+    auth-limit: 100
+    create-limit: 50
+    window-seconds: 60
 
 minio:
   endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
@@ -117,3 +125,19 @@ minio:
 upload:
   max-size: 10485760  # 10MB в байтах
   allowed-types: image/jpeg,image/png,image/webp,image/gif
+
+resilience4j:
+  ratelimiter:
+    configs:
+      default:
+        limitForPeriod: 1000
+        limitRefreshPeriod: 60s
+        timeoutDuration: 1000ms
+      auth:
+        limitForPeriod: 100
+        limitRefreshPeriod: 60s
+        timeoutDuration: 1000ms
+      create:
+        limitForPeriod: 50
+        limitRefreshPeriod: 60s
+        timeoutDuration: 1000ms

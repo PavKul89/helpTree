@@ -13,6 +13,7 @@ import org.example.helptreeservice.repository.AchievementRepository;
 import org.example.helptreeservice.repository.HelpRepository;
 import org.example.helptreeservice.repository.PostRepository;
 import org.example.helptreeservice.repository.UserRepository;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -50,7 +51,7 @@ public class ActivityService {
     }
 
     private List<ActivityDto> getHelpGivenActivities(User user) {
-        List<Help> helps = helpRepository.findByHelperWithDetails(user);
+        List<Help> helps = helpRepository.findByHelperWithDetails(user, PageRequest.of(0, 1000)).getContent();
         return helps.stream()
                 .filter(help -> help.getStatus() != null)
                 .map(help -> ActivityDto.builder()
@@ -71,7 +72,7 @@ public class ActivityService {
     }
 
     private List<ActivityDto> getHelpReceivedActivities(User user) {
-        List<Help> helps = helpRepository.findByReceiverWithDetails(user);
+        List<Help> helps = helpRepository.findByReceiverWithDetails(user, PageRequest.of(0, 1000)).getContent();
         return helps.stream()
                 .filter(help -> help.getStatus() != null)
                 .map(help -> ActivityDto.builder()

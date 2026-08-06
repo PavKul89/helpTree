@@ -1,7 +1,6 @@
 package org.example.helptreeservice.service;
 
 
-import org.example.helptreeservice.dto.HelpEvent;
 import org.example.helptreeservice.dto.helps.HelpRequest;
 import org.example.helptreeservice.dto.helps.HelpResponse;
 import org.example.helptreeservice.entity.Help;
@@ -18,6 +17,8 @@ import org.example.helptreeservice.repository.PostRepository;
 import org.example.helptreeservice.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,7 +38,7 @@ public class HelpService {
     private final UserRepository userRepository;
     private final UserService userService;
     private final HelpMapper helpMapper;
-    private final KafkaProducerService kafkaProducerService;
+    private final RatingService ratingService;
     private final AchievementService achievementService;
     private final WalletService walletService;
 
@@ -83,11 +84,6 @@ public class HelpService {
                 throw new BadRequestException("Нельзя помочь самому себе");
             }
 
-            if (receiver.getBlockedAt() != null) {
-                log.warn("Попытка откликнуться на пост заблокированного пользователя: receiverId={}", receiver.getId());
-                throw new BadRequestException("Пользователь заблокирован за долг. Невозможно откликнуться на пост.");
-            }
-
             if (receiver.getDebtCount() > 5) {
                 log.warn("Попытка откликнуться на пост пользователя с долгом: receiverId={}, debtCount={}",
                         receiver.getId(), receiver.getDebtCount());
@@ -126,23 +122,6 @@ public class HelpService {
             log.debug("Статус поста обновлен на IN_PROGRESS, назначен помощник ID: {}", helper.getId());
 
             Help savedHelp = helpRepository.save(help);
-
-            // Отправляем событие в Kafka
-            HelpEvent event = HelpEvent.builder()
-                    .helpId(savedHelp.getId())
-                    .postId(post.getId())
-                    .postTitle(post.getTitle())
-                    .authorId(receiver.getId())
-                    .authorEmail(receiver.getEmail())
-                    .authorName(receiver.getName())
-                    .helperId(helper.getId())
-                    .helperEmail(helper.getEmail())
-                    .helperName(helper.getName())
-                    .receiverId(receiver.getId())
-                    .eventType("HELP_ACCEPTED")
-                    .timestamp(LocalDateTime.now())
-                    .build();
-            kafkaProducerService.sendHelpEvent(event);
 
             log.info("Помощь успешно принята: helpId={}, helperId={}, receiverId={}, postId={}",
                     savedHelp.getId(), helper.getId(), receiver.getId(), post.getId());
@@ -210,22 +189,7 @@ public class HelpService {
                 duration = ChronoUnit.MINUTES.between(acceptedAt, LocalDateTime.now());
             }
 
-            // Отправляем событие в Kafka
-            HelpEvent event = HelpEvent.builder()
-                    .postId(help.getPost().getId())
-                    .postTitle(help.getPost().getTitle())
-                    .authorId(help.getReceiver().getId())
-                    .authorEmail(help.getReceiver().getEmail())
-                    .authorName(help.getReceiver().getName())
-                    .helperId(help.getHelper().getId())
-                    .helperEmail(help.getHelper().getEmail())
-                    .helperName(help.getHelper().getName())
-                    .receiverId(help.getReceiver().getId())
-                    .eventType("HELP_COMPLETED")
-                    .timestamp(LocalDateTime.now())
-                    .duration(duration)
-                    .build();
-            kafkaProducerService.sendHelpEvent(event);
+            ratingService.updateStatsAfterHelp(help.getHelper().getId(), help.getReceiver().getId(), true);
 
             log.info("Помощь успешно отмечена как выполненная: helpId={}", helpId);
             log.debug("Обновленный статус помощи: {}", updatedHelp.getStatus());
@@ -304,22 +268,7 @@ public class HelpService {
 
             Help updatedHelp = helpRepository.save(help);
 
-            // Отправляем событие в Kafka
-            HelpEvent event = HelpEvent.builder()
-                    .helpId(updatedHelp.getId())
-                    .postId(post.getId())
-                    .postTitle(post.getTitle())
-                    .authorId(help.getReceiver().getId())
-                    .authorEmail(help.getReceiver().getEmail())
-                    .authorName(help.getReceiver().getName())
-                    .helperId(help.getHelper().getId())
-                    .helperEmail(help.getHelper().getEmail())
-                    .helperName(help.getHelper().getName())
-                    .receiverId(help.getReceiver().getId())
-                    .eventType("HELP_CONFIRMED")
-                    .timestamp(LocalDateTime.now())
-                    .build();
-            kafkaProducerService.sendHelpEvent(event);
+            ratingService.updateStatsAfterHelp(help.getHelper().getId(), help.getReceiver().getId(), true);
 
             log.info("Помощь успешно подтверждена: helpId={}", helpId);
             log.debug("Итоговое состояние помощи: {}", updatedHelp.getStatus());
@@ -372,22 +321,7 @@ public class HelpService {
 
             Help updatedHelp = helpRepository.save(help);
 
-            // Отправляем событие в Kafka
-            HelpEvent event = HelpEvent.builder()
-                    .helpId(updatedHelp.getId())
-                    .postId(post.getId())
-                    .postTitle(post.getTitle())
-                    .authorId(help.getReceiver().getId())
-                    .authorEmail(help.getReceiver().getEmail())
-                    .authorName(help.getReceiver().getName())
-                    .helperId(help.getHelper().getId())
-                    .helperEmail(help.getHelper().getEmail())
-                    .helperName(help.getHelper().getName())
-                    .receiverId(help.getReceiver().getId())
-                    .eventType("HELP_CANCELLED")
-                    .timestamp(LocalDateTime.now())
-                    .build();
-            kafkaProducerService.sendHelpEvent(event);
+            ratingService.updateStatsAfterHelp(help.getHelper().getId(), help.getReceiver().getId(), false);
 
             log.info("Помощь успешно отменена: helpId={}", helpId);
 
@@ -416,8 +350,8 @@ public class HelpService {
     }
 
     @Transactional(readOnly = true)
-    public List<HelpResponse> getHelpsByHelper(Long helperId) {
-        log.info("Запрос всех откликов помощника с ID: {}", helperId);
+    public Page<HelpResponse> getHelpsByHelper(Long helperId, Pageable pageable) {
+        log.info("Запрос откликов помощника с ID: {}, page={}, size={}", helperId, pageable.getPageNumber(), pageable.getPageSize());
 
         try {
             User helper = userRepository.findById(helperId)
@@ -428,13 +362,10 @@ public class HelpService {
                 throw new NotFoundException("Пользователь не найден");
             }
 
-            List<HelpResponse> helps = helpRepository.findByHelperWithDetails(helper).stream()
-                    .map(helpMapper::toResponse)
-                    .collect(Collectors.toList());
+            Page<HelpResponse> helps = helpRepository.findByHelperWithDetails(helper, pageable)
+                    .map(helpMapper::toResponse);
 
-            log.info("Найдено {} откликов для помощника с ID: {}", helps.size(), helperId);
-            log.debug("ID откликов помощника {}: {}", helperId,
-                    helps.stream().map(HelpResponse::getId).collect(Collectors.toList()));
+            log.info("Найдено {} откликов для помощника с ID: {}", helps.getTotalElements(), helperId);
 
             return helps;
 
@@ -451,8 +382,8 @@ public class HelpService {
      * Получить все помощи пользователя (где ему помогали)
      */
     @Transactional(readOnly = true)
-    public List<HelpResponse> getHelpsByReceiver(Long receiverId) {
-        log.info("Запрос всех полученных помощью пользователя с ID: {}", receiverId);
+    public Page<HelpResponse> getHelpsByReceiver(Long receiverId, Pageable pageable) {
+        log.info("Запрос полученных помощью пользователя с ID: {}, page={}, size={}", receiverId, pageable.getPageNumber(), pageable.getPageSize());
 
         try {
             User receiver = userRepository.findById(receiverId)
@@ -463,13 +394,10 @@ public class HelpService {
                 throw new NotFoundException("Пользователь не найден");
             }
 
-            List<HelpResponse> helps = helpRepository.findByReceiverWithDetails(receiver).stream()
-                    .map(helpMapper::toResponse)
-                    .collect(Collectors.toList());
+            Page<HelpResponse> helps = helpRepository.findByReceiverWithDetails(receiver, pageable)
+                    .map(helpMapper::toResponse);
 
-            log.info("Найдено {} полученных помощью для пользователя с ID: {}", helps.size(), receiverId);
-            log.debug("ID полученных помощью пользователя {}: {}", receiverId,
-                    helps.stream().map(HelpResponse::getId).collect(Collectors.toList()));
+            log.info("Найдено {} полученных помощью для пользователя с ID: {}", helps.getTotalElements(), receiverId);
 
             return helps;
 
@@ -613,8 +541,15 @@ public class HelpService {
         // Создаем узлы
         Map<Long, org.example.helptreeservice.dto.graph.HelpGraphDto.Node> nodesMap = new HashMap<>();
         
+        // Загружаем всех пользователей одним запросом
+        List<User> allUsers = userRepository.findAllById(visitedUserIds);
+        Map<Long, User> usersMap = new HashMap<>();
+        for (User user : allUsers) {
+            usersMap.put(user.getId(), user);
+        }
+        
         // Добавляем текущего пользователя первым (корень)
-        User currentUser = userRepository.findById(userId).orElse(null);
+        User currentUser = usersMap.get(userId);
         if (currentUser != null) {
             nodesMap.put(userId, org.example.helptreeservice.dto.graph.HelpGraphDto.Node.builder()
                     .id(userId)
@@ -629,7 +564,7 @@ public class HelpService {
         // Добавляем остальных
         for (Long id : visitedUserIds) {
             if (id.equals(userId)) continue;
-            User user = userRepository.findById(id).orElse(null);
+            User user = usersMap.get(id);
             if (user != null) {
                 nodesMap.put(id, org.example.helptreeservice.dto.graph.HelpGraphDto.Node.builder()
                         .id(id)
@@ -717,8 +652,11 @@ public class HelpService {
             .collect(Collectors.toList());
         
         Map<Long, String> userNames = new HashMap<>();
-        for (Long userId : topHelpers) {
-            userRepository.findById(userId).ifPresent(u -> userNames.put(userId, u.getName()));
+        if (!topHelpers.isEmpty()) {
+            List<User> topUsers = userRepository.findAllById(topHelpers);
+            for (User user : topUsers) {
+                userNames.put(user.getId(), user.getName());
+            }
         }
         
         final Map<Long, Long> finalHelpCountByUser = helpCountByUser;

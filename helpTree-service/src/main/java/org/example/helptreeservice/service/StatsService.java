@@ -17,8 +17,8 @@ public class StatsService {
     private final HelpRepository helpRepository;
 
     public StatsDto getStats() {
-        long totalUsers = userRepository.count();
-        long totalHelps = helpRepository.count();
+        long totalUsers = userRepository.countActive();
+        long totalHelps = helpRepository.countActive();
         long activePosts = postRepository.countByStatus(PostStatus.OPEN);
 
         return StatsDto.builder()

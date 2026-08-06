@@ -33,4 +33,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     @Query("SELECT u FROM User u WHERE u.deleted = false AND u.debtCount > 5 AND (u.blockedUntil IS NULL OR u.blockedUntil < :now)")
     List<User> findUsersWithDebtToBlock(@Param("now") LocalDateTime now);
+
+    @Query("SELECT COUNT(u) FROM User u WHERE u.deleted = false OR u.deleted IS NULL")
+    long countActive();
 }

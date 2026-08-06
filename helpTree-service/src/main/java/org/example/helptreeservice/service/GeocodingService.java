@@ -8,6 +8,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 @Service
 @Slf4j
@@ -16,13 +17,13 @@ public class GeocodingService {
     private static final String NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
     private static final String USER_AGENT = "HelpTree/1.0 (Java Backend)";
     private static final long MIN_REQUEST_INTERVAL = 1100;
-    
+
     private final RestTemplate restTemplate;
     private final Map<String, GeoLocation> cache = new ConcurrentHashMap<>();
-    private long lastRequestTime = 0;
+    private final AtomicLong lastRequestTime = new AtomicLong(0);
 
-    public GeocodingService() {
-        this.restTemplate = new RestTemplate();
+    public GeocodingService(RestTemplate restTemplate) {
+        this.restTemplate = restTemplate;
     }
 
     public Optional<GeoLocation> geocodeCity(String cityName) {
@@ -35,15 +36,23 @@ public class GeocodingService {
                 .replace("г ", "");
 
         String cacheKey = normalizedCity;
-        
+
         if (cache.containsKey(cacheKey)) {
             return Optional.ofNullable(cache.get(cacheKey));
         }
 
-        try {
-            Thread.sleep(Math.max(0, MIN_REQUEST_INTERVAL - (System.currentTimeMillis() - lastRequestTime)));
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+        long now = System.currentTimeMillis();
+        long lastTime = lastRequestTime.get();
+        long waitTime = Math.max(0, MIN_REQUEST_INTERVAL - (now - lastTime));
+
+        if (waitTime > 0) {
+            log.debug("Geocoding rate limited, skipping request for '{}'", cityName);
+            return Optional.empty();
+        }
+
+        if (!lastRequestTime.compareAndSet(lastTime, now)) {
+            log.debug("Geocoding concurrent request, skipping for '{}'", cityName);
+            return Optional.empty();
         }
 
         try {
@@ -67,14 +76,12 @@ public class GeocodingService {
                     List.class
             );
 
-            lastRequestTime = System.currentTimeMillis();
-
             if (response.getBody() != null && !response.getBody().isEmpty()) {
                 @SuppressWarnings("unchecked")
                 Map<String, Object> data = (Map<String, Object>) response.getBody().get(0);
                 String lat = (String) data.get("lat");
                 String lon = (String) data.get("lon");
-                
+
                 if (lat != null && lon != null) {
                     GeoLocation location = new GeoLocation(
                             Double.parseDouble(lat),
@@ -89,7 +96,6 @@ public class GeocodingService {
             log.warn("Failed to geocode city '{}': {}", cityName, e.getMessage());
         }
 
-        cache.put(cacheKey, null);
         return Optional.empty();
     }
 

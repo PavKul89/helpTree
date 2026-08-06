@@ -1,4 +1,4 @@
-package com.example.gatewayservice.config;
+package org.example.helptreeservice.config;
 
 import com.github.benmanes.caffeine.cache.Caffeine;
 import org.springframework.cache.CacheManager;
@@ -9,14 +9,14 @@ import org.springframework.context.annotation.Configuration;
 import java.util.concurrent.TimeUnit;
 
 @Configuration
-public class LoadBalancerConfig {
+public class CacheConfig {
 
     @Bean
     public CacheManager cacheManager() {
-        CaffeineCacheManager cacheManager = new CaffeineCacheManager();
-        cacheManager.setCaffeine(Caffeine.newBuilder()
-                .expireAfterWrite(60, TimeUnit.SECONDS)
-                .maximumSize(100));
-        return cacheManager;
+        CaffeineCacheManager manager = new CaffeineCacheManager();
+        manager.setCaffeine(Caffeine.newBuilder()
+                .maximumSize(1000)
+                .expireAfterWrite(10, TimeUnit.MINUTES));
+        return manager;
     }
 }

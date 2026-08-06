@@ -5,7 +5,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.helptreeservice.dto.chat.ChatResponse;
 import org.example.helptreeservice.dto.chat.CreateChatRequest;
-import org.example.helptreeservice.dto.chat.CreateMessageRequest;
 import org.example.helptreeservice.dto.chat.MessageResponse;
 import org.example.helptreeservice.exception.UnauthorizedException;
 import org.example.helptreeservice.service.AuthorizationService;
@@ -46,19 +45,6 @@ public class ChatController {
         }
         List<ChatResponse> chats = chatService.getChats(user.getUserId());
         return ResponseEntity.ok(chats);
-    }
-
-    @PostMapping("/{chatId}/messages")
-    public ResponseEntity<MessageResponse> sendMessage(
-            @PathVariable Long chatId,
-            @Valid @RequestBody CreateMessageRequest request) {
-        
-        AuthorizationService.UserContext user = authorizationService.getCurrentUser();
-        if (user == null) {
-            throw new UnauthorizedException("Требуется авторизация");
-        }
-        MessageResponse response = chatService.sendMessage(chatId, request, user.getUserId());
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @GetMapping("/{chatId}/messages")

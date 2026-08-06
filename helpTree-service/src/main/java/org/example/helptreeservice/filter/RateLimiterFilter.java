@@ -1,28 +1,30 @@
-package com.example.gatewayservice.filter;
+package org.example.helptreeservice.filter;
 
-import com.example.gatewayservice.config.RateLimitConfig;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.resilience4j.ratelimiter.RateLimiter;
 import io.github.resilience4j.ratelimiter.RateLimiterConfig;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.cloud.gateway.filter.GatewayFilterChain;
-import org.springframework.cloud.gateway.filter.GlobalFilter;
-import org.springframework.core.Ordered;
-import org.springframework.http.HttpHeaders;
+import org.example.helptreeservice.config.RateLimitConfig;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
-import org.springframework.web.server.ServerWebExchange;
-import reactor.core.publisher.Mono;
+import org.springframework.web.filter.OncePerRequestFilter;
 
+import java.io.IOException;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Component
-public class RateLimiterFilter implements GlobalFilter, Ordered {
+public class RateLimiterFilter extends OncePerRequestFilter {
 
     private final RateLimitConfig config;
+    private final ObjectMapper objectMapper = new ObjectMapper();
     private final Map<String, RateLimiter> limiters = new ConcurrentHashMap<>();
 
     public RateLimiterFilter(RateLimitConfig config) {
@@ -30,18 +32,22 @@ public class RateLimiterFilter implements GlobalFilter, Ordered {
     }
 
     @Override
-    public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+            throws ServletException, IOException {
+
         if (!config.isEnabled()) {
-            return chain.filter(exchange);
+            filterChain.doFilter(request, response);
+            return;
         }
 
-        String path = exchange.getRequest().getPath().toString();
+        String path = request.getRequestURI();
 
         if (path.startsWith("/actuator") || path.startsWith("/error")) {
-            return chain.filter(exchange);
+            filterChain.doFilter(request, response);
+            return;
         }
 
-        String method = exchange.getRequest().getMethod().toString();
+        String method = request.getMethod();
         String bucketType = getBucketType(path, method);
         int limit = getLimit(bucketType);
 
@@ -50,23 +56,26 @@ public class RateLimiterFilter implements GlobalFilter, Ordered {
         );
 
         if (rateLimiter.acquirePermission()) {
-            return chain.filter(exchange);
+            filterChain.doFilter(request, response);
+            return;
         }
 
         log.warn("Превышен лимит запросов: path={}, type={}, limit={}", path, bucketType, limit);
 
-        var response = exchange.getResponse();
-        response.setStatusCode(HttpStatus.TOO_MANY_REQUESTS);
-        response.getHeaders().add(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE);
-        response.getHeaders().add("X-RateLimit-Limit", String.valueOf(limit));
-        response.getHeaders().add("X-RateLimit-Remaining", "0");
-        response.getHeaders().add("Retry-After", String.valueOf(config.getWindowSeconds()));
+        response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.setHeader("X-RateLimit-Limit", String.valueOf(limit));
+        response.setHeader("X-RateLimit-Remaining", "0");
+        response.setHeader("Retry-After", String.valueOf(config.getWindowSeconds()));
 
-        String body = """
-                {"status":429,"error":"Too Many Requests","message":"Превышен лимит запросов. Попробуйте через %d секунд.","path":"%s"}
-                """.formatted(config.getWindowSeconds(), path);
+        String body = objectMapper.writeValueAsString(Map.of(
+                "status", 429,
+                "error", "Too Many Requests",
+                "message", "Превышен лимит запросов. Попробуйте через " + config.getWindowSeconds() + " секунд.",
+                "path", path
+        ));
 
-        return response.writeWith(Mono.just(response.bufferFactory().wrap(body.getBytes())));
+        response.getWriter().write(body);
     }
 
     private RateLimiter createRateLimiter(String bucketType, int limit) {
@@ -76,7 +85,7 @@ public class RateLimiterFilter implements GlobalFilter, Ordered {
                 .timeoutDuration(Duration.ofSeconds(5))
                 .build();
 
-        return RateLimiter.of("gateway-" + bucketType, rateLimiterConfig);
+        return RateLimiter.of("helptree-" + bucketType, rateLimiterConfig);
     }
 
     private String getBucketType(String path, String method) {
@@ -95,10 +104,5 @@ public class RateLimiterFilter implements GlobalFilter, Ordered {
             case "create" -> config.getCreateLimit();
             default -> config.getDefaultLimit();
         };
-    }
-
-    @Override
-    public int getOrder() {
-        return 90;
     }
 }

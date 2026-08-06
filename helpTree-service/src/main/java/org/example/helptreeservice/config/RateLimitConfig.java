@@ -1,4 +1,4 @@
-package com.example.gatewayservice.config;
+package org.example.helptreeservice.config;
 
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -8,7 +8,7 @@ import org.springframework.stereotype.Component;
 @Component
 @ConfigurationProperties(prefix = "app.rate-limit")
 public class RateLimitConfig {
-    
+
     private boolean enabled = false;
     private int defaultLimit = 1000;
     private int authLimit = 100;

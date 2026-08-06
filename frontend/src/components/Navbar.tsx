@@ -1,16 +1,18 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { chatApi } from '../api/chatApi';
 import { authApi } from '../api/authApi';
 import { walletApi } from '../api/walletApi';
+import { useWebSocketChat } from '../hooks/useWebSocketChat';
 import { theme } from '../theme';
 import { Map, GitBranch, Trophy, ClipboardList, User, Star, Package, MessageCircle, AlertTriangle, Ban, Plus, Coins } from 'lucide-react';
+import type { Chat } from '../types';
 
 export const Navbar: React.FC = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const [unreadChats, setUnreadChats] = useState(0);
+  const [chats, setChats] = useState<Chat[]>([]);
   const [debtWarning, setDebtWarning] = useState<number | null>(null);
   const [isBlocked, setIsBlocked] = useState(false);
   const [daysUntilBlock, setDaysUntilBlock] = useState<number | null>(null);
@@ -18,6 +20,29 @@ export const Navbar: React.FC = () => {
   const [helpCoins, setHelpCoins] = useState<number>(0);
   const [isVip, setIsVip] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const handleChatUpdated = useCallback((updatedChat: Chat) => {
+    setChats((prev) => {
+      const existing = prev.find((c) => c.id === updatedChat.id);
+      if (existing) {
+        return prev.map((c) => (c.id === updatedChat.id ? updatedChat : c));
+      }
+      return [updatedChat, ...prev];
+    });
+  }, []);
+
+  const handleChatDeleted = useCallback((chatId: number) => {
+    setChats((prev) => prev.filter((c) => c.id !== chatId));
+  }, []);
+
+  useWebSocketChat({
+    userId: user?.id ?? null,
+    onNewMessage: () => {},
+    onMessageDeleted: () => {},
+    onMessagesRead: () => {},
+    onChatDeleted: handleChatDeleted,
+    onChatUpdated: handleChatUpdated,
+  });
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -31,82 +56,69 @@ export const Navbar: React.FC = () => {
 
   useEffect(() => {
     if (user) {
-      const loadUnread = () => {
-        chatApi.getChats()
-          .then(chats => {
-            const total = chats.reduce((sum, chat) => sum + chat.unreadCount, 0);
-            setUnreadChats(total);
-          })
-          .catch(console.error);
-      };
-      
-      loadUnread();
-      
-      const interval = setInterval(() => {
-        loadUnread();
-      }, 30000);
-      
-      const handleVisibility = () => {
-        if (!document.hidden) {
-          loadUnread();
-        }
-      };
-      
-      const handleChatsUpdated = () => {
-        loadUnread();
-      };
-      
-      document.addEventListener('visibilitychange', handleVisibility);
-      document.addEventListener('chatsUpdated', handleChatsUpdated);
-
-      authApi.getCurrentUser()
-        .then(userData => {
-          if (userData.blockedUntil) {
-            setIsBlocked(true);
-            setDebtWarning(null);
-            const hoursLeft = (new Date(userData.blockedUntil).getTime() - Date.now()) / (1000 * 60 * 60);
-            setDaysUntilBlock(Math.max(0, hoursLeft));
-          } else if ('blockedAt' in userData && userData.blockedAt) {
-            setIsBlocked(true);
-            setDebtWarning(null);
-            const hoursBlocked = (Date.now() - new Date(userData.blockedAt).getTime()) / (1000 * 60 * 60);
-            const totalHoursLeft = Math.max(0, 7 * 24 - hoursBlocked);
-            setDaysUntilBlock(totalHoursLeft);
-          } else if ('debtCount' in userData && userData.debtCount !== undefined && userData.debtCount > 2) {
-            setIsBlocked(false);
-            setDebtWarning(userData.debtCount);
-            setDaysUntilBlock(null);
-          } else {
-            setIsBlocked(false);
-            setDebtWarning(null);
-            setDaysUntilBlock(null);
-          }
-          
-          if (userData.helpCoins !== undefined) {
-            setHelpCoins(userData.helpCoins);
-          }
-          
-          if (userData.vipUntil && new Date(userData.vipUntil) > new Date()) {
-            setIsVip(true);
-          } else {
-            setIsVip(false);
-          }
-        })
-        .catch(console.error);
-      
-      walletApi.getWallet(user.id)
-        .then(wallet => {
-          setHelpCoins(wallet.balance);
-        })
-        .catch(console.error);
-      
-      return () => {
-        clearInterval(interval);
-        document.removeEventListener('visibilitychange', handleVisibility);
-        document.removeEventListener('chatsUpdated', handleChatsUpdated);
-      };
+      loadInitialChats();
+      loadUserData();
+      loadWallet();
     }
   }, [user]);
+
+  const loadInitialChats = async () => {
+    try {
+      const data = await chatApi.getChats();
+      setChats(data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const loadUserData = async () => {
+    try {
+      const userData = await authApi.getCurrentUser();
+      if (userData.blockedUntil) {
+        setIsBlocked(true);
+        setDebtWarning(null);
+        const hoursLeft = (new Date(userData.blockedUntil).getTime() - Date.now()) / (1000 * 60 * 60);
+        setDaysUntilBlock(Math.max(0, hoursLeft));
+      } else if ('blockedAt' in userData && userData.blockedAt) {
+        setIsBlocked(true);
+        setDebtWarning(null);
+        const hoursBlocked = (Date.now() - new Date(userData.blockedAt).getTime()) / (1000 * 60 * 60);
+        const totalHoursLeft = Math.max(0, 7 * 24 - hoursBlocked);
+        setDaysUntilBlock(totalHoursLeft);
+      } else if ('debtCount' in userData && userData.debtCount !== undefined && userData.debtCount > 2) {
+        setIsBlocked(false);
+        setDebtWarning(userData.debtCount);
+        setDaysUntilBlock(null);
+      } else {
+        setIsBlocked(false);
+        setDebtWarning(null);
+        setDaysUntilBlock(null);
+      }
+
+      if (userData.helpCoins !== undefined) {
+        setHelpCoins(userData.helpCoins);
+      }
+
+      if (userData.vipUntil && new Date(userData.vipUntil) > new Date()) {
+        setIsVip(true);
+      } else {
+        setIsVip(false);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const loadWallet = async () => {
+    if (user) {
+      try {
+        const wallet = await walletApi.getWallet(user.id);
+        setHelpCoins(wallet.balance);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+  };
 
   const handleLogout = () => {
     logout();
@@ -211,7 +223,7 @@ export const Navbar: React.FC = () => {
                     </Link>
                     <Link to="/chats" style={styles.dropdownItem} onClick={closeDropdown}>
                       <MessageCircle size={16} style={{marginRight: 8}} /> Чаты
-                      {unreadChats > 0 && <span style={styles.dropdownBadge}>{unreadChats}</span>}
+                      {chats.reduce((sum, c) => sum + (c.unreadCount || 0), 0) > 0 && <span style={styles.dropdownBadge}>{chats.reduce((sum, c) => sum + (c.unreadCount || 0), 0)}</span>}
                     </Link>
                     <Link to="/wallet" style={{...styles.dropdownItem, ...styles.walletItem}} onClick={closeDropdown}>
                       <Coins size={16} style={{marginRight: 8, color: '#fbbf24'}} /> 
