@@ -554,19 +554,9 @@ public class UserService {
     public void unblockExpiredBlocks() {
         log.info("Запуск авто-разблокировки пользователей с истёкшим сроком");
         LocalDateTime now = LocalDateTime.now();
-        List<User> usersToUnblock = userRepository.findAll().stream()
-                .filter(u -> !u.getDeleted() && u.getBlockedUntil() != null && u.getBlockedUntil().isBefore(now))
-                .collect(Collectors.toList());
-
-        for (User user : usersToUnblock) {
-            user.setBlockedAt(null);
-            user.setBlockedUntil(null);
-            userRepository.save(user);
-            log.info("Авто-разблокировка пользователя {} (истёк срок)", user.getId());
-        }
-
-        if (!usersToUnblock.isEmpty()) {
-            log.info("Авто-разблокировано {} пользователей", usersToUnblock.size());
+        int unblocked = userRepository.unblockExpiredUsers(now);
+        if (unblocked > 0) {
+            log.info("Авто-разблокировано {} пользователей", unblocked);
         }
     }
 }

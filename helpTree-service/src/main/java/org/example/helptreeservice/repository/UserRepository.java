@@ -36,4 +36,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     @Query("SELECT COUNT(u) FROM User u WHERE u.deleted = false OR u.deleted IS NULL")
     long countActive();
+
+    @Modifying
+    @Query("UPDATE User u SET u.blockedAt = NULL, u.blockedUntil = NULL, u.updatedAt = CURRENT_TIMESTAMP " +
+           "WHERE u.deleted = false AND u.blockedUntil IS NOT NULL AND u.blockedUntil < :now")
+    int unblockExpiredUsers(@Param("now") LocalDateTime now);
 }

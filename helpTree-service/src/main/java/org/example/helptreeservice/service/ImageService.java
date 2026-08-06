@@ -110,6 +110,11 @@ public class ImageService {
         return urls.stream().map(this::refreshUrl).toList();
     }
 
+    public List<String> refreshUrlsBatch(List<String> urls) {
+        if (urls == null || urls.isEmpty()) return urls;
+        return urls.stream().map(this::refreshUrl).toList();
+    }
+
     private void validateFile(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new BadRequestException("Файл не выбран");

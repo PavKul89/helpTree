@@ -418,30 +418,19 @@ public class HelpService {
     public long getNewResponsesCount(Long userId, String sinceParam) {
         log.info("Подсчет новых ответов для userId: {}", userId);
 
-        LocalDateTime lastLogin;
+        LocalDateTime since;
         if (sinceParam != null && !sinceParam.isEmpty()) {
-            lastLogin = LocalDateTime.parse(sinceParam);
+            since = LocalDateTime.parse(sinceParam);
         } else {
             User user = userRepository.findById(userId)
                     .orElseThrow(() -> new NotFoundException("Пользователь не найден с id: " + userId));
-            lastLogin = user.getLastLogin();
-            if (lastLogin == null) {
-                lastLogin = LocalDateTime.of(1970, 1, 1, 0, 0);
+            since = user.getLastLogin();
+            if (since == null) {
+                since = LocalDateTime.of(1970, 1, 1, 0, 0);
             }
         }
 
-        List<Post> userPosts = postRepository.findByUserId(userId);
-
-        long count = 0;
-        for (Post post : userPosts) {
-            List<Help> helps = helpRepository.findByPostWithHelper(post);
-            for (Help help : helps) {
-                if (help.getCreatedAt() != null && help.getCreatedAt().isAfter(lastLogin)) {
-                    count++;
-                }
-            }
-        }
-
+        long count = helpRepository.countNewResponsesSince(userId, since);
         log.info("Найдено {} новых ответов для userId: {}", count, userId);
         return count;
     }
@@ -450,26 +439,19 @@ public class HelpService {
     public List<org.example.helptreeservice.dto.helps.NewResponseDto> getNewResponses(Long userId, String sinceParam) {
         log.info("Получение ответов для userId: {}", userId);
 
-        List<Post> userPosts = postRepository.findByUserId(userId);
+        List<Object[]> rows = helpRepository.findNewResponsesData(userId);
         List<org.example.helptreeservice.dto.helps.NewResponseDto> responses = new ArrayList<>();
 
-        for (Post post : userPosts) {
-            List<Help> helps = helpRepository.findByPostWithHelper(post);
-            for (Help help : helps) {
-                org.example.helptreeservice.dto.helps.NewResponseDto dto = new org.example.helptreeservice.dto.helps.NewResponseDto();
-                dto.setHelpId(help.getId());
-                dto.setPostId(post.getId());
-                dto.setPostTitle(post.getTitle());
-                String helperName = "Неизвестно";
-                if (help.getHelper() != null) {
-                    helperName = help.getHelper().getName();
-                }
-                dto.setHelperName(helperName);
-                if (help.getCreatedAt() != null) {
-                    dto.setCreatedAt(help.getCreatedAt().toString());
-                }
-                responses.add(dto);
+        for (Object[] row : rows) {
+            org.example.helptreeservice.dto.helps.NewResponseDto dto = new org.example.helptreeservice.dto.helps.NewResponseDto();
+            dto.setHelpId(((Number) row[0]).longValue());
+            dto.setPostId(((Number) row[1]).longValue());
+            dto.setPostTitle((String) row[2]);
+            dto.setHelperName(row[3] != null ? row[3].toString() : "Неизвестно");
+            if (row[4] != null) {
+                dto.setCreatedAt(row[4].toString());
             }
+            responses.add(dto);
         }
 
         log.info("Найдено {} ответов для userId: {}", responses.size(), userId);
@@ -502,18 +484,18 @@ public class HelpService {
     public org.example.helptreeservice.dto.graph.HelpGraphDto getHelpGraph(Long userId) {
         log.info("Построение графа помощи для userId: {}", userId);
         
-        List<Help> confirmedHelps = helpRepository.findByStatusAndDeletedFalse(org.example.helptreeservice.enums.HelpStatus.CONFIRMED);
+        List<Object[]> graphData = helpRepository.findConfirmedHelpGraphData();
         
         if (userId == null) {
-            return buildFullGraph(confirmedHelps);
+            return buildFullGraphFromSql(graphData);
         }
         
         // Строим карту: кто помог → список кому помогли
         Map<Long, List<Long>> helperToReceivers = new HashMap<>();
         
-        for (Help help : confirmedHelps) {
-            Long helperId = help.getHelper().getId();
-            Long receiverId = help.getReceiver().getId();
+        for (Object[] row : graphData) {
+            Long helperId = ((Number) row[0]).longValue();
+            Long receiverId = ((Number) row[2]).longValue();
             helperToReceivers.computeIfAbsent(helperId, k -> new ArrayList<>()).add(receiverId);
         }
         
@@ -527,7 +509,6 @@ public class HelpService {
         while (!toProcess.isEmpty()) {
             Long currentId = toProcess.remove(0);
             
-            // Кому currentId помог (он был helper) - это его дети в цепочке
             List<Long> iHelped = helperToReceivers.get(currentId);
             if (iHelped != null) {
                 for (Long helpedId : iHelped) {
@@ -539,9 +520,6 @@ public class HelpService {
             }
         }
         
-        // Создаем узлы
-        Map<Long, org.example.helptreeservice.dto.graph.HelpGraphDto.Node> nodesMap = new HashMap<>();
-        
         // Загружаем всех пользователей одним запросом
         List<User> allUsers = userRepository.findAllById(visitedUserIds);
         Map<Long, User> usersMap = new HashMap<>();
@@ -549,7 +527,9 @@ public class HelpService {
             usersMap.put(user.getId(), user);
         }
         
-        // Добавляем текущего пользователя первым (корень)
+        // Создаем узлы
+        Map<Long, org.example.helptreeservice.dto.graph.HelpGraphDto.Node> nodesMap = new HashMap<>();
+        
         User currentUser = usersMap.get(userId);
         if (currentUser != null) {
             nodesMap.put(userId, org.example.helptreeservice.dto.graph.HelpGraphDto.Node.builder()
@@ -562,7 +542,6 @@ public class HelpService {
                     .build());
         }
         
-        // Добавляем остальных
         for (Long id : visitedUserIds) {
             if (id.equals(userId)) continue;
             User user = usersMap.get(id);
@@ -578,22 +557,28 @@ public class HelpService {
             }
         }
         
-        // Создаем рёбра (только от userId и далее по цепочке)
+        // Создаем рёбра
         List<org.example.helptreeservice.dto.graph.HelpGraphDto.Edge> edges = new ArrayList<>();
-        for (Help help : confirmedHelps) {
-            Long fromId = help.getHelper().getId();
-            Long toId = help.getReceiver().getId();
+        for (Object[] row : graphData) {
+            Long fromId = ((Number) row[0]).longValue();
+            String fromName = row[1] != null ? row[1].toString() : "";
+            Long toId = ((Number) row[2]).longValue();
+            String toName = row[3] != null ? row[3].toString() : "";
+            Long postId = ((Number) row[4]).longValue();
+            String postTitle = row[5] != null ? row[5].toString() : "";
+            String status = row[6] != null ? row[6].toString() : "";
+            LocalDateTime confirmedAt = row[7] instanceof LocalDateTime ? (LocalDateTime) row[7] : null;
             
             if (visitedUserIds.contains(fromId) && visitedUserIds.contains(toId)) {
                 edges.add(org.example.helptreeservice.dto.graph.HelpGraphDto.Edge.builder()
-                        .id(help.getId())
+                        .id(((Number) row[0]).longValue())
                         .fromUserId(fromId)
-                        .fromUserName(help.getHelper().getName())
+                        .fromUserName(fromName)
                         .toUserId(toId)
-                        .toUserName(help.getReceiver().getName())
-                        .postTitle(help.getPost().getTitle())
-                        .status(help.getStatus().name())
-                        .confirmedAt(help.getConfirmedAt())
+                        .toUserName(toName)
+                        .postTitle(postTitle)
+                        .status(status)
+                        .confirmedAt(confirmedAt)
                         .build());
             }
         }
@@ -607,9 +592,7 @@ public class HelpService {
     }
 
     public org.example.helptreeservice.dto.graph.HelpStatsDto getHelpStats() {
-        List<Help> allHelps = helpRepository.findAllWithDetails();
-        
-        // По месяцам
+        // SQL агрегация по месяцам
         Map<String, Long> byMonth = new LinkedHashMap<>();
         Calendar cal = Calendar.getInstance();
         cal.add(Calendar.MONTH, -11);
@@ -619,58 +602,58 @@ public class HelpService {
             cal.add(Calendar.MONTH, 1);
         }
         
-        for (Help help : allHelps) {
-            if (help.getConfirmedAt() != null) {
-                String monthKey = String.format("%02d/%d", 
-                    help.getConfirmedAt().getMonthValue(), 
-                    help.getConfirmedAt().getYear());
-                if (byMonth.containsKey(monthKey)) {
-                    byMonth.put(monthKey, byMonth.get(monthKey) + 1);
-                }
+        List<Object[]> monthData = helpRepository.countConfirmedByMonth();
+        for (Object[] row : monthData) {
+            String monthKey = (String) row[0];
+            Long count = ((Number) row[1]).longValue();
+            if (byMonth.containsKey(monthKey)) {
+                byMonth.put(monthKey, count);
             }
         }
         
-        // По категориям
+        // SQL агрегация по категориям
         Map<String, Long> byCategory = new HashMap<>();
-        for (Help help : allHelps) {
-            if (help.getPost() != null && help.getPost().getCategory() != null) {
-                String category = help.getPost().getCategory();
-                byCategory.put(category, byCategory.getOrDefault(category, 0L) + 1);
+        List<Object[]> categoryData = helpRepository.countConfirmedByCategory();
+        for (Object[] row : categoryData) {
+            String category = (String) row[0];
+            Long count = ((Number) row[1]).longValue();
+            if (category != null) {
+                byCategory.put(category, count);
             }
         }
         
-        // Топ помогающих
+        // SQL агрегация топ помогающих
+        List<Object[]> helperData = helpRepository.countHelpsByHelper();
+        List<Long> topHelperIds = new ArrayList<>();
         Map<Long, Long> helpCountByUser = new HashMap<>();
-        for (Help help : allHelps) {
-            Long helperId = help.getHelper().getId();
-            helpCountByUser.put(helperId, helpCountByUser.getOrDefault(helperId, 0L) + 1);
+        for (Object[] row : helperData) {
+            Long helperId = ((Number) row[0]).longValue();
+            Long count = ((Number) row[1]).longValue();
+            topHelperIds.add(helperId);
+            helpCountByUser.put(helperId, count);
         }
-        
-        List<Long> topHelpers = helpCountByUser.entrySet().stream()
-            .sorted(Map.Entry.<Long, Long>comparingByValue().reversed())
-            .limit(10)
-            .map(Map.Entry::getKey)
-            .collect(Collectors.toList());
+        topHelperIds = topHelperIds.stream().limit(10).collect(Collectors.toList());
         
         Map<Long, String> userNames = new HashMap<>();
-        if (!topHelpers.isEmpty()) {
-            List<User> topUsers = userRepository.findAllById(topHelpers);
+        if (!topHelperIds.isEmpty()) {
+            List<User> topUsers = userRepository.findAllById(topHelperIds);
             for (User user : topUsers) {
                 userNames.put(user.getId(), user.getName());
             }
         }
         
-        final Map<Long, Long> finalHelpCountByUser = helpCountByUser;
-        List<org.example.helptreeservice.dto.graph.HelpStatsDto.TopHelper> topHelpersList = topHelpers.stream()
+        List<org.example.helptreeservice.dto.graph.HelpStatsDto.TopHelper> topHelpersList = topHelperIds.stream()
             .map(id -> org.example.helptreeservice.dto.graph.HelpStatsDto.TopHelper.builder()
                 .userId(id)
                 .name(userNames.get(id))
-                .helpCount(finalHelpCountByUser.get(id))
+                .helpCount(helpCountByUser.get(id))
                 .build())
             .collect(Collectors.toList());
         
+        long totalHelps = helpRepository.countActive();
+        
         return org.example.helptreeservice.dto.graph.HelpStatsDto.builder()
-                .totalHelps(allHelps.size())
+                .totalHelps((int) totalHelps)
                 .byMonth(byMonth)
                 .byCategory(byCategory)
                 .topHelpers(topHelpersList)
@@ -678,55 +661,72 @@ public class HelpService {
     }
     
     /**
-     * Построить полный граф всех пользователей (без фильтрации)
+     * Построить полный граф всех пользователей (без фильтрации) из SQL данных
      */
-    private org.example.helptreeservice.dto.graph.HelpGraphDto buildFullGraph(List<Help> confirmedHelps) {
+    private org.example.helptreeservice.dto.graph.HelpGraphDto buildFullGraphFromSql(List<Object[]> graphData) {
         Map<Long, org.example.helptreeservice.dto.graph.HelpGraphDto.Node> nodesMap = new HashMap<>();
         
-        for (Help help : confirmedHelps) {
-            Long helperId = help.getHelper().getId();
+        for (Object[] row : graphData) {
+            Long helperId = ((Number) row[0]).longValue();
+            String helperName = row[1] != null ? row[1].toString() : "";
+            Long receiverId = ((Number) row[2]).longValue();
+            String receiverName = row[3] != null ? row[3].toString() : "";
+            
             if (!nodesMap.containsKey(helperId)) {
-                nodesMap.put(helperId, org.example.helptreeservice.dto.graph.HelpGraphDto.Node.builder()
-                        .id(helperId)
-                        .name(help.getHelper().getName())
-                        .avatarUrl(imageService.refreshUrl(help.getHelper().getAvatarUrl()))
-                        .helpedCount(help.getHelper().getHelpedCount())
-                        .debtCount(help.getHelper().getDebtCount())
-                        .rating(help.getHelper().getRating())
-                        .build());
+                User helper = userRepository.findById(helperId).orElse(null);
+                if (helper != null) {
+                    nodesMap.put(helperId, org.example.helptreeservice.dto.graph.HelpGraphDto.Node.builder()
+                            .id(helperId)
+                            .name(helper.getName())
+                            .avatarUrl(imageService.refreshUrl(helper.getAvatarUrl()))
+                            .helpedCount(helper.getHelpedCount())
+                            .debtCount(helper.getDebtCount())
+                            .rating(helper.getRating())
+                            .build());
+                }
             }
             
-            Long receiverId = help.getReceiver().getId();
             if (!nodesMap.containsKey(receiverId)) {
-                nodesMap.put(receiverId, org.example.helptreeservice.dto.graph.HelpGraphDto.Node.builder()
-                        .id(receiverId)
-                        .name(help.getReceiver().getName())
-                        .avatarUrl(imageService.refreshUrl(help.getReceiver().getAvatarUrl()))
-                        .helpedCount(help.getReceiver().getHelpedCount())
-                        .debtCount(help.getReceiver().getDebtCount())
-                        .rating(help.getReceiver().getRating())
-                        .build());
+                User receiver = userRepository.findById(receiverId).orElse(null);
+                if (receiver != null) {
+                    nodesMap.put(receiverId, org.example.helptreeservice.dto.graph.HelpGraphDto.Node.builder()
+                            .id(receiverId)
+                            .name(receiver.getName())
+                            .avatarUrl(imageService.refreshUrl(receiver.getAvatarUrl()))
+                            .helpedCount(receiver.getHelpedCount())
+                            .debtCount(receiver.getDebtCount())
+                            .rating(receiver.getRating())
+                            .build());
+                }
             }
         }
         
         List<org.example.helptreeservice.dto.graph.HelpGraphDto.Edge> edges = new ArrayList<>();
-        for (Help help : confirmedHelps) {
+        for (Object[] row : graphData) {
+            Long fromId = ((Number) row[0]).longValue();
+            String fromName = row[1] != null ? row[1].toString() : "";
+            Long toId = ((Number) row[2]).longValue();
+            String toName = row[3] != null ? row[3].toString() : "";
+            String postTitle = row[5] != null ? row[5].toString() : "";
+            String status = row[6] != null ? row[6].toString() : "";
+            LocalDateTime confirmedAt = row[7] instanceof LocalDateTime ? (LocalDateTime) row[7] : null;
+            
             edges.add(org.example.helptreeservice.dto.graph.HelpGraphDto.Edge.builder()
-                    .id(help.getId())
-                    .fromUserId(help.getHelper().getId())
-                    .fromUserName(help.getHelper().getName())
-                    .toUserId(help.getReceiver().getId())
-                    .toUserName(help.getReceiver().getName())
-                    .postTitle(help.getPost().getTitle())
-                    .status(help.getStatus().name())
-                    .confirmedAt(help.getConfirmedAt())
+                    .id(fromId)
+                    .fromUserId(fromId)
+                    .fromUserName(fromName)
+                    .toUserId(toId)
+                    .toUserName(toName)
+                    .postTitle(postTitle)
+                    .status(status)
+                    .confirmedAt(confirmedAt)
                     .build());
         }
         
         return org.example.helptreeservice.dto.graph.HelpGraphDto.builder()
                 .nodes(new ArrayList<>(nodesMap.values()))
                 .edges(edges)
-                .totalHelps(confirmedHelps.size())
+                .totalHelps(graphData.size())
                 .totalUsers(nodesMap.size())
                 .build();
     }
