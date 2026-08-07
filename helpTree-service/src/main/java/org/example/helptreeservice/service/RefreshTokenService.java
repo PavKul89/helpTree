@@ -2,6 +2,7 @@ package org.example.helptreeservice.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.example.helptreeservice.config.EconomyConfig;
 import org.example.helptreeservice.entity.RefreshToken;
 import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.repository.RefreshTokenRepository;
@@ -18,8 +19,7 @@ import java.util.UUID;
 public class RefreshTokenService {
 
     private final RefreshTokenRepository refreshTokenRepository;
-    
-    private int refreshTokenDays = 7;
+    private final EconomyConfig economyConfig;
 
     @Transactional
     public String createRefreshToken(User user) {
@@ -28,7 +28,7 @@ public class RefreshTokenService {
         RefreshToken refreshToken = RefreshToken.builder()
                 .token(token)
                 .user(user)
-                .expiresAt(LocalDateTime.now().plusDays(refreshTokenDays))
+                .expiresAt(LocalDateTime.now().plusDays(economyConfig.getRefreshTokenDays()))
                 .revoked(false)
                 .build();
         
@@ -62,13 +62,5 @@ public class RefreshTokenService {
     public void cleanupExpiredTokens() {
         refreshTokenRepository.deleteExpiredTokens(LocalDateTime.now());
         log.debug("Удалены просроченные refresh токены");
-    }
-
-    public void setRefreshTokenDays(int days) {
-        this.refreshTokenDays = days;
-    }
-
-    public int getRefreshTokenDays() {
-        return refreshTokenDays;
     }
 }

@@ -41,4 +41,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query("UPDATE User u SET u.blockedAt = NULL, u.blockedUntil = NULL, u.updatedAt = CURRENT_TIMESTAMP " +
            "WHERE u.deleted = false AND u.blockedUntil IS NOT NULL AND u.blockedUntil < :now")
     int unblockExpiredUsers(@Param("now") LocalDateTime now);
+
+    @Modifying
+    @Query("UPDATE User u SET u.helpCoins = u.helpCoins - :amount, u.updatedAt = CURRENT_TIMESTAMP " +
+           "WHERE u.id = :userId AND u.helpCoins >= :amount")
+    int deductHelpCoins(@Param("userId") Long userId, @Param("amount") long amount);
 }

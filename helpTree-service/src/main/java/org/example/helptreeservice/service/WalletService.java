@@ -170,16 +170,13 @@ public class WalletService {
             throw new BadRequestException("Сумма должна быть положительной");
         }
         
-        User user = getUserOrThrow(userId);
-        Long currentCoins = user.getHelpCoins();
-        if (currentCoins == null) {
-            currentCoins = 0L;
-        }
-        if (currentCoins < amount) {
-            throw new BadRequestException("Недостаточно монет. Доступно: " + currentCoins);
+        int updated = userRepository.deductHelpCoins(userId, amount);
+        if (updated == 0) {
+            User user = getUserOrThrow(userId);
+            throw new BadRequestException("Недостаточно монет. Доступно: " + (user.getHelpCoins() != null ? user.getHelpCoins() : 0L));
         }
         
-        user.setHelpCoins(currentCoins - amount);
+        User user = getUserOrThrow(userId);
         
         if (type == TransactionType.ACCOUNT_UNBLOCK) {
             userService.unblockUser(userId);
@@ -194,9 +191,8 @@ public class WalletService {
                 user.setVipUntil(now.plusDays(30));
             }
             log.info("VIP статус активирован до {} для пользователя {}", user.getVipUntil(), userId);
+            userRepository.save(user);
         }
-        
-        userRepository.save(user);
         
         CoinTransaction transaction = CoinTransaction.builder()
                 .userId(userId)
@@ -206,7 +202,7 @@ public class WalletService {
                 .build();
         transactionRepository.save(transaction);
         
-        log.info("Списано {} монет у пользователя {}. Новый баланс: {}", amount, userId, user.getHelpCoins());
+        log.info("Списано {} монет у пользователя {}", amount, userId);
     }
     
     public void changeNicknameColor(Long userId, String color) {

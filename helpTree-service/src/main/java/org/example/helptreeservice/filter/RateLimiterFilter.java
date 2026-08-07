@@ -48,11 +48,13 @@ public class RateLimiterFilter extends OncePerRequestFilter {
         }
 
         String method = request.getMethod();
+        String ip = request.getRemoteAddr();
         String bucketType = getBucketType(path, method);
+        String rateLimitKey = ip + ":" + bucketType;
         int limit = getLimit(bucketType);
 
-        RateLimiter rateLimiter = limiters.computeIfAbsent(bucketType, k ->
-                createRateLimiter(bucketType, limit)
+        RateLimiter rateLimiter = limiters.computeIfAbsent(rateLimitKey, k ->
+                createRateLimiter(rateLimitKey, limit)
         );
 
         if (rateLimiter.acquirePermission()) {
@@ -60,7 +62,7 @@ public class RateLimiterFilter extends OncePerRequestFilter {
             return;
         }
 
-        log.warn("Превышен лимит запросов: path={}, type={}, limit={}", path, bucketType, limit);
+        log.warn("Превышен лимит запросов: ip={}, path={}, type={}, limit={}", ip, path, bucketType, limit);
 
         response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);

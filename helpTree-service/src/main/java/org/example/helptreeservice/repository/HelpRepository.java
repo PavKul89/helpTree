@@ -6,6 +6,7 @@ import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.enums.HelpStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -26,10 +27,12 @@ public interface HelpRepository extends JpaRepository<Help, Long> {
     @Query("SELECT h FROM Help h JOIN FETCH h.post JOIN FETCH h.helper JOIN FETCH h.receiver WHERE h.post.id = :postId AND (h.deleted = false OR h.deleted IS NULL)")
     List<Help> findByPostId(@Param("postId") Long postId);
 
-    @Query("SELECT h FROM Help h JOIN FETCH h.helper JOIN FETCH h.receiver WHERE h.helper = :helper AND (h.deleted = false OR h.deleted IS NULL)")
+    @EntityGraph(attributePaths = {"helper", "receiver"})
+    @Query("SELECT h FROM Help h WHERE h.helper = :helper AND (h.deleted = false OR h.deleted IS NULL)")
     Page<Help> findByHelperWithDetails(@Param("helper") User helper, Pageable pageable);
 
-    @Query("SELECT h FROM Help h JOIN FETCH h.helper JOIN FETCH h.receiver WHERE h.receiver = :receiver AND (h.deleted = false OR h.deleted IS NULL)")
+    @EntityGraph(attributePaths = {"helper", "receiver"})
+    @Query("SELECT h FROM Help h WHERE h.receiver = :receiver AND (h.deleted = false OR h.deleted IS NULL)")
     Page<Help> findByReceiverWithDetails(@Param("receiver") User receiver, Pageable pageable);
 
     Optional<Help> findByPostAndStatusNot(Post post, HelpStatus status);

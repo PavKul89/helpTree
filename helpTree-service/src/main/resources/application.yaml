@@ -92,11 +92,13 @@ logging:
 
 
 app:
-  jwtSecret: ${JWT_SECRET:mySecretKeyForJWTGenerationWithAtLeast64CharactersLong12345678901234567890123456789012}
+  jwtSecret: ${JWT_SECRET}
   jwtExpirationMs: 86400000
+  cors:
+    allowed-origins: ${CORS_ORIGINS:http://localhost:3000,http://localhost:3001,http://localhost:5173}
   admin:
-    email: ${ADMIN_EMAIL:Admin@test.com}
-    password: ${ADMIN_PASSWORD:123456}
+    email: ${ADMIN_EMAIL}
+    password: ${ADMIN_PASSWORD}
   economy:
     coins-per-help: 10
     coins-per-help-received: 2
@@ -110,7 +112,7 @@ app:
     debt-warning-threshold: 3
     debt-create-post-threshold: 2
   rate-limit:
-    enabled: false
+    enabled: true
     default-limit: 1000
     auth-limit: 100
     create-limit: 50

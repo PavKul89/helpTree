@@ -6,6 +6,7 @@ import org.example.helptreeservice.dto.RatingResponse;
 import org.example.helptreeservice.entity.RatingHistory;
 import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.entity.UserRatingStats;
+import org.example.helptreeservice.exception.NotFoundException;
 import org.example.helptreeservice.repository.RatingHistoryRepository;
 import org.example.helptreeservice.repository.UserRatingStatsRepository;
 import org.example.helptreeservice.repository.UserRepository;
@@ -36,7 +37,7 @@ public class RatingService {
         log.info("Получение рейтинга для пользователя ID: {}", userId);
 
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
+                .orElseThrow(() -> new NotFoundException("Пользователь не найден"));
         
         UserRatingStats stats = statsRepository.findByUserId(userId)
                 .orElseGet(() -> {
@@ -63,9 +64,9 @@ public class RatingService {
         Double newRating = calculationService.calculateUserRating(userId);
 
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
+                .orElseThrow(() -> new NotFoundException("Пользователь не найден"));
         UserRatingStats stats = statsRepository.findByUserId(userId)
-                .orElseThrow(() -> new RuntimeException("Статистика не найдена"));
+                .orElseThrow(() -> new NotFoundException("Статистика не найдена"));
 
         return buildRatingResponse(user, stats);
     }

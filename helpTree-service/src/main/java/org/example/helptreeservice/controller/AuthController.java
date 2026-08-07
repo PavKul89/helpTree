@@ -11,6 +11,7 @@ import org.example.helptreeservice.dto.users.CreateUserRequest;
 import org.example.helptreeservice.dto.users.UserDto;
 import org.example.helptreeservice.entity.RefreshToken;
 import org.example.helptreeservice.entity.User;
+import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.UnauthorizedException;
 import org.example.helptreeservice.service.JwtService;
 import org.example.helptreeservice.service.PasswordService;
@@ -19,6 +20,9 @@ import org.example.helptreeservice.service.UserService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.time.Instant;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @RestController
@@ -30,6 +34,19 @@ public class AuthController {
     private final JwtService jwtService;
     private final PasswordService passwordService;
     private final RefreshTokenService refreshTokenService;
+
+    private static final int MAX_FAILED_ATTEMPTS = 5;
+    private static final long LOCKOUT_DURATION_MS = 15 * 60 * 1000L;
+    private final ConcurrentHashMap<String, FailedLoginTracker> failedAttempts = new ConcurrentHashMap<>();
+
+    private static class FailedLoginTracker {
+        int count;
+        Instant lockedUntil;
+
+        boolean isLocked() {
+            return lockedUntil != null && Instant.now().isBefore(lockedUntil);
+        }
+    }
 
     @PostMapping("/register")
     public ResponseEntity<AuthResponse> register(@Valid @RequestBody CreateUserRequest request) {
@@ -53,15 +70,32 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
+        FailedLoginTracker tracker = failedAttempts.computeIfAbsent(request.getEmail(), k -> new FailedLoginTracker());
+
+        if (tracker.isLocked()) {
+            long secondsLeft = java.time.Duration.between(Instant.now(), tracker.lockedUntil).getSeconds();
+            log.warn("Попытка входа с заблокированного аккаунта: email={}, осталось {}с", request.getEmail(), secondsLeft);
+            throw new BadRequestException("Аккаунт временно заблокирован. Попробуйте через " + secondsLeft + " секунд.");
+        }
+
         User user = userService.getUserEntityByEmail(request.getEmail());
         
         if (!passwordService.matches(request.getPassword(), user.getPassword())) {
+            tracker.count++;
+            if (tracker.count >= MAX_FAILED_ATTEMPTS) {
+                tracker.lockedUntil = Instant.now().plusMillis(LOCKOUT_DURATION_MS);
+                log.warn("Аккаунт заблокирован после {} неудачных попыток: email={}", tracker.count, request.getEmail());
+                throw new BadRequestException("Аккаунт заблокирован после " + MAX_FAILED_ATTEMPTS + " неудачных попыток. Попробуйте через 15 минут.");
+            }
+            log.warn("Неудачная попытка входа: email={}, попытка {}/{}", request.getEmail(), tracker.count, MAX_FAILED_ATTEMPTS);
             throw new UnauthorizedException("Неверный email или пароль");
         }
 
         if (user.getDeleted()) {
             throw new UnauthorizedException("Аккаунт удалён");
         }
+
+        failedAttempts.remove(request.getEmail());
 
         LocalDateTime previousLastLogin = user.getLastLogin();
         userService.updateLastLogin(user.getId());

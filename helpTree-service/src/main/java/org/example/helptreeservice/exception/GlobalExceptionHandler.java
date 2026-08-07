@@ -156,17 +156,12 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ErrorResponse> handleHttpMessageNotReadable(HttpMessageNotReadableException ex, HttpServletRequest request) {
-        String message = "Malformed JSON request";
-        String causeMessage = ex.getMostSpecificCause().getMessage();
-        if (causeMessage != null && !causeMessage.isEmpty()) {
-            message = causeMessage;
-        }
-        log.warn("Malformed request for {}: {}", request.getRequestURI(), message);
+        log.warn("Malformed request for {}: {}", request.getRequestURI(), ex.getMostSpecificCause().getMessage());
 
         ErrorResponse response = ErrorResponse.builder()
                 .status(HttpStatus.BAD_REQUEST.value())
                 .error(ErrorType.BAD_REQUEST.getTitle())
-                .message(message)
+                .message("Неверный формат запроса")
                 .path(request.getRequestURI())
                 .build();
 
@@ -205,14 +200,12 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ErrorResponse> handleDataIntegrityViolation(DataIntegrityViolationException ex, HttpServletRequest request) {
-        String causeMessage = ex.getMostSpecificCause().getMessage();
-        String message = (causeMessage != null && !causeMessage.isEmpty()) ? causeMessage : ex.getMessage();
-        log.error("Data integrity violation for {}: {}", request.getRequestURI(), message);
+        log.error("Data integrity violation for {}: {}", request.getRequestURI(), ex.getMostSpecificCause().getMessage());
 
         ErrorResponse response = ErrorResponse.builder()
                 .status(HttpStatus.CONFLICT.value())
                 .error(ErrorType.CONFLICT.getTitle())
-                .message("Database error: " + message)
+                .message("Нарушение целостности данных. Возможно, запись уже существует.")
                 .path(request.getRequestURI())
                 .build();
 

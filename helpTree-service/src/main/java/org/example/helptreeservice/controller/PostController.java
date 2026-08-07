@@ -113,6 +113,9 @@ public class PostController {
 
     @PostMapping("/by-ids")
     public ResponseEntity<List<PostDto>> getPostsByIds(@RequestBody List<Long> ids) {
+        if (ids.size() > 100) {
+            throw new BadRequestException("Максимальный размер пакетного запроса — 100 ID");
+        }
         return ResponseEntity.ok(postService.getPostsByIds(ids));
     }
 

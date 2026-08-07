@@ -38,7 +38,7 @@ public class HelpController {
         if (userService.isUserBlocked(currentUser.getUserId())) {
             throw new ForbiddenException("Ваш аккаунт заблокирован за долг. Помогите другим пользователям, чтобы разблокировать аккаунт.");
         }
-        HelpResponse response = helpService.acceptHelp(request);
+        HelpResponse response = helpService.acceptHelp(request, currentUser.getUserId());
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
@@ -122,15 +122,10 @@ public class HelpController {
 
     @GetMapping("/new-responses")
     public ResponseEntity<List<org.example.helptreeservice.dto.helps.NewResponseDto>> getNewResponses(@RequestParam(required = false) String since) {
-        try {
-            var currentUser = authService.getCurrentUser();
-            if (currentUser == null) {
-                throw new ForbiddenException("Необходимо войти в систему");
-            }
-            return ResponseEntity.ok(helpService.getNewResponses(currentUser.getUserId(), since));
-        } catch (Exception e) {
-            log.error("Error getting new responses: {}", e.getMessage(), e);
-            return ResponseEntity.ok(List.of());
+        var currentUser = authService.getCurrentUser();
+        if (currentUser == null) {
+            throw new ForbiddenException("Необходимо войти в систему");
         }
+        return ResponseEntity.ok(helpService.getNewResponses(currentUser.getUserId(), since));
     }
 }

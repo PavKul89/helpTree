@@ -37,98 +37,91 @@ public class AchievementService {
 
         int helpedCount = user.getHelpedCount();
 
-        // По количеству помощи
-        if (helpedCount >= 1 && !hasAchievement(user, AchievementType.FIRST_HELP)) {
+        Set<AchievementType> existingTypes = achievementRepository.findAchievementTypesByUserId(user.getId());
+
+        if (helpedCount >= 1 && !existingTypes.contains(AchievementType.FIRST_HELP)) {
             newAchievements.add(AchievementType.FIRST_HELP);
         }
-        if (helpedCount >= 5 && !hasAchievement(user, AchievementType.HELPER_5)) {
+        if (helpedCount >= 5 && !existingTypes.contains(AchievementType.HELPER_5)) {
             newAchievements.add(AchievementType.HELPER_5);
         }
-        if (helpedCount >= 10 && !hasAchievement(user, AchievementType.HELPER_10)) {
+        if (helpedCount >= 10 && !existingTypes.contains(AchievementType.HELPER_10)) {
             newAchievements.add(AchievementType.HELPER_10);
         }
-        if (helpedCount >= 25 && !hasAchievement(user, AchievementType.HELPER_25)) {
+        if (helpedCount >= 25 && !existingTypes.contains(AchievementType.HELPER_25)) {
             newAchievements.add(AchievementType.HELPER_25);
         }
-        if (helpedCount >= 50 && !hasAchievement(user, AchievementType.HELPER_50)) {
+        if (helpedCount >= 50 && !existingTypes.contains(AchievementType.HELPER_50)) {
             newAchievements.add(AchievementType.HELPER_50);
         }
-        if (helpedCount >= 100 && !hasAchievement(user, AchievementType.HELPER_100)) {
+        if (helpedCount >= 100 && !existingTypes.contains(AchievementType.HELPER_100)) {
             newAchievements.add(AchievementType.HELPER_100);
         }
 
-        // По скорости
         if (help.getAcceptedAt() != null) {
             long hoursBetween = java.time.Duration.between(help.getAcceptedAt(), LocalDateTime.now()).toHours();
-            if (hoursBetween <= 1 && !hasAchievement(user, AchievementType.FAST_HELP)) {
+            if (hoursBetween <= 1 && !existingTypes.contains(AchievementType.FAST_HELP)) {
                 newAchievements.add(AchievementType.FAST_HELP);
             }
         }
 
         int hour = LocalDateTime.now().getHour();
-        if ((hour >= 22 || hour < 6) && !hasAchievement(user, AchievementType.NIGHT_OWL)) {
+        if ((hour >= 22 || hour < 6) && !existingTypes.contains(AchievementType.NIGHT_OWL)) {
             newAchievements.add(AchievementType.NIGHT_OWL);
         }
 
         int dayOfWeek = LocalDateTime.now().getDayOfWeek().getValue();
-        if ((dayOfWeek == 6 || dayOfWeek == 7) && !hasAchievement(user, AchievementType.WEEKEND_HERO)) {
+        if ((dayOfWeek == 6 || dayOfWeek == 7) && !existingTypes.contains(AchievementType.WEEKEND_HERO)) {
             newAchievements.add(AchievementType.WEEKEND_HERO);
         }
 
-        // Праздничные
         int month = LocalDateTime.now().getMonthValue();
         int day = LocalDateTime.now().getDayOfMonth();
         
-        if (month == 12 && !hasAchievement(user, AchievementType.NEW_YEAR_WIZARD)) {
+        if (month == 12 && !existingTypes.contains(AchievementType.NEW_YEAR_WIZARD)) {
             newAchievements.add(AchievementType.NEW_YEAR_WIZARD);
         }
         
-        if (month == 10 && day == 31 && !hasAchievement(user, AchievementType.HALLOWEEN_HERO)) {
+        if (month == 10 && day == 31 && !existingTypes.contains(AchievementType.HALLOWEEN_HERO)) {
             newAchievements.add(AchievementType.HALLOWEEN_HERO);
         }
 
         if (user.getBirthDate() != null) {
             int birthMonth = user.getBirthDate().getMonthValue();
             int birthDay = user.getBirthDate().getDayOfMonth();
-            if (month == birthMonth && day == birthDay && !hasAchievement(user, AchievementType.BIRTHDAY_HERO)) {
+            if (month == birthMonth && day == birthDay && !existingTypes.contains(AchievementType.BIRTHDAY_HERO)) {
                 newAchievements.add(AchievementType.BIRTHDAY_HERO);
             }
         }
 
-        // Зимний (декабрь-февраль)
-        if ((month == 12 || month == 1 || month == 2) && !hasAchievement(user, AchievementType.WINTER_HELPER)) {
+        if ((month == 12 || month == 1 || month == 2) && !existingTypes.contains(AchievementType.WINTER_HELPER)) {
             newAchievements.add(AchievementType.WINTER_HELPER);
         }
 
-        // Без долгов
-        if (helpedCount >= 5 && user.getDebtCount() == 0 && !hasAchievement(user, AchievementType.DEBT_FREE)) {
+        if (helpedCount >= 5 && user.getDebtCount() == 0 && !existingTypes.contains(AchievementType.DEBT_FREE)) {
             newAchievements.add(AchievementType.DEBT_FREE);
         }
 
-        // Мастер баланса
-        if (user.getHelpedCount() > user.getDebtCount() && helpedCount >= 3 && !hasAchievement(user, AchievementType.BALANCED)) {
+        if (user.getHelpedCount() > user.getDebtCount() && helpedCount >= 3 && !existingTypes.contains(AchievementType.BALANCED)) {
             newAchievements.add(AchievementType.BALANCED);
         }
 
-        // По количеству постов
         long postCount = postRepository.countByUserId(user.getId());
-        if (postCount >= 1 && !hasAchievement(user, AchievementType.FIRST_POST)) {
+        if (postCount >= 1 && !existingTypes.contains(AchievementType.FIRST_POST)) {
             newAchievements.add(AchievementType.FIRST_POST);
         }
-        if (postCount >= 10 && !hasAchievement(user, AchievementType.POSTER_10)) {
+        if (postCount >= 10 && !existingTypes.contains(AchievementType.POSTER_10)) {
             newAchievements.add(AchievementType.POSTER_10);
         }
 
-        // По количеству сообщений (chat achievements)
         long messageCount = messageRepository.countBySenderId(user.getId());
-        if (messageCount >= 1 && !hasAchievement(user, AchievementType.FIRST_CHAT)) {
+        if (messageCount >= 1 && !existingTypes.contains(AchievementType.FIRST_CHAT)) {
             newAchievements.add(AchievementType.FIRST_CHAT);
         }
-        if (messageCount >= 50 && !hasAchievement(user, AchievementType.CHATTER_10)) {
+        if (messageCount >= 50 && !existingTypes.contains(AchievementType.CHATTER_10)) {
             newAchievements.add(AchievementType.CHATTER_10);
         }
 
-        // VARIETY - помог разным людям
         List<Help> confirmedHelps = helpRepository.findByHelperAndStatus(user, HelpStatus.CONFIRMED);
         Set<Long> uniqueReceivers = new HashSet<>();
         Set<String> uniqueCategories = new HashSet<>();
@@ -138,21 +131,18 @@ public class AchievementService {
                 uniqueCategories.add(h.getPost().getCategory());
             }
         }
-        if (uniqueReceivers.size() >= 10 && !hasAchievement(user, AchievementType.VARIETY)) {
+        if (uniqueReceivers.size() >= 10 && !existingTypes.contains(AchievementType.VARIETY)) {
             newAchievements.add(AchievementType.VARIETY);
         }
 
-        // QUICK_FIX - помог в 5 категориях
-        if (uniqueCategories.size() >= 5 && !hasAchievement(user, AchievementType.QUICK_FIX)) {
+        if (uniqueCategories.size() >= 5 && !existingTypes.contains(AchievementType.QUICK_FIX)) {
             newAchievements.add(AchievementType.QUICK_FIX);
         }
 
-        // REPUTATION_5 - рейтинг 5.0
-        if (user.getRating() != null && user.getRating() >= 5.0 && !hasAchievement(user, AchievementType.REPUTATION_5)) {
+        if (user.getRating() != null && user.getRating() >= 5.0 && !existingTypes.contains(AchievementType.REPUTATION_5)) {
             newAchievements.add(AchievementType.REPUTATION_5);
         }
 
-        // CONSISTENT - помогал 3 месяца подряд
         if (confirmedHelps.size() >= 3) {
             Set<String> helpedMonths = new HashSet<>();
             for (Help h : confirmedHelps) {
@@ -160,20 +150,15 @@ public class AchievementService {
                     helpedMonths.add(h.getConfirmedAt().getYear() + "-" + h.getConfirmedAt().getMonthValue());
                 }
             }
-            if (helpedMonths.size() >= 3 && !hasAchievement(user, AchievementType.CONSISTENT)) {
+            if (helpedMonths.size() >= 3 && !existingTypes.contains(AchievementType.CONSISTENT)) {
                 newAchievements.add(AchievementType.CONSISTENT);
             }
         }
 
-        // Начисляем достижения
         for (AchievementType type : newAchievements) {
             awardAchievement(user, type);
             log.info("Пользователь {} получил достижение: {}", user.getName(), type.getName());
         }
-    }
-
-    private boolean hasAchievement(User user, AchievementType type) {
-        return achievementRepository.existsByUserIdAndType(user.getId(), type);
     }
 
     private void awardAchievement(User user, AchievementType type) {
@@ -350,7 +335,8 @@ public class AchievementService {
 
     @Transactional
     public void awardAchievementOnRegistration(User user) {
-        if (!hasAchievement(user, AchievementType.SEEDLING)) {
+        Set<AchievementType> existing = achievementRepository.findAchievementTypesByUserId(user.getId());
+        if (!existing.contains(AchievementType.SEEDLING)) {
             awardAchievement(user, AchievementType.SEEDLING);
             log.info("Пользователь {} получил достижение: {}", user.getName(), AchievementType.SEEDLING.getName());
         }

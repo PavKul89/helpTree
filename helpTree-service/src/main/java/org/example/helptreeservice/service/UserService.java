@@ -304,22 +304,8 @@ public class UserService {
 
     public void incrementHelpedCount(Long receiverId) {
         log.info("Увеличение счетчика долгов для получателя помощи с ID: {}", receiverId);
-        try {
-            User user = userRepository.findById(receiverId).orElse(null);
-            if (user != null) {
-                int newDebtCount = user.getDebtCount() + 2;
-                user.setDebtCount(newDebtCount);
-                userRepository.saveAndFlush(user);
-                if (newDebtCount > 2 && user.getDebtStartedAt() == null) {
-                    user.setDebtStartedAt(LocalDateTime.now());
-                    userRepository.save(user);
-                }
-            }
-            log.info("Счетчик долгов для получателя ID {} успешно обновлен", receiverId);
-        } catch (Exception e) {
-            log.error("Ошибка при увеличении счетчика долгов для получателя ID: {}", receiverId, e);
-            throw e;
-        }
+        userRepository.updateDebtCount(receiverId, 2);
+        log.info("Счетчик долгов для получателя ID {} успешно обновлен", receiverId);
     }
 
     public void userHelpedSomeone(Long helperId) {
@@ -484,17 +470,11 @@ public class UserService {
     @Transactional(readOnly = true)
     public List<Long> getFavorites(Long userId) {
         log.debug("Получение избранных постов для пользователя {}", userId);
-        try {
-            Long userIdOnly = userRepository.findUserIdOnly(userId);
-            if (userIdOnly == null) {
-                return new ArrayList<>();
-            }
-            return userRepository.findFavoritePostIds(userId);
-        } catch (Exception e) {
-            log.error("Ошибка при получении избранного: {}", e.getMessage());
-            e.printStackTrace();
+        Long userIdOnly = userRepository.findUserIdOnly(userId);
+        if (userIdOnly == null) {
             return new ArrayList<>();
         }
+        return userRepository.findFavoritePostIds(userId);
     }
 
     @Transactional(readOnly = true)

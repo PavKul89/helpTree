@@ -46,9 +46,9 @@ public class HelpService {
     /**
      * 1. Помощник откликается на пост
      */
-    public HelpResponse acceptHelp(HelpRequest request) {
+    public HelpResponse acceptHelp(HelpRequest request, Long helperId) {
         log.info("Принятие помощи: helperId={} откликается на postId={}",
-                request.getHelperId(), request.getPostId());
+                helperId, request.getPostId());
 
         try {
             Post post = postRepository.findById(request.getPostId())
@@ -61,11 +61,11 @@ public class HelpService {
             log.debug("Найден пост: title={}, автор={}, статус={}",
                     post.getTitle(), post.getUser().getEmail(), post.getStatus());
 
-            User helper = userRepository.findById(request.getHelperId())
-                    .orElseThrow(() -> new NotFoundException("Помощник не найден с id: " + request.getHelperId()));
+            User helper = userRepository.findById(helperId)
+                    .orElseThrow(() -> new NotFoundException("Помощник не найден с id: " + helperId));
 
             if (helper.getDeleted() != null && helper.getDeleted()) {
-                log.warn("Попытка откликнуться от удаленного пользователя с ID: {}", request.getHelperId());
+                log.warn("Попытка откликнуться от удаленного пользователя с ID: {}", helperId);
                 throw new NotFoundException("Помощник не найден");
             }
             log.debug("Найден помощник: email={}, имя={}", helper.getEmail(), helper.getName());
@@ -137,7 +137,7 @@ public class HelpService {
             throw e;
         } catch (Exception e) {
             log.error("Ошибка при принятии помощи: helperId={}, postId={}",
-                    request.getHelperId(), request.getPostId(), e);
+                    helperId, request.getPostId(), e);
             throw e;
         }
     }
@@ -666,14 +666,21 @@ public class HelpService {
     private org.example.helptreeservice.dto.graph.HelpGraphDto buildFullGraphFromSql(List<Object[]> graphData) {
         Map<Long, org.example.helptreeservice.dto.graph.HelpGraphDto.Node> nodesMap = new HashMap<>();
         
+        Set<Long> allIds = new HashSet<>();
+        for (Object[] row : graphData) {
+            allIds.add(((Number) row[0]).longValue());
+            allIds.add(((Number) row[2]).longValue());
+        }
+        
+        Map<Long, User> usersMap = userRepository.findAllById(allIds).stream()
+                .collect(java.util.stream.Collectors.toMap(User::getId, u -> u));
+        
         for (Object[] row : graphData) {
             Long helperId = ((Number) row[0]).longValue();
-            String helperName = row[1] != null ? row[1].toString() : "";
             Long receiverId = ((Number) row[2]).longValue();
-            String receiverName = row[3] != null ? row[3].toString() : "";
             
             if (!nodesMap.containsKey(helperId)) {
-                User helper = userRepository.findById(helperId).orElse(null);
+                User helper = usersMap.get(helperId);
                 if (helper != null) {
                     nodesMap.put(helperId, org.example.helptreeservice.dto.graph.HelpGraphDto.Node.builder()
                             .id(helperId)
@@ -687,7 +694,7 @@ public class HelpService {
             }
             
             if (!nodesMap.containsKey(receiverId)) {
-                User receiver = userRepository.findById(receiverId).orElse(null);
+                User receiver = usersMap.get(receiverId);
                 if (receiver != null) {
                     nodesMap.put(receiverId, org.example.helptreeservice.dto.graph.HelpGraphDto.Node.builder()
                             .id(receiverId)

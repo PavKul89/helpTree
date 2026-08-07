@@ -78,6 +78,9 @@ public class UserController {
         if (ids == null || ids.isEmpty()) {
             return ResponseEntity.ok(List.of());
         }
+        if (ids.size() > 100) {
+            throw new BadRequestException("Максимальный размер пакетного запроса — 100 ID");
+        }
         return ResponseEntity.ok(userService.getUsersPublicByIds(ids));
     }
 
@@ -226,14 +229,8 @@ public class UserController {
 
     @GetMapping("/{id}/favorites")
     public ResponseEntity<List<Long>> getFavorites(@PathVariable Long id) {
-        try {
-            List<Long> favorites = userService.getFavorites(id);
-            return ResponseEntity.ok(favorites != null ? favorites : java.util.Collections.emptyList());
-        } catch (Exception e) {
-            log.error("Error getting favorites for user {}: {}", id, e.getMessage());
-            e.printStackTrace();
-            return ResponseEntity.ok(java.util.Collections.emptyList());
-        }
+        List<Long> favorites = userService.getFavorites(id);
+        return ResponseEntity.ok(favorites != null ? favorites : java.util.Collections.emptyList());
     }
 
     @GetMapping("/{id}/favorites/{postId}")
@@ -318,6 +315,9 @@ public class UserController {
             @RequestParam String color) {
         if (!authService.canManageUser(id)) {
             throw new ForbiddenException("Вы можете менять цвет ника только своего аккаунта");
+        }
+        if (color == null || !color.matches("^#[0-9A-Fa-f]{6}$")) {
+            throw new BadRequestException("Цвет должен быть в формате #RRGGBB (например, #FF5733)");
         }
         walletService.changeNicknameColor(id, color);
         WalletDto wallet = walletService.getWallet(id);

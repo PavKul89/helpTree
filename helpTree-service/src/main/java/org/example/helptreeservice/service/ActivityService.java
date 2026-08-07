@@ -9,6 +9,7 @@ import org.example.helptreeservice.entity.Post;
 import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.enums.ActivityType;
 import org.example.helptreeservice.enums.AchievementType;
+import org.example.helptreeservice.exception.NotFoundException;
 import org.example.helptreeservice.repository.AchievementRepository;
 import org.example.helptreeservice.repository.HelpRepository;
 import org.example.helptreeservice.repository.PostRepository;
@@ -34,7 +35,7 @@ public class ActivityService {
 
     public List<ActivityDto> getUserActivities(Long userId, int limit) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new NotFoundException("User not found"));
 
         List<ActivityDto> activities = new ArrayList<>();
 
