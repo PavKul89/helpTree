@@ -92,13 +92,13 @@ logging:
 
 
 app:
-  jwtSecret: ${JWT_SECRET}
+  jwtSecret: ${JWT_SECRET:dev-only-secret-not-for-production-64chars-minimum-length!!}
   jwtExpirationMs: 86400000
   cors:
     allowed-origins: ${CORS_ORIGINS:http://localhost:3000,http://localhost:3001,http://localhost:5173}
   admin:
-    email: ${ADMIN_EMAIL}
-    password: ${ADMIN_PASSWORD}
+    email: ${ADMIN_EMAIL:admin@helptree.dev}
+    password: ${ADMIN_PASSWORD:dev-admin-password-change-in-prod}
   economy:
     coins-per-help: 10
     coins-per-help-received: 2
