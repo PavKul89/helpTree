@@ -8,13 +8,17 @@ import io.minio.http.Method;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.helptreeservice.exception.BadRequestException;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 
 @Service
@@ -23,6 +27,7 @@ import java.util.concurrent.TimeUnit;
 public class ImageService {
 
     private final MinioClient minioClient;
+    private final Executor imageUploadExecutor;
 
     @Value("${minio.bucket}")
     private String bucket;
@@ -70,6 +75,22 @@ public class ImageService {
             }
         }
         return urls;
+    }
+
+    @Async("imageUploadExecutor")
+    public CompletableFuture<String> uploadAsync(MultipartFile file) {
+        return CompletableFuture.completedFuture(upload(file));
+    }
+
+    public CompletableFuture<List<String>> uploadMultipleAsync(List<MultipartFile> files) {
+        List<CompletableFuture<String>> futures = files.stream()
+                .filter(f -> f != null && !f.isEmpty())
+                .map(this::uploadAsync)
+                .toList();
+        return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                .thenApply(v -> futures.stream()
+                        .map(CompletableFuture::join)
+                        .toList());
     }
 
     public void delete(String url) {

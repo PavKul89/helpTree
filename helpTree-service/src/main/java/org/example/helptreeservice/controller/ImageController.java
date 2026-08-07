@@ -14,6 +14,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 @RestController
 @RequestMapping("/api/images")
@@ -25,24 +26,24 @@ public class ImageController {
     private final AuthorizationService authService;
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<Map<String, String>> upload(@RequestParam("file") MultipartFile file) {
+    public CompletableFuture<ResponseEntity<Map<String, String>>> upload(@RequestParam("file") MultipartFile file) {
         UserContext user = authService.getCurrentUser();
         if (user == null) {
             throw new UnauthorizedException("Требуется авторизация");
         }
-        String url = imageService.upload(file);
-        return ResponseEntity.ok(Map.of("url", url));
+        return imageService.uploadAsync(file)
+                .thenApply(url -> ResponseEntity.ok(Map.of("url", url)));
     }
 
     @PostMapping(value = "/multiple", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<Map<String, List<String>>> uploadMultiple(
+    public CompletableFuture<ResponseEntity<Map<String, List<String>>>> uploadMultiple(
             @RequestParam("files") List<MultipartFile> files) {
         UserContext user = authService.getCurrentUser();
         if (user == null) {
             throw new UnauthorizedException("Требуется авторизация");
         }
-        List<String> urls = imageService.uploadMultiple(files);
-        return ResponseEntity.ok(Map.of("urls", urls));
+        return imageService.uploadMultipleAsync(files)
+                .thenApply(urls -> ResponseEntity.ok(Map.of("urls", urls)));
     }
 
     @DeleteMapping
