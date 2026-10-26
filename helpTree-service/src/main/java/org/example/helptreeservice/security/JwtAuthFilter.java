@@ -1,4 +1,4 @@
-package org.example.helptreeservice.filter;
+package org.example.helptreeservice.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.jsonwebtoken.Claims;

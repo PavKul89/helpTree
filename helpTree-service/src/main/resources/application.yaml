@@ -38,13 +38,13 @@ spring:
     baseline-on-migrate: true
 
 # ======================================================
-# ТРАССИРОВКА (по аналогии с gateway)
+# ТРАССИРОВКА
 # ======================================================
 management:
   tracing:
     enabled: true
     sampling:
-      probability: 1.0
+      probability: ${TRACING_SAMPLING_PROBABILITY:0.1}
     propagation:
       type: w3c
     mdc:
@@ -55,7 +55,7 @@ management:
     tracing:
       export:
         otlp:
-          endpoint: http://localhost:4318/v1/traces
+          endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
           protocol: http/protobuf
   metrics:
     export:
@@ -74,17 +74,17 @@ management:
           - info
           - prometheus
           - loggers
-          - tracing
 
 logging:
   level:
-    org.hibernate.SQL: DEBUG
-    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
-    org.springframework.web: DEBUG
-    org.example.helptreeservice: DEBUG
-    io.micrometer.tracing: DEBUG
-    io.opentelemetry: DEBUG
-    io.opentelemetry.exporter.otlp: DEBUG
+    root: INFO
+    org.springframework.web: INFO
+    org.hibernate.SQL: WARN
+    org.hibernate.type.descriptor.sql.BasicBinder: WARN
+    org.example.helptreeservice: INFO
+    io.micrometer.tracing: WARN
+    io.opentelemetry: WARN
+    io.opentelemetry.exporter.otlp: WARN
 
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %highlight(%-5level) [%thread] %green([HELPTREE]) %X{traceId} %X{spanId} %X{requestId} %X{userId} %cyan(%logger{36}) - %msg%n"

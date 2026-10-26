@@ -21,10 +21,10 @@ public class AdminInitializer implements CommandLineRunner {
     private final UserRepository userRepository;
     private final PasswordService passwordService;
 
-    @Value("${app.admin.email:admin@helptree.com}")
+    @Value("${app.admin.email:admin@helptree.dev}")
     private String adminEmail;
 
-    @Value("${app.admin.password:Admin123!}")
+    @Value("${app.admin.password:dev-admin-password-change-in-prod}")
     private String adminPassword;
 
     @Override

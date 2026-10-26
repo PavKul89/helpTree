@@ -1,4 +1,4 @@
-package org.example.helptreeservice.config;
+package org.example.helptreeservice.scheduler;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

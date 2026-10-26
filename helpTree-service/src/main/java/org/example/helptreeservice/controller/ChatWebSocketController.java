@@ -2,7 +2,7 @@ package org.example.helptreeservice.controller;
 
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
-import org.example.helptreeservice.config.WsUserPrincipal;
+import org.example.helptreeservice.security.WsUserPrincipal;
 import org.example.helptreeservice.dto.chat.CreateMessageRequest;
 import org.example.helptreeservice.dto.chat.CreateMessageWsRequest;
 import org.example.helptreeservice.dto.chat.MessageResponse;

@@ -1,4 +1,4 @@
-package org.example.helptreeservice.config;
+package org.example.helptreeservice.security;
 
 import java.security.Principal;
 

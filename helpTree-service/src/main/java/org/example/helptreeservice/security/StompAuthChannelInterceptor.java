@@ -1,4 +1,4 @@
-package org.example.helptreeservice.config;
+package org.example.helptreeservice.security;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
