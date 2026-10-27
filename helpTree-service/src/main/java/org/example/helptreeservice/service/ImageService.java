@@ -1,36 +1,31 @@
 package org.example.helptreeservice.service;
 
-import io.minio.GetPresignedObjectUrlArgs;
-import io.minio.MinioClient;
-import io.minio.PutObjectArgs;
-import io.minio.RemoveObjectArgs;
-import io.minio.http.Method;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.helptreeservice.exception.BadRequestException;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
-import java.util.concurrent.TimeUnit;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class ImageService {
 
-    private final MinioClient minioClient;
     private final Executor imageUploadExecutor;
 
-    @Value("${minio.bucket}")
-    private String bucket;
+    @Value("${upload.dir:uploads}")
+    private String uploadDir;
 
     @Value("${upload.max-size}")
     private long maxSize;
@@ -38,30 +33,28 @@ public class ImageService {
     @Value("${upload.allowed-types}")
     private List<String> allowedTypes;
 
+    @Value("${server.port:8080}")
+    private String serverPort;
+
+    public ImageService(Executor imageUploadExecutor) {
+        this.imageUploadExecutor = imageUploadExecutor;
+    }
+
     public String upload(MultipartFile file) {
         validateFile(file);
         String filename = generateFilename(file);
-        
+        Path uploadPath = Paths.get(uploadDir).toAbsolutePath().normalize();
+
         try {
-            minioClient.putObject(PutObjectArgs.builder()
-                    .bucket(bucket)
-                    .object(filename)
-                    .stream(file.getInputStream(), file.getSize(), -1)
-                    .contentType(file.getContentType())
-                    .build());
-
-            String url = minioClient.getPresignedObjectUrl(
-                    GetPresignedObjectUrlArgs.builder()
-                            .method(Method.GET)
-                            .bucket(bucket)
-                            .object(filename)
-                            .expiry(7, TimeUnit.DAYS)
-                            .build());
-
+            Files.createDirectories(uploadPath);
+            Path target = uploadPath.resolve(filename).normalize();
+            if (!target.startsWith(uploadPath)) {
+                throw new BadRequestException("Недопустимое имя файла");
+            }
+            Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
             log.info("✅ Изображение загружено: {}", filename);
-            return url;
-
-        } catch (Exception e) {
+            return "http://localhost:" + serverPort + "/uploads/" + filename;
+        } catch (IOException e) {
             log.error("❌ Ошибка загрузки изображения: {}", e.getMessage());
             throw new RuntimeException("Ошибка загрузки изображения", e);
         }
@@ -95,56 +88,45 @@ public class ImageService {
 
     public void delete(String url) {
         String filename = extractFilename(url);
-        
+        if (filename == null || filename.isBlank()) {
+            return;
+        }
+        Path uploadPath = Paths.get(uploadDir).toAbsolutePath().normalize();
+        Path target = uploadPath.resolve(filename).normalize();
+        if (!target.startsWith(uploadPath)) {
+            return;
+        }
         try {
-            minioClient.removeObject(RemoveObjectArgs.builder()
-                    .bucket(bucket)
-                    .object(filename)
-                    .build());
+            Files.deleteIfExists(target);
             log.info("✅ Изображение удалено: {}", filename);
-        } catch (Exception e) {
+        } catch (IOException e) {
             log.error("❌ Ошибка удаления изображения: {}", e.getMessage());
         }
     }
 
     public String refreshUrl(String storedUrl) {
-        if (storedUrl == null || !storedUrl.contains("/")) {
-            return storedUrl;
-        }
-        try {
-            String filename = extractFilename(storedUrl);
-            return minioClient.getPresignedObjectUrl(
-                    GetPresignedObjectUrlArgs.builder()
-                            .method(Method.GET)
-                            .bucket(bucket)
-                            .object(filename)
-                            .expiry(7, TimeUnit.DAYS)
-                            .build());
-        } catch (Exception e) {
-            log.warn("Не удалось обновить URL изображения: {}", storedUrl);
-            return storedUrl;
-        }
+        return storedUrl;
     }
 
     public List<String> refreshUrls(List<String> urls) {
         if (urls == null) return urls;
-        return urls.stream().map(this::refreshUrl).toList();
+        return urls;
     }
 
     public List<String> refreshUrlsBatch(List<String> urls) {
         if (urls == null || urls.isEmpty()) return urls;
-        return urls.stream().map(this::refreshUrl).toList();
+        return urls;
     }
 
     private void validateFile(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new BadRequestException("Файл не выбран");
         }
-        
+
         if (file.getSize() > maxSize) {
             throw new BadRequestException("Размер файла превышает 10MB");
         }
-        
+
         String contentType = file.getContentType();
         if (contentType == null || !allowedTypes.contains(contentType)) {
             throw new BadRequestException("Недопустимый тип файла. Разрешены: jpg, png, webp, gif");
@@ -160,17 +142,23 @@ public class ImageService {
         if (filename != null && filename.contains(".")) {
             return filename.substring(filename.lastIndexOf("."));
         }
-        switch (contentType) {
-            case "image/jpeg": return ".jpg";
-            case "image/png": return ".png";
-            case "image/webp": return ".webp";
-            case "image/gif": return ".gif";
-            default: return ".jpg";
+        if (contentType == null) {
+            return ".jpg";
         }
+        return switch (contentType) {
+            case "image/jpeg" -> ".jpg";
+            case "image/png" -> ".png";
+            case "image/webp" -> ".webp";
+            case "image/gif" -> ".gif";
+            default -> ".jpg";
+        };
     }
 
     private String extractFilename(String url) {
-        String filename = url.substring(url.lastIndexOf("/") + 1);
+        if (url == null) return null;
+        int lastSlash = url.lastIndexOf("/");
+        if (lastSlash == -1) return url;
+        String filename = url.substring(lastSlash + 1);
         if (filename.contains("?")) {
             filename = filename.substring(0, filename.indexOf("?"));
         }

@@ -79,26 +79,7 @@ services:
       timeout: 5s
       retries: 5
 
-  minio:
-    image: minio/minio:latest
-    container_name: minio
-    restart: unless-stopped
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
-      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
-    volumes:
-      - minio_data:/data
-    networks:
-      - helpTree-network
-    command: server /data --console-address ":9001"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+  # minio removed - using local file storage
 
 volumes:
   postgres_data:
@@ -109,8 +90,6 @@ volumes:
     name: helpTree_grafana_data
   jaeger_data:
     name: helpTree_jaeger_data
-  minio_data:
-    name: helpTree_minio_data
 
 networks:
   helpTree-network:
