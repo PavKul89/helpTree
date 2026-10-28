@@ -285,7 +285,6 @@ const styles: Record<string, React.CSSProperties> = {
   buttonHover: {
     background: 'linear-gradient(135deg, #67e8f9 0%, #22d3ee 100%)',
     boxShadow: '0 6px 20px -3px rgba(34, 211, 238, 0.6), 0 0 30px rgba(34, 211, 238, 0.4)',
-    transform: 'perspective(1000px) translateZ(5px)',
   },
   loginLink: {
     textAlign: 'center' as const,

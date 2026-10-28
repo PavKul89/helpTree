@@ -171,7 +171,7 @@ function App() {
             box-shadow: 0 0 15px rgba(34, 211, 238, 0.3) !important;
           }
           .post-card:hover {
-            transform: translateY(-8px) scale(1.02);
+            box-shadow: 0 12px 24px -4px rgba(0, 0, 0, 0.3);
           }
         `}</style>
         <AppContent />

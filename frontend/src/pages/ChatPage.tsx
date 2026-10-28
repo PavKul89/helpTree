@@ -241,9 +241,8 @@ export const ChatPage = () => {
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
-            placeholder={isConnected ? 'Напишите сообщение...' : 'Подключение к серверу...'}
-            disabled={!isConnected}
-            style={isConnected ? styles.input : styles.inputDisabled}
+            placeholder={isConnected ? 'Напишите сообщение...' : 'Нет соединения — сообщение не отправится'}
+            style={isConnected ? styles.input : styles.inputDisconnected}
           />
           <Button
             onClick={handleSend}
@@ -447,16 +446,16 @@ const styles: Record<string, React.CSSProperties> = {
     outline: 'none',
     transition: 'all 0.2s ease',
   },
-  inputDisabled: {
+  inputDisconnected: {
     flex: 1,
     padding: '14px 20px',
     fontSize: '15px',
     background: 'rgba(255,255,255,0.04)',
     border: `1px solid rgba(255,255,255,0.08)`,
     borderRadius: '24px',
-    color: theme.colors.textMuted,
+    color: theme.colors.text,
     outline: 'none',
-    cursor: 'not-allowed',
+    cursor: 'text',
   },
   sendBtn: {
     padding: '14px 20px',

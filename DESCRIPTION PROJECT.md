@@ -30,7 +30,7 @@
 - Авторизация и JWT токены встроены в helpTree-service
 - Rate limiting (Resilience4j) встроен в helpTree-service
 - Асинхронное взаимодействие через Kafka
-- Загрузка изображений в посты (MinIO/S3)
+- Загрузка изображений в посты (Silo, S3-совместимое хранилище)
 - Telegram уведомления о событиях помощи
 - Система отзывов после завершения помощи
 - Комментарии постов
@@ -47,7 +47,7 @@
 | Язык | Java 21 |
 | Фреймворки | Spring Boot 3.4.3 |
 | База данных | PostgreSQL 16, Flyway (миграции) |
-| Хранилище файлов | MinIO (S3-совместимое) |
+| Хранилище файлов | Silo (S3-совместимое, community fork MinIO) |
 | Rate Limiting | Resilience4j |
 | Контейнеризация | Docker, Docker Compose |
 | Утилиты | Lombok |
@@ -58,10 +58,24 @@
 
 | Сервис | URL | Данные для входа |
 |--------|-----|------------------|
-| MinIO Console | http://localhost:9001 | minioadmin / minioadmin |
+| Silo Console | http://localhost:9001 | значения SILO_ACCESS_KEY / SILO_SECRET_KEY |
 | Prometheus | http://localhost:9090 | — |
 | Grafana | http://localhost:3000 | admin/admin |
 | Jaeger | http://localhost:16686 | — |
+
+---
+
+## Хранение изображений в Silo
+
+Silo запускается вместе с остальными сервисами через `docker compose up -d`.
+Изображения сохраняются в бакете `helptree-images` на постоянном Docker volume
+`helpTree_silo_data`; бакет и публичное чтение объектов настраиваются при первой загрузке.
+Silo Console: http://localhost:9001.
+
+Для разработки используются локальные значения по умолчанию. Перед запуском
+вне локальной среды задайте `SILO_ACCESS_KEY` и `SILO_SECRET_KEY`, а также
+`SILO_PUBLIC_ENDPOINT` — URL Silo, доступный браузеру. `SILO_ENDPOINT` задаёт
+адрес Silo для backend-клиента; по умолчанию `http://localhost:9000`.
 
 ---
 
@@ -501,7 +515,7 @@ app:
 | ✅ | Kafka интеграция                                |      17.03.2026 |
 | ✅ | Распределенная трассировка (Jaeger)             |      19.03.2026 |
 | ✅ | Security (BCrypt, JWT, роли)                    |      20.03.2026 |
-| ✅ | Загрузка изображений (MinIO)                    |      21.03.2026 |
+| ✅ | Загрузка изображений (Silo / S3)                |      21.03.2026 |
 | ✅ | Rate limit (лимит запросов)                     |      21.03.2026 |
 | ✅ | Telegram уведомления                            |      22.03.2026 |
 | ✅ | Добавить валидацию паролей                      |      22.03.2026 |

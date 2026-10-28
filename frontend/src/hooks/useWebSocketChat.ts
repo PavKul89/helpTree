@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Client, StompSubscription } from '@stomp/stompjs';
+import { API_URL } from '../api/axios';
 import type { Chat, Message, WsMessageEnvelope } from '../types';
 
 export type WsMessageType = 'NEW_MESSAGE' | 'MESSAGE_DELETED' | 'MESSAGES_READ' | 'CHAT_DELETED' | 'CHAT_UPDATED';
+
+const WS_URL = process.env.REACT_APP_WS_URL || `${API_URL.replace(/^http/, 'ws')}/ws/chat`;
 
 interface UseWebSocketChatOptions {
   userId: number | null;
@@ -13,111 +16,36 @@ interface UseWebSocketChatOptions {
   onChatUpdated?: (chat: Chat) => void;
 }
 
-export function useWebSocketChat({
-  userId,
-  onNewMessage,
-  onMessageDeleted,
-  onMessagesRead,
-  onChatDeleted,
-  onChatUpdated,
-}: UseWebSocketChatOptions) {
+export function useWebSocketChat(options: UseWebSocketChatOptions) {
+  const { userId } = options;
   const [isConnected, setIsConnected] = useState(false);
   const clientRef = useRef<Client | null>(null);
   const subscriptionsRef = useRef<Map<number, StompSubscription>>(new Map());
   const userSubscriptionRef = useRef<StompSubscription | null>(null);
-  const reconnectTimeoutRef = useRef<number | null>(null);
-  const retryCountRef = useRef(0);
-  const maxRetries = 10;
+  const chatIdsRef = useRef<Set<number>>(new Set());
+  const handlersRef = useRef(options);
 
-  const connect = useCallback(() => {
-    if (!userId) return;
-
-    const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
-    if (!token) return;
-
-    const client = new Client({
-      brokerURL: 'ws://localhost:8081/ws/chat',
-      connectHeaders: {
-        Authorization: `Bearer ${token}`,
-      },
-      reconnectDelay: 0,
-      heartbeatIncoming: 10000,
-      heartbeatOutgoing: 10000,
-      onConnect: () => {
-        setIsConnected(true);
-        retryCountRef.current = 0;
-      },
-      onDisconnect: () => {
-        setIsConnected(false);
-        scheduleReconnect();
-      },
-      onStompError: (frame) => {
-        console.error('STOMP error:', frame.headers['message']);
-        setIsConnected(false);
-      },
-    });
-
-    client.activate();
-    clientRef.current = client;
-  }, [userId]);
-
-  const scheduleReconnect = useCallback(() => {
-    if (retryCountRef.current >= maxRetries) return;
-
-    const delay = Math.min(1000 * Math.pow(2, retryCountRef.current), 30000);
-    retryCountRef.current++;
-
-    reconnectTimeoutRef.current = window.setTimeout(() => {
-      connect();
-      resubscribeAll();
-    }, delay);
-  }, [connect]);
-
-  const subscribeToChat = useCallback((chatId: number) => {
-    const client = clientRef.current;
-    if (!client || !client.connected) return;
-
-    if (subscriptionsRef.current.has(chatId)) return;
-
-    const subscription = client.subscribe(`/topic/chat/${chatId}`, (message) => {
-      const envelope: WsMessageEnvelope = JSON.parse(message.body);
-      handleEnvelope(envelope);
-    });
-
-    subscriptionsRef.current.set(chatId, subscription);
-  }, []);
-
-  const unsubscribeFromChat = useCallback((chatId: number) => {
-    const subscription = subscriptionsRef.current.get(chatId);
-    if (subscription) {
-      subscription.unsubscribe();
-      subscriptionsRef.current.delete(chatId);
-    }
-  }, []);
-
-  const subscribeToUser = useCallback(() => {
-    const client = clientRef.current;
-    if (!client || !client.connected || !userId) return;
-
-    if (userSubscriptionRef.current) return;
-
-    const subscription = client.subscribe(`/topic/user/${userId}`, (message) => {
-      const envelope: WsMessageEnvelope = JSON.parse(message.body);
-      handleEnvelope(envelope);
-    });
-
-    userSubscriptionRef.current = subscription;
-  }, [userId]);
+  useEffect(() => {
+    handlersRef.current = options;
+  });
 
   const handleEnvelope = useCallback((envelope: WsMessageEnvelope) => {
+    const {
+      onNewMessage,
+      onMessageDeleted,
+      onMessagesRead,
+      onChatDeleted,
+      onChatUpdated,
+    } = handlersRef.current;
+
     switch (envelope.type) {
       case 'NEW_MESSAGE':
         if (envelope.message) {
-          onNewMessage(envelope.message as Message);
+          onNewMessage(envelope.message);
         }
         break;
       case 'MESSAGE_DELETED':
-        if (envelope.chatId && envelope.message?.id) {
+        if (envelope.chatId && envelope.message) {
           onMessageDeleted(envelope.chatId, envelope.message.id);
         }
         break;
@@ -133,43 +61,123 @@ export function useWebSocketChat({
         break;
       case 'CHAT_UPDATED':
         if (envelope.chat && onChatUpdated) {
-          onChatUpdated(envelope.chat as Chat);
+          onChatUpdated(envelope.chat);
         }
         break;
     }
-  }, [onNewMessage, onMessageDeleted, onMessagesRead, onChatDeleted, onChatUpdated]);
+  }, []);
 
-  const resubscribeAll = useCallback(() => {
-    const chatIds = Array.from(subscriptionsRef.current.keys());
-    chatIds.forEach((chatId) => {
-      subscribeToChat(chatId);
+  const parseEnvelope = useCallback((body: string) => {
+    try {
+      handleEnvelope(JSON.parse(body) as WsMessageEnvelope);
+    } catch (err) {
+      console.error('Не удалось разобрать сообщение WebSocket', err);
+    }
+  }, [handleEnvelope]);
+
+  const subscribeToUser = useCallback(() => {
+    const client = clientRef.current;
+    if (!client || !client.connected || !userId) return;
+
+    if (userSubscriptionRef.current) return;
+
+    userSubscriptionRef.current = client.subscribe(`/topic/user/${userId}`, (message) => {
+      parseEnvelope(message.body);
     });
-    subscribeToUser();
-  }, [subscribeToChat, subscribeToUser]);
+  }, [userId, parseEnvelope]);
 
-  const sendMessage = useCallback((chatId: number, content: string) => {
+  const subscribeToChat = useCallback((chatId: number) => {
+    chatIdsRef.current.add(chatId);
+
     const client = clientRef.current;
     if (!client || !client.connected) return;
 
-    client.publish({
-      destination: `/app/chat/${chatId}/messages`,
-      body: JSON.stringify({ content }),
+    if (subscriptionsRef.current.has(chatId)) return;
+
+    const subscription = client.subscribe(`/topic/chat/${chatId}`, (message) => {
+      parseEnvelope(message.body);
     });
+
+    subscriptionsRef.current.set(chatId, subscription);
+  }, [parseEnvelope]);
+
+  const unsubscribeFromChat = useCallback((chatId: number) => {
+    chatIdsRef.current.delete(chatId);
+
+    const subscription = subscriptionsRef.current.get(chatId);
+    if (subscription) {
+      try {
+        subscription.unsubscribe();
+      } catch (err) {
+        console.warn('Не удалось отписаться от чата', chatId, err);
+      }
+      subscriptionsRef.current.delete(chatId);
+    }
   }, []);
 
-  const disconnect = useCallback(() => {
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = null;
-    }
-
-    subscriptionsRef.current.forEach((sub) => sub.unsubscribe());
+  const clearSubscriptions = useCallback(() => {
+    subscriptionsRef.current.forEach((subscription) => {
+      try {
+        subscription.unsubscribe();
+      } catch {
+        // сокет уже закрыт — игнорируем
+      }
+    });
     subscriptionsRef.current.clear();
 
     if (userSubscriptionRef.current) {
-      userSubscriptionRef.current.unsubscribe();
+      try {
+        userSubscriptionRef.current.unsubscribe();
+      } catch {
+        // сокет уже закрыт — игнорируем
+      }
       userSubscriptionRef.current = null;
     }
+  }, []);
+
+  const connect = useCallback(() => {
+    if (!userId) return;
+    if (clientRef.current?.active) return;
+
+    const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
+    if (!token) return;
+
+    const client = new Client({
+      brokerURL: WS_URL,
+      connectHeaders: {
+        Authorization: `Bearer ${token}`,
+      },
+      reconnectDelay: 5000,
+      heartbeatIncoming: 10000,
+      heartbeatOutgoing: 10000,
+      onConnect: () => {
+        setIsConnected(true);
+        subscribeToUser();
+        chatIdsRef.current.forEach((chatId) => subscribeToChat(chatId));
+      },
+      onDisconnect: () => {
+        setIsConnected(false);
+      },
+      onWebSocketClose: () => {
+        setIsConnected(false);
+        clearSubscriptions();
+      },
+      onWebSocketError: (event) => {
+        console.warn('Ошибка WebSocket', event);
+        setIsConnected(false);
+      },
+      onStompError: (frame) => {
+        console.error('STOMP error:', frame.headers['message'], frame.body);
+        setIsConnected(false);
+      },
+    });
+
+    clientRef.current = client;
+    client.activate();
+  }, [userId, subscribeToUser, subscribeToChat, clearSubscriptions]);
+
+  const disconnect = useCallback(() => {
+    clearSubscriptions();
 
     if (clientRef.current) {
       clientRef.current.deactivate();
@@ -177,18 +185,30 @@ export function useWebSocketChat({
     }
 
     setIsConnected(false);
+  }, [clearSubscriptions]);
+
+  const sendMessage = useCallback((chatId: number, content: string) => {
+    const client = clientRef.current;
+    if (!client || !client.connected) {
+      console.warn('WebSocket не подключён, сообщение не отправлено');
+      return;
+    }
+
+    client.publish({
+      destination: `/app/chat/${chatId}/messages`,
+      body: JSON.stringify({ content }),
+    });
   }, []);
 
   useEffect(() => {
-    if (userId) {
-      connect();
-      subscribeToUser();
-    }
+    if (!userId) return;
+
+    connect();
 
     return () => {
       disconnect();
     };
-  }, [userId]);
+  }, [userId, connect, disconnect]);
 
   return {
     isConnected,

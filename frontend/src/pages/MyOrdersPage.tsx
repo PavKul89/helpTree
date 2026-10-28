@@ -33,11 +33,20 @@ export const MyOrdersPage = () => {
     if (!user) return;
     try {
       const posts = await postsApi.getByUser(user.id);
-      setMyPosts(posts);
+      setMyPosts(Array.isArray(posts) ? posts : []);
+
       const helps = await helpApi.getHelpsByHelper(user.id);
-      setMyHelps(helps);
+      if (Array.isArray(helps)) {
+        setMyHelps(helps);
+      } else if (helps && Array.isArray((helps as any).content)) {
+        setMyHelps((helps as any).content);
+      } else {
+        setMyHelps([]);
+      }
     } catch (err) {
       console.error(err);
+      setMyPosts([]);
+      setMyHelps([]);
     } finally {
       setLoading(false);
     }
@@ -88,10 +97,12 @@ export const MyOrdersPage = () => {
 
   if (loading) return <Spinner message="Загрузка заказов..." />;
 
+  const helpsList = Array.isArray(myHelps) ? myHelps : [];
+
   const openPosts = myPosts.filter(p => p.status === 'OPEN').length;
   const inProgressPosts = myPosts.filter(p => p.status === 'IN_PROGRESS').length;
   const completedPosts = myPosts.filter(p => p.status === 'COMPLETED').length;
-  const completedHelps = myHelps.filter(h => h.status === 'COMPLETED').length;
+  const completedHelps = helpsList.filter(h => h.status === 'COMPLETED').length;
 
   return (
     <div style={styles.container}>
@@ -131,7 +142,7 @@ export const MyOrdersPage = () => {
         <Tabs
           tabs={[
             { key: 'posts', label: 'Мои посты', count: myPosts.length },
-            { key: 'helps', label: 'Мои отклики', count: myHelps.length },
+            { key: 'helps', label: 'Мои отклики', count: helpsList.length },
           ]}
           activeTab={activeTab}
           onChange={(key) => setActiveTab(key as 'posts' | 'helps')}
@@ -200,7 +211,7 @@ export const MyOrdersPage = () => {
           )}
 
           {activeTab === 'helps' && (
-            myHelps.length === 0 ? (
+            helpsList.length === 0 ? (
               <div style={styles.emptyState}>
                 <HandHeart size={48} color={theme.colors.accent} style={styles.emptyIcon as React.CSSProperties} />
                 <div style={styles.emptyTitle}>У вас пока нет откликов</div>
@@ -211,7 +222,7 @@ export const MyOrdersPage = () => {
               </div>
             ) : (
               <div style={styles.list}>
-                {myHelps.map((help) => (
+                {helpsList.map((help) => (
                   <Link 
                     key={help.id} 
                     to={`/posts/${help.postId}`}

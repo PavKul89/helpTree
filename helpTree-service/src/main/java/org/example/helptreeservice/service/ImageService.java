@@ -1,5 +1,11 @@
 package org.example.helptreeservice.service;
 
+import io.minio.BucketExistsArgs;
+import io.minio.MakeBucketArgs;
+import io.minio.MinioClient;
+import io.minio.PutObjectArgs;
+import io.minio.RemoveObjectArgs;
+import io.minio.SetBucketPolicyArgs;
 import lombok.extern.slf4j.Slf4j;
 import org.example.helptreeservice.exception.BadRequestException;
 import org.springframework.beans.factory.annotation.Value;
@@ -7,11 +13,8 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
+import java.io.InputStream;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -22,10 +25,8 @@ import java.util.concurrent.Executor;
 @Slf4j
 public class ImageService {
 
+    private final MinioClient siloClient;
     private final Executor imageUploadExecutor;
-
-    @Value("${upload.dir:uploads}")
-    private String uploadDir;
 
     @Value("${upload.max-size}")
     private long maxSize;
@@ -33,31 +34,54 @@ public class ImageService {
     @Value("${upload.allowed-types}")
     private List<String> allowedTypes;
 
-    @Value("${server.port:8080}")
-    private String serverPort;
+    @Value("${silo.public-endpoint}")
+    private String publicEndpoint;
 
-    public ImageService(Executor imageUploadExecutor) {
+    @Value("${silo.bucket}")
+    private String bucket;
+
+    private volatile boolean bucketInitialized;
+
+    public ImageService(MinioClient siloClient, Executor imageUploadExecutor) {
+        this.siloClient = siloClient;
         this.imageUploadExecutor = imageUploadExecutor;
     }
 
     public String upload(MultipartFile file) {
         validateFile(file);
         String filename = generateFilename(file);
-        Path uploadPath = Paths.get(uploadDir).toAbsolutePath().normalize();
 
-        try {
-            Files.createDirectories(uploadPath);
-            Path target = uploadPath.resolve(filename).normalize();
-            if (!target.startsWith(uploadPath)) {
-                throw new BadRequestException("Недопустимое имя файла");
-            }
-            Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
-            log.info("✅ Изображение загружено: {}", filename);
-            return "http://localhost:" + serverPort + "/uploads/" + filename;
-        } catch (IOException e) {
-            log.error("❌ Ошибка загрузки изображения: {}", e.getMessage());
+        try (InputStream input = file.getInputStream()) {
+            ensureBucket();
+            siloClient.putObject(PutObjectArgs.builder()
+                    .bucket(bucket)
+                    .object(filename)
+                    .stream(input, file.getSize(), -1)
+                    .contentType(file.getContentType())
+                    .build());
+            log.info("Изображение загружено в Silo: {}", filename);
+            return publicEndpoint.replaceAll("/+$", "") + "/" + bucket + "/" + filename;
+        } catch (Exception e) {
+            log.error("Ошибка загрузки изображения в Silo: {}", e.getMessage(), e);
             throw new RuntimeException("Ошибка загрузки изображения", e);
         }
+    }
+
+    private synchronized void ensureBucket() throws Exception {
+        if (bucketInitialized) {
+            return;
+        }
+        if (!siloClient.bucketExists(BucketExistsArgs.builder().bucket(bucket).build())) {
+            siloClient.makeBucket(MakeBucketArgs.builder().bucket(bucket).build());
+        }
+        String policy = """
+                {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"AWS":["*"]},"Action":["s3:GetObject"],"Resource":["arn:aws:s3:::%s/*"]}]}
+                """.formatted(bucket);
+        siloClient.setBucketPolicy(SetBucketPolicyArgs.builder()
+                .bucket(bucket)
+                .config(policy)
+                .build());
+        bucketInitialized = true;
     }
 
     public List<String> uploadMultiple(List<MultipartFile> files) {
@@ -87,21 +111,41 @@ public class ImageService {
     }
 
     public void delete(String url) {
-        String filename = extractFilename(url);
-        if (filename == null || filename.isBlank()) {
-            return;
-        }
-        Path uploadPath = Paths.get(uploadDir).toAbsolutePath().normalize();
-        Path target = uploadPath.resolve(filename).normalize();
-        if (!target.startsWith(uploadPath)) {
+        if (url == null || url.isBlank()) {
             return;
         }
         try {
-            Files.deleteIfExists(target);
-            log.info("✅ Изображение удалено: {}", filename);
-        } catch (IOException e) {
-            log.error("❌ Ошибка удаления изображения: {}", e.getMessage());
+            URI imageUri = URI.create(url);
+            String imagePath = imageUri.getPath();
+            String objectPrefix = "/" + bucket + "/";
+            if (imagePath != null && imagePath.startsWith(objectPrefix)
+                    && sameOrigin(imageUri, URI.create(publicEndpoint))) {
+                String objectName = imagePath.substring(objectPrefix.length());
+                if (!objectName.isBlank() && !objectName.contains("/")) {
+                    ensureBucket();
+                    siloClient.removeObject(RemoveObjectArgs.builder()
+                            .bucket(bucket)
+                            .object(objectName)
+                            .build());
+                    log.info("Изображение удалено из Silo: {}", objectName);
+                }
+                return;
+            }
+
+        } catch (Exception e) {
+            log.error("Ошибка удаления изображения: {}", e.getMessage(), e);
+            throw new RuntimeException("Ошибка удаления изображения", e);
         }
+    }
+
+    private boolean sameOrigin(URI first, URI second) {
+        return first.getScheme() != null
+                && first.getHost() != null
+                && second.getScheme() != null
+                && second.getHost() != null
+                && first.getScheme().equalsIgnoreCase(second.getScheme())
+                && first.getHost().equalsIgnoreCase(second.getHost())
+                && first.getPort() == second.getPort();
     }
 
     public String refreshUrl(String storedUrl) {
@@ -134,14 +178,11 @@ public class ImageService {
     }
 
     private String generateFilename(MultipartFile file) {
-        String ext = getExtension(file.getOriginalFilename(), file.getContentType());
+        String ext = getExtension(file.getContentType());
         return UUID.randomUUID() + ext;
     }
 
-    private String getExtension(String filename, String contentType) {
-        if (filename != null && filename.contains(".")) {
-            return filename.substring(filename.lastIndexOf("."));
-        }
+    private String getExtension(String contentType) {
         if (contentType == null) {
             return ".jpg";
         }
@@ -154,14 +195,4 @@ public class ImageService {
         };
     }
 
-    private String extractFilename(String url) {
-        if (url == null) return null;
-        int lastSlash = url.lastIndexOf("/");
-        if (lastSlash == -1) return url;
-        String filename = url.substring(lastSlash + 1);
-        if (filename.contains("?")) {
-            filename = filename.substring(0, filename.indexOf("?"));
-        }
-        return filename;
-    }
 }

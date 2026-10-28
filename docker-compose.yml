@@ -79,7 +79,21 @@ services:
       timeout: 5s
       retries: 5
 
-  # minio removed - using local file storage
+  silo:
+    image: pgsty/silo:RELEASE.2026-10-26T00-00-00Z
+    container_name: helptree-silo
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${SILO_ACCESS_KEY:-helptree}
+      MINIO_ROOT_PASSWORD: ${SILO_SECRET_KEY:-helptree-dev-password-change-me}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - silo_data:/data
+    networks:
+      - helpTree-network
 
 volumes:
   postgres_data:
@@ -90,6 +104,8 @@ volumes:
     name: helpTree_grafana_data
   jaeger_data:
     name: helpTree_jaeger_data
+  silo_data:
+    name: helpTree_silo_data
 
 networks:
   helpTree-network:

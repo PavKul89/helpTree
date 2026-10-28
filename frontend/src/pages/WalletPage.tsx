@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { walletApi, WalletDto, CoinTransactionDto } from '../api/walletApi';
 import { postsApi } from '../api/postsApi';
@@ -87,6 +87,7 @@ export const WalletPage: React.FC = () => {
   const [showBoostModal, setShowBoostModal] = useState(false);
   const [userPosts, setUserPosts] = useState<Post[]>([]);
   const { showToast } = useToast();
+  const dailyLoginShownRef = useRef<number | null>(null);
 
   const loadWallet = async () => {
     if (!user) return;
@@ -110,7 +111,8 @@ export const WalletPage: React.FC = () => {
       if (lastTx && lastTx.type === 'DAILY_LOGIN') {
         const txTime = new Date(lastTx.createdAt).getTime();
         const now = Date.now();
-        if (now - txTime < 60000) {
+        if (now - txTime < 60000 && dailyLoginShownRef.current !== lastTx.id) {
+          dailyLoginShownRef.current = lastTx.id;
           showToast('+1 HC за ежедневный вход!', 'success');
         }
       }

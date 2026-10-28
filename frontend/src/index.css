@@ -45,26 +45,21 @@ select:focus {
 }
 
 .card-hoverable {
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  transition: box-shadow 0.3s ease;
 }
 
 .card-hoverable:hover {
-  transform: translateY(-4px);
   box-shadow: 0 12px 24px -4px rgba(0, 0, 0, 0.3), 0 0 20px rgba(34, 211, 238, 0.15);
 }
 
 button {
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease,
+    color 0.2s ease, border-color 0.2s ease;
   cursor: pointer;
 }
 
 button:hover {
-  transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-}
-
-button:active {
-  transform: translateY(0);
 }
 
 select {
@@ -174,11 +169,10 @@ a:hover {
   overflow: hidden;
   border-radius: 12px;
   cursor: pointer;
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  transition: box-shadow 0.3s ease;
 }
 
 .post-image-wrapper:hover {
-  transform: scale(1.02);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 }
 

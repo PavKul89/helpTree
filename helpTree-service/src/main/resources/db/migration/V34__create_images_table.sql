@@ -1,0 +1,7 @@
+CREATE TABLE IF NOT EXISTS images (
+    id BIGSERIAL PRIMARY KEY,
+    filename VARCHAR(255),
+    content_type VARCHAR(100),
+    data BYTEA NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

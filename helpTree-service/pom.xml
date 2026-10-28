@@ -117,7 +117,12 @@
             <artifactId>spring-boot-starter-security</artifactId>
         </dependency>
 
-        <!-- Локальное хранение изображений -->
+        <!-- S3-compatible image storage (Silo) -->
+        <dependency>
+            <groupId>io.minio</groupId>
+            <artifactId>minio</artifactId>
+            <version>8.5.17</version>
+        </dependency>
 
         <!-- Тесты -->
         <!-- ================================================= -->

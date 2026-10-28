@@ -130,6 +130,20 @@ class JwtAuthFilterTest {
     }
 
     @Test
+    void filter_shouldAllowAuthenticatedImageUpload() throws Exception {
+        String token = generateToken(42L, "user@test.com", "USER");
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/images/multiple");
+        request.addHeader("Authorization", "Bearer " + token);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        doFilterInternalMethod.invoke(jwtAuthFilter, request, response, filterChain);
+
+        assertEquals("42", request.getAttribute("X-User-Id"));
+        assertEquals(200, response.getStatus());
+        verify(filterChain).doFilter(request, response);
+    }
+
+    @Test
     void filter_shouldRejectInternalPathsForNonAdmin() throws Exception {
         String token = generateToken(1L, "user@test.com", "USER");
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/internal/users");
