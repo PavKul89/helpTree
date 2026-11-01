@@ -6,6 +6,7 @@ import { PostsPage } from './pages/PostsPage';
 import { HomePage } from './pages/HomePage';
 import { PostDetailPage } from './pages/PostDetailPage';
 import { CreatePostPage } from './pages/CreatePostPage';
+import { EditPostPage } from './pages/EditPostPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { ChatListPage } from './pages/ChatListPage';
 import { ChatPage } from './pages/ChatPage';
@@ -47,6 +48,11 @@ const AppLayout = () => {
               </ProtectedRoute>
             } />
             <Route path="/posts/:id" element={<PostDetailPage />} />
+            <Route path="/posts/:id/edit" element={
+              <ProtectedRoute>
+                <EditPostPage />
+              </ProtectedRoute>
+            } />
             <Route path="/users" element={<UsersPage />} />
             <Route path="/my-orders" element={
               <ProtectedRoute>

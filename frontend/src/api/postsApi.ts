@@ -1,5 +1,11 @@
 import api from './axios';
-import type { Post, CreatePostRequest, Comment, CreateCommentRequest } from '../types';
+import type {
+  Post,
+  CreatePostRequest,
+  UpdatePostRequest,
+  Comment,
+  CreateCommentRequest,
+} from '../types';
 
 interface PostsResponse {
   content: Post[];
@@ -45,7 +51,7 @@ export const postsApi = {
     await api.delete(`/api/posts/${id}`);
   },
 
-  update: async (id: number, data: { title?: string; description?: string; status?: string; imageUrls?: string[] }): Promise<Post> => {
+  update: async (id: number, data: UpdatePostRequest): Promise<Post> => {
     const response = await api.put<Post>(`/api/posts/${id}`, data);
     return response.data;
   },

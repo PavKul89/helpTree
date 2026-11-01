@@ -127,6 +127,14 @@ export interface CreatePostRequest {
   imageUrls?: string[];
 }
 
+export interface UpdatePostRequest {
+  title?: string;
+  description?: string;
+  authorName?: string;
+  status?: Post['status'];
+  imageUrls?: string[];
+}
+
 export interface CreateCommentRequest {
   content: string;
   parentCommentId?: number;

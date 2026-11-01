@@ -3,16 +3,14 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { postsApi } from '../api/postsApi';
 import { helpApi } from '../api/helpApi';
 import { reviewApi } from '../api/reviewApi';
-import { imagesApi } from '../api/imagesApi';
 import { chatApi } from '../api/chatApi';
 import { authApi } from '../api/authApi';
 import type { Post, Comment, Help, Review } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/Toast';
-import { StatusBadge, getStatusColor, getStatusLabel } from '../components/StatusBadge';
+import { getStatusColor, getStatusLabel } from '../components/StatusBadge';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
-import { Spinner } from '../components/Spinner';
 import { Modal } from '../components/Modal';
 import { Avatar } from '../components/Avatar';
 import { PostDetailSkeleton } from '../components/Skeleton';
@@ -31,16 +29,14 @@ export const PostDetailPage = () => {
   const [replyingTo, setReplyingTo] = useState<number | null>(null);
   const [replyContent, setReplyContent] = useState('');
   const [loading, setLoading] = useState(true);
-  const [isEditing, setIsEditing] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
-  const [editForm, setEditForm] = useState({ title: '', description: '' });
   const [showDeletePostModal, setShowDeletePostModal] = useState(false);
-  const [showDeleteImageModal, setShowDeleteImageModal] = useState<string | null>(null);
   const [showFavoriteModal, setShowFavoriteModal] = useState(false);
   const [isBoosting, setIsBoosting] = useState(false);
   const { user } = useAuth();
   const { showToast } = useToast();
+  const postId = post?.id;
 
   useEffect(() => {
     loadData();
@@ -48,12 +44,12 @@ export const PostDetailPage = () => {
   }, [id]);
 
   useEffect(() => {
-    if (post && currentUserId) {
+    if (postId && currentUserId) {
       authApi.getFavorites(currentUserId)
-        .then(favs => setIsFavorite(favs.includes(post.id)))
+        .then(favs => setIsFavorite(favs.includes(postId)))
         .catch(console.error);
     }
-  }, [post?.id, currentUserId]);
+  }, [postId, currentUserId]);
 
   const loadData = async () => {
     try {
@@ -141,16 +137,6 @@ export const PostDetailPage = () => {
     setShowDeletePostModal(true);
   };
 
-  const handleEditPost = async () => {
-    try {
-      await postsApi.update(Number(id), { title: editForm.title, description: editForm.description });
-      setIsEditing(false);
-      loadData();
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
   const handleBoostPost = async () => {
     setIsBoosting(true);
     try {
@@ -184,29 +170,8 @@ export const PostDetailPage = () => {
   };
 
   const startEdit = () => {
-    setEditForm({ title: post!.title, description: post!.description });
-    setIsEditing(true);
-  };
-
-  const handleDeleteImageClick = (url: string) => {
-    setShowDeleteImageModal(url);
-  };
-
-  const handleDeleteImageConfirm = async () => {
-    if (!showDeleteImageModal || !post) return;
-    const url = showDeleteImageModal;
-    try {
-      const newImageUrls = post.imageUrls?.filter((img: string) => img !== url) || [];
-      await postsApi.update(Number(id), { imageUrls: newImageUrls });
-      try {
-        await imagesApi.delete(url);
-      } catch (e) {
-        console.log('Изображение уже удалено из хранилища');
-      }
-      loadData();
-    } catch (err: any) {
-      console.error('Error updating post:', err?.response?.data || err);
-    }
+    if (!post) return;
+    navigate(`/posts/${post.id}/edit`);
   };
 
   const handleDeleteComment = async (commentId: number) => {
@@ -259,38 +224,16 @@ export const PostDetailPage = () => {
       <Link to="/" style={styles.backLink}>← На главную</Link>
       
       <Card style={styles.mainCard}>
-        {isEditing ? (
-          <div>
-            <input
-              type="text"
-              value={editForm.title}
-              onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
-              style={styles.input}
-            />
-            <textarea
-              value={editForm.description}
-              onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-              style={{ ...styles.input, height: 100 }}
-            />
-            <div style={styles.buttonGroup}>
-              <Button onClick={handleEditPost} style={{ marginRight: 10 }}>Сохранить</Button>
-              <Button variant="outline" onClick={() => setIsEditing(false)}>Отмена</Button>
-            </div>
-          </div>
-        ) : (
-          <>
-            <div style={styles.headerRow}>
-              <span style={{ ...styles.statusBadgeLarge, backgroundColor: getStatusColor(post.status) }}>
-                <span style={styles.statusDot}>●</span>
-                {getStatusLabel(post.status)}
-              </span>
-              <span style={styles.category}>{post.category}</span>
-            </div>
-            
-            <h1 className="page-title" style={styles.title}>{post.title}</h1>
-            <p style={styles.description}>{post.description}</p>
-          </>
-        )}
+        <div style={styles.headerRow}>
+          <span style={{ ...styles.statusBadgeLarge, backgroundColor: getStatusColor(post.status) }}>
+            <span style={styles.statusDot}>●</span>
+            {getStatusLabel(post.status)}
+          </span>
+          <span style={styles.category}>{post.category}</span>
+        </div>
+
+        <h1 className="page-title" style={styles.title}>{post.title}</h1>
+        <p style={styles.description}>{post.description}</p>
 
         {post.imageUrls && post.imageUrls.length > 0 && (
           <div style={styles.heroImageContainer}>
@@ -434,16 +377,6 @@ export const PostDetailPage = () => {
         onConfirm={handleDeletePost}
         title="Удаление поста"
         message="Вы уверены, что хотите удалить этот пост? Это действие нельзя отменить."
-        confirmText="Удалить"
-        cancelText="Отмена"
-      />
-
-      <Modal
-        isOpen={!!showDeleteImageModal}
-        onClose={() => setShowDeleteImageModal(null)}
-        onConfirm={handleDeleteImageConfirm}
-        title="Удаление изображения"
-        message="Вы уверены, что хотите удалить это изображение?"
         confirmText="Удалить"
         cancelText="Отмена"
       />
@@ -776,68 +709,6 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '20px',
     marginBottom: '16px',
   },
-  imagesSection: {
-    marginTop: '24px',
-    paddingTop: '24px',
-    borderTop: `1px solid ${theme.colors.border}`,
-  },
-  imagesGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
-    gap: '16px',
-    marginTop: '16px',
-  },
-  imageWrapper: {
-    position: 'relative',
-    borderRadius: theme.borderRadius.lg,
-    overflow: 'hidden',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-    aspectRatio: '4/3',
-    cursor: 'pointer',
-    transition: 'all 0.3s ease',
-  },
-  image: {
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover',
-    transition: 'transform 0.3s ease',
-  },
-  imageOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    background: 'rgba(0,0,0,0.3)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    opacity: 0,
-    transition: 'opacity 0.3s ease',
-  },
-  imageOverlayVisible: {
-    opacity: 1,
-  },
-  removeImageBtn: {
-    position: 'absolute',
-    top: '8px',
-    right: '8px',
-    background: theme.colors.error,
-    color: 'white',
-    border: '2px solid rgba(255,255,255,0.8)',
-    borderRadius: '50%',
-    width: 28,
-    height: 28,
-    cursor: 'pointer',
-    fontSize: '18px',
-    fontWeight: 'bold',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 10,
-    transition: 'all 0.2s ease',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-  },
   meta: {
     marginTop: '20px',
     display: 'flex',
@@ -874,17 +745,6 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     gap: '12px',
   },
-  input: {
-    width: '100%',
-    padding: '12px',
-    fontSize: '15px',
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    border: `1px solid ${theme.colors.border}`,
-    borderRadius: theme.borderRadius.md,
-    color: theme.colors.text,
-    outline: 'none',
-    marginBottom: '12px',
-  },
   inputSmall: {
     padding: '8px 12px',
     fontSize: '14px',
@@ -894,11 +754,6 @@ const styles: Record<string, React.CSSProperties> = {
     color: theme.colors.text,
     outline: 'none',
     marginRight: '8px',
-  },
-  buttonGroup: {
-    display: 'flex',
-    gap: '12px',
-    marginTop: '12px',
   },
   textarea: {
     width: '100%',

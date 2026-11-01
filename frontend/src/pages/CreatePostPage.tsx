@@ -1,371 +1,86 @@
-import { useState, useRef } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { 
-  Star, FileText, Image, FolderOpen, AlertTriangle,
-  Loader2, Send, Sparkles
-} from 'lucide-react';
+import { useMemo } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { ArrowLeft, Leaf, ShieldCheck } from 'lucide-react';
 import { postsApi } from '../api/postsApi';
-import { imagesApi } from '../api/imagesApi';
-import { Card } from '../components/Card';
-import { Button } from '../components/Button';
-import { theme } from '../theme';
+import { PostForm } from '../components/PostForm';
 import { useToast } from '../components/Toast';
-import { CATEGORY_ICONS, CATEGORIES } from '../utils/categoryIcons';
+import { useAuth } from '../context/AuthContext';
+import '../components/PostForm.css';
 
 export const CreatePostPage = () => {
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [category, setCategory] = useState('Другое');
-  const [images, setImages] = useState<File[]>([]);
-  const [previews, setPreviews] = useState<string[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [errors, setErrors] = useState<{ title?: string; description?: string }>({});
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { showToast } = useToast();
 
-  const validate = () => {
-    const newErrors: { title?: string; description?: string } = {};
-    
-    if (!title.trim()) {
-      newErrors.title = 'Название обязательно';
-    } else if (title.trim().length < 5) {
-      newErrors.title = 'Название должно быть минимум 5 символов';
-    } else if (title.trim().length > 100) {
-      newErrors.title = 'Название должно быть не более 100 символов';
-    }
-    
-    if (!description.trim()) {
-      newErrors.description = 'Описание обязательно';
-    } else if (description.trim().length < 20) {
-      newErrors.description = 'Описание должно быть минимум 20 символов';
-    } else if (description.trim().length > 2000) {
-      newErrors.description = 'Описание должно быть не более 2000 символов';
-    }
-    
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
+  const initialValues = useMemo(
+    () => ({ title: '', description: '', category: '', imageUrls: [] }),
+    []
+  );
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    setImages([...images, ...files]);
-    const newPreviews = files.map((file) => URL.createObjectURL(file));
-    setPreviews([...previews, ...newPreviews]);
-  };
+  const previewAuthor = useMemo(
+    () => ({
+      name: user?.name || 'Вы',
+      avatarUrl: user?.avatarUrl,
+      rating: user?.rating,
+      city: user?.city,
+    }),
+    [user]
+  );
 
-  const removeImage = (index: number) => {
-    setImages(images.filter((_, i) => i !== index));
-    setPreviews(previews.filter((_, i) => i !== index));
-  };
+  const handleSubmit = async (payload: {
+    title: string;
+    description: string;
+    category: string;
+    imageUrls: string[];
+  }) => {
+    const created = await postsApi.create({
+      title: payload.title,
+      description: payload.description,
+      category: payload.category,
+      imageUrls: payload.imageUrls,
+    });
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    
-    if (!validate()) {
-      return;
-    }
-    
-    setLoading(true);
-    try {
-      let imageUrls: string[] = [];
-      if (images.length > 0) {
-        imageUrls = await imagesApi.uploadMultiple(images);
-      }
-      await postsApi.create({ title, description, category, imageUrls });
-      showToast('Пост успешно создан!', 'success');
-      navigate('/');
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Ошибка создания поста');
-      showToast(err.response?.data?.message || 'Ошибка создания поста', 'error');
-    } finally {
-      setLoading(false);
-    }
+    showToast('Заявка опубликована', 'success');
+    navigate(`/posts/${created.id}`, { replace: true });
   };
 
   return (
-    <div style={styles.container}>
-      <Link to="/" style={styles.backLink}>← На главную</Link>
-      <h1 className="page-title" style={styles.title}>Создать пост</h1>
-      {error && <div style={styles.errorBox}><AlertTriangle size={18} color="#fca5a5" /> {error}</div>}
-      <Card>
-        <form onSubmit={handleSubmit}>
-          <div style={styles.field}>
-            <label style={styles.label}>
-              <FileText size={18} style={styles.labelIcon as React.CSSProperties} /> Заголовок
-            </label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => { setTitle(e.target.value); setErrors({...errors, title: undefined}); }}
-              placeholder="Например: Нужно наколоть дрова"
-              style={{
-                ...styles.input,
-                ...(errors.title ? styles.inputError : {}),
-              }}
-            />
-            {errors.title && <div style={styles.errorText}>{errors.title}</div>}
-          </div>
-          <div style={styles.field}>
-            <label style={styles.label}>
-              <FileText size={18} style={styles.labelIcon as React.CSSProperties} /> Описание
-            </label>
-            <textarea
-              value={description}
-              onChange={(e) => { setDescription(e.target.value); setErrors({...errors, description: undefined}); }}
-              placeholder="Подробно опишите, какая помощь нужна..."
-              style={{
-                ...styles.input,
-                height: 150,
-                ...(errors.description ? styles.inputError : {}),
-              }}
-            />
-            {errors.description && <div style={styles.errorText}>{errors.description}</div>}
-          </div>
-          <div style={styles.field}>
-            <label style={styles.label}>
-              <Sparkles size={18} style={styles.labelIcon as React.CSSProperties} /> Категория
-            </label>
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              style={styles.select}
-            >
-              {CATEGORIES.map((cat) => {
-                const IconComponent = CATEGORY_ICONS[cat];
-                return (
-                  <option key={cat} value={cat}>
-                    {cat}
-                  </option>
-                );
-              })}
-            </select>
-          </div>
-          <div style={styles.field}>
-            <label style={styles.label}>
-              <Image size={18} style={styles.labelIcon as React.CSSProperties} /> Картинки
-            </label>
-            <div 
-              style={styles.uploadArea}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handleImageChange}
-                accept="image/*"
-                multiple
-                style={{ display: 'none' }}
-              />
-              <div style={styles.uploadContent}>
-                <FolderOpen size={40} color={theme.colors.accent} style={{ marginBottom: 8 }} />
-                <span style={styles.uploadText}>Нажмите или перетащите изображения</span>
-                <span style={styles.uploadHint}>PNG, JPG до 10MB</span>
-              </div>
-            </div>
-            {previews.length > 0 && (
-              <div style={styles.previewGrid}>
-                {previews.map((preview, index) => (
-                  <div key={index} style={styles.previewItem}>
-                    <img src={preview} alt="" style={styles.previewImage} />
-                    <button
-                      type="button"
-                      onClick={() => removeImage(index)}
-                      style={styles.removeBtn}
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          <Button type="submit" disabled={loading} style={styles.submitBtn}>
-            {loading ? (
-              <><Loader2 size={18} style={{ marginRight: 8, animation: 'spin 1s linear infinite' }} /> Создание...</>
-            ) : (
-              <><Send size={18} style={{ marginRight: 8 }} /> Создать пост</>
-            )}
-          </Button>
-        </form>
-      </Card>
+    <div className="post-editor-page">
+      <header className="post-editor-hero">
+        <Link to="/posts" className="post-editor-back">
+          <ArrowLeft size={15} aria-hidden="true" />
+          Назад в каталог
+        </Link>
+
+        <span className="post-editor-eyebrow">
+          <Leaf size={13} aria-hidden="true" />
+          Новая заявка
+        </span>
+
+        <h1>Расскажите, какая помощь вам нужна</h1>
+        <p>
+          Опишите свою ситуацию — возможно, рядом уже есть человек, который сможет помочь
+        </p>
+
+        <div className="post-editor-meta">
+          <span>
+            <ShieldCheck size={13} aria-hidden="true" />
+            Публикация бесплатна
+          </span>
+          <span className="post-editor-meta-dot" aria-hidden="true" />
+          <span>Заявка появится в каталоге сразу после публикации</span>
+        </div>
+      </header>
+
+      <PostForm
+        mode="create"
+        initialValues={initialValues}
+        previewAuthor={previewAuthor}
+        locationLabel={user?.city}
+        status="OPEN"
+        onSubmit={handleSubmit}
+        onCancel={() => navigate('/posts')}
+      />
     </div>
   );
-};
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    maxWidth: 700,
-    margin: '0 auto',
-    padding: '24px',
-  },
-  backLink: {
-    color: theme.colors.accentLight,
-    textDecoration: 'none',
-    fontSize: '14px',
-    display: 'inline-block',
-    marginBottom: '16px',
-  },
-  title: {
-    color: theme.colors.text,
-    fontSize: '28px',
-    marginBottom: '24px',
-    fontWeight: 700,
-  },
-  errorBox: {
-    background: 'rgba(239, 68, 68, 0.15)',
-    border: '1px solid rgba(239, 68, 68, 0.3)',
-    borderRadius: theme.borderRadius.md,
-    padding: '14px 18px',
-    color: '#FCA5A5',
-    marginBottom: '20px',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-  },
-  field: {
-    marginBottom: '24px',
-  },
-  label: {
-    display: 'flex',
-    alignItems: 'center',
-    color: theme.colors.textSecondary,
-    marginBottom: '10px',
-    fontSize: '15px',
-    fontWeight: 500,
-  },
-  labelIcon: {
-    marginRight: '8px',
-  },
-  input: {
-    width: '100%',
-    padding: '14px 18px',
-    fontSize: '16px',
-    background: 'rgba(255,255,255,0.08)',
-    border: '1px solid rgba(34, 211, 238, 0.2)',
-    borderRadius: theme.borderRadius.md,
-    color: theme.colors.text,
-    outline: 'none',
-    transition: 'all 0.3s ease',
-    boxSizing: 'border-box',
-  },
-  inputError: {
-    borderColor: '#ef4444',
-  },
-  errorText: {
-    color: '#ef4444',
-    fontSize: '13px',
-    marginTop: '6px',
-  },
-  select: {
-    width: '100%',
-    padding: '14px 40px 14px 18px',
-    fontSize: '16px',
-    background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.15) 0%, rgba(8, 145, 178, 0.15) 100%)',
-    border: '1px solid rgba(34, 211, 238, 0.3)',
-    borderRadius: theme.borderRadius.lg,
-    color: theme.colors.text,
-    outline: 'none',
-    cursor: 'pointer',
-    boxSizing: 'border-box',
-    appearance: 'none',
-    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 14 14'%3E%3Cpath fill='%2322d3ee' d='M7 9L2 4h10z'/%3E%3C/svg%3E")`,
-    backgroundRepeat: 'no-repeat',
-    backgroundPosition: 'right 14px center',
-    transition: 'all 0.2s ease',
-  },
-  categoryGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(3, 1fr)',
-    gap: '12px',
-  },
-  categoryItem: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '8px',
-    padding: '14px 16px',
-    background: 'rgba(255,255,255,0.08)',
-    border: '1px solid rgba(34, 211, 238, 0.2)',
-    borderRadius: theme.borderRadius.md,
-    cursor: 'pointer',
-    transition: 'all 0.3s ease',
-    fontSize: '14px',
-    color: theme.colors.textSecondary,
-  },
-  categoryItemActive: {
-    background: 'linear-gradient(135deg, rgba(34, 211, 238, 0.3) 0%, rgba(6, 182, 212, 0.3) 100%)',
-    border: '1px solid #22d3ee',
-    color: '#fff',
-    boxShadow: '0 0 15px rgba(34, 211, 238, 0.3)',
-  },
-  categoryIcon: {
-    fontSize: '20px',
-  },
-  uploadArea: {
-    border: '2px dashed rgba(34, 211, 238, 0.3)',
-    borderRadius: theme.borderRadius.lg,
-    padding: '32px',
-    textAlign: 'center',
-    cursor: 'pointer',
-    transition: 'all 0.3s ease',
-    background: 'rgba(255,255,255,0.03)',
-  },
-  uploadContent: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: '8px',
-  },
-  uploadText: {
-    color: theme.colors.text,
-    fontSize: '15px',
-  },
-  uploadHint: {
-    color: theme.colors.textMuted,
-    fontSize: '12px',
-  },
-  previewGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))',
-    gap: '12px',
-    marginTop: '16px',
-  },
-  previewItem: {
-    position: 'relative',
-    borderRadius: theme.borderRadius.md,
-    overflow: 'hidden',
-    aspectRatio: '1',
-  },
-  previewImage: {
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover',
-  },
-  removeBtn: {
-    position: 'absolute',
-    top: '4px',
-    right: '4px',
-    background: theme.colors.error,
-    color: 'white',
-    border: '2px solid rgba(255,255,255,0.8)',
-    borderRadius: '50%',
-    width: 24,
-    height: 24,
-    cursor: 'pointer',
-    fontSize: '14px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    transition: 'all 0.2s ease',
-  },
-  submitBtn: {
-    width: '100%',
-    padding: '16px',
-    fontSize: '16px',
-    fontWeight: 700,
-    marginTop: '8px',
-  },
 };

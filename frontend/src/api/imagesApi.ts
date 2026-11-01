@@ -1,3 +1,4 @@
+import type { AxiosProgressEvent } from 'axios';
 import api from './axios';
 
 export const imagesApi = {
@@ -8,10 +9,15 @@ export const imagesApi = {
     return response.data.url;
   },
 
-  uploadMultiple: async (files: File[]): Promise<string[]> => {
+  uploadMultiple: async (
+    files: File[],
+    onUploadProgress?: (event: AxiosProgressEvent) => void
+  ): Promise<string[]> => {
     const formData = new FormData();
     files.forEach((file) => formData.append('files', file));
-    const response = await api.post<{ urls: string[] }>('/api/images/multiple', formData);
+    const response = await api.post<{ urls: string[] }>('/api/images/multiple', formData, {
+      onUploadProgress,
+    });
     return response.data.urls;
   },
 
