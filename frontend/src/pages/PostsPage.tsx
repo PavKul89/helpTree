@@ -1,1053 +1,865 @@
-import { useEffect, useState, useCallback } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { MapPin, Star, Search, X, CircleDot, User, Zap, Settings, Pin, Sparkles } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import {
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  CircleSlash2,
+  LayoutGrid,
+  List,
+  LoaderCircle,
+  MapPin,
+  Plus,
+  RefreshCw,
+  RotateCcw,
+  Search,
+  SearchX,
+  SlidersHorizontal,
+  TreeDeciduous,
+  User,
+  X,
+} from 'lucide-react';
 import { postsApi } from '../api/postsApi';
 import { authApi } from '../api/authApi';
 import type { Post } from '../types';
-import { Card, Button, Spinner, EmptyState, Avatar, PostCardSkeleton } from '../components';
-import { StatusBadge, getStatusLabel } from '../components/StatusBadge';
-import { Pagination } from '../components/Pagination';
-import { CATEGORY_ICONS, CATEGORIES } from '../utils/categoryIcons';
-import { useToast } from '../components/Toast';
 import { useAuth } from '../context/AuthContext';
-import { theme } from '../theme';
-import { getRelativeTime } from '../utils/dateUtils';
+import { useToast } from '../components/Toast';
+import { CatalogFilters, POST_STATUSES } from '../components/CatalogFilters';
+import { PostCatalogCard } from '../components/PostCatalogCard';
+import { CATEGORIES } from '../utils/categoryIcons';
+import { getStatusLabel } from '../utils/statusHelpers';
+import './PostsPage.css';
 
-type PostStatus = 'OPEN' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+const PAGE_SIZE = 12;
 
-const FavoriteButton = ({ 
-  postId, 
-  isFavorite, 
-  onToggle,
-  disabled 
-}: { 
-  postId: number; 
-  isFavorite: boolean; 
-  onToggle: (postId: number, e: React.MouseEvent) => void;
-  disabled?: boolean;
-}) => {
-  if (disabled) return null;
-  
-  return (
-    <span 
-      onClick={(e) => onToggle(postId, e)}
-      className={isFavorite ? 'favorite-active' : ''}
-      style={{
-        fontSize: '20px',
-        cursor: 'pointer',
-        padding: '4px',
-        color: isFavorite ? '#FFD700' : 'rgba(255,255,255,0.5)',
-        textShadow: isFavorite ? '0 0 8px rgba(255, 215, 0, 0.8)' : 'none',
-        transition: 'all 0.3s ease',
-        display: 'inline-block',
-      }}
-      title={isFavorite ? "Убрать из избранного" : "В избранное"}
-    >
-      {isFavorite ? '★' : '☆'}
-    </span>
-  );
+type ViewMode = 'grid' | 'list';
+type SortMode = 'newest' | 'oldest';
+
+const SORT_API: Record<SortMode, string> = {
+  newest: 'createdAt,desc',
+  oldest: 'createdAt,asc',
 };
 
-const CATEGORY_FILTERS = ['Все', ...CATEGORIES];
+const isPostStatus = (value: string): value is Post['status'] =>
+  POST_STATUSES.includes(value as Post['status']);
 
-const STATUSES = ['Все', 'OPEN', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'Избранное'];
+const getPageItems = (current: number, pages: number): Array<number | 'gap'> => {
+  if (pages <= 7) return Array.from({ length: pages }, (_, index) => index);
+
+  const items: Array<number | 'gap'> = [0];
+  const start = Math.max(1, current - 1);
+  const end = Math.min(pages - 2, current + 1);
+
+  if (start > 1) items.push('gap');
+  for (let index = start; index <= end; index += 1) items.push(index);
+  if (end < pages - 2) items.push('gap');
+  items.push(pages - 1);
+
+  return items;
+};
+
+interface MobileFilterDraft {
+  category: string;
+  status: string;
+  city: string;
+  author: string;
+}
+
+const EMPTY_DRAFT: MobileFilterDraft = { category: '', status: '', city: '', author: '' };
 
 export const PostsPage = () => {
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [searchInput, setSearchInput] = useState('');
-  const [authorSearch, setAuthorSearch] = useState('');
-  const [authorInput, setAuthorInput] = useState('');
-  const [category, setCategory] = useState('Все');
-  const [status, setStatus] = useState('Все');
-  const [city, setCity] = useState('');
-  const [cityInput, setCityInput] = useState('');
-  const [page, setPage] = useState(0);
-  const [totalPages, setTotalPages] = useState(0);
-  const [favorites, setFavorites] = useState<number[]>([]);
-  const location = useLocation();
-  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
-  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
-  const [currentUserCity, setCurrentUserCity] = useState<string>('');
-  const [showFilters, setShowFilters] = useState(false);
   const { showToast } = useToast();
+  const navigate = useNavigate();
 
-  const hasActiveFilters = category !== 'Все' || status !== 'Все' || city || authorSearch;
-  const activeFilterCount = [category !== 'Все', status !== 'Все', !!city, !!authorSearch].filter(Boolean).length;
+  const q = searchParams.get('q') ?? '';
+  const rawCategory = searchParams.get('category') ?? '';
+  const category = CATEGORIES.includes(rawCategory) ? rawCategory : '';
+  const rawStatus = searchParams.get('status') ?? '';
+  const status: Post['status'] | '' = isPostStatus(rawStatus) ? rawStatus : '';
+  const city = searchParams.get('city') ?? '';
+  const author = searchParams.get('author') ?? '';
+  const sort: SortMode = searchParams.get('sort') === 'oldest' ? 'oldest' : 'newest';
+  const view: ViewMode = searchParams.get('view') === 'list' ? 'list' : 'grid';
+  const rawPage = Number.parseInt(searchParams.get('page') ?? '0', 10);
+  const page = Number.isNaN(rawPage) || rawPage < 0 ? 0 : rawPage;
 
-  const loadPosts = useCallback(async (pageNum = 0, searchTerm?: string, newCategory?: string, newStatus?: string, newCity?: string, newAuthorSearch?: string) => {
-    try {
-      const searchToUse = searchTerm !== undefined ? searchTerm : search;
-      const cat = newCategory !== undefined ? newCategory : category;
-      const stat = newStatus !== undefined ? newStatus : status;
-      const cit = newCity !== undefined ? newCity : city;
-      const author = newAuthorSearch !== undefined ? newAuthorSearch : authorSearch;
-      const params: any = { page: pageNum, size: 10 };
-      if (searchToUse) params.title = searchToUse;
-      if (author) params.authorName = author;
-      if (cat !== 'Все') params.category = cat;
-      if (stat !== 'Все') params.status = stat;
-      if (cit) params.city = cit;
-      const data = await postsApi.getAll(params);
-      setPosts(data.content);
-      setTotalPages(data.totalPages);
-      setPage(data.number);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  }, [search, authorSearch, category, status, city]);
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(false);
+  const [reloadTick, setReloadTick] = useState(0);
+  // Page number the currently stored response belongs to. Used to avoid
+  // clamping the URL before the very first response arrives (totalPages is 0
+  // while loading, which would otherwise drop a deep link like ?page=2).
+  const [loadedPage, setLoadedPage] = useState<number | null>(null);
+
+  const [favorites, setFavorites] = useState<number[]>([]);
+
+  const [searchInput, setSearchInput] = useState(q);
+  const [cityDraft, setCityDraft] = useState(city);
+  const [authorDraft, setAuthorDraft] = useState(author);
+
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [draft, setDraft] = useState<MobileFilterDraft>(EMPTY_DRAFT);
+
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const resultsRef = useRef<HTMLDivElement>(null);
+  const requestRef = useRef(0);
+  const hasLoadedRef = useRef(false);
+
+  const applyParams = useCallback(
+    (
+      updates: Record<string, string | null>,
+      options?: { replace?: boolean; resetPage?: boolean }
+    ) => {
+      setSearchParams(
+        (previous) => {
+          const next = new URLSearchParams(previous);
+          Object.entries(updates).forEach(([key, value]) => {
+            if (value === null || value === '') next.delete(key);
+            else next.set(key, value);
+          });
+          if (options?.resetPage !== false) next.delete('page');
+          return next;
+        },
+        { replace: options?.replace ?? false }
+      );
+    },
+    [setSearchParams]
+  );
+
+  // Keep the visible inputs in sync with the URL (browser back/forward,
+  // shared links, chips removal).
+  useEffect(() => {
+    setSearchInput(q);
+  }, [q]);
 
   useEffect(() => {
-    setSearch('');
-    setSearchInput('');
-    setAuthorSearch('');
-    setAuthorInput('');
-    setCategory('Все');
-    setStatus('Все');
-    setCity('');
-    setCityInput('');
-    setPage(0);
-    loadPosts(0, '');
-    
-    authApi.getCurrentUser()
-      .then(user => {
-        console.log('Current user:', user);
-        setCurrentUserId(user.id);
-        if ('city' in user && user.city) {
-          setCurrentUserCity(user.city);
-        }
-        return authApi.getFavorites(user.id);
-      })
-      .then(favs => {
-        console.log('Favorites loaded:', favs);
-        setFavorites(favs);
-      })
-      .catch(err => console.error('Error loading user:', err));
-  }, [location.key]);
+    setCityDraft(city);
+  }, [city]);
 
   useEffect(() => {
-    console.log('User changed:', user);
-    if (user) {
-      authApi.getFavorites(user.id)
-        .then(favs => {
-          console.log('Favorites loaded (user effect):', favs);
-          setFavorites(favs);
-        })
-        .catch(err => console.error('Error loading favorites:', err));
+    setAuthorDraft(author);
+  }, [author]);
+
+  // Debounced server-side search. The URL is the single source of truth,
+  // so the same request path is used for typing, Enter and clearing.
+  useEffect(() => {
+    const trimmed = searchInput.trim();
+    if (trimmed === q) return undefined;
+
+    const timer = window.setTimeout(() => {
+      applyParams({ q: trimmed || null }, { replace: true });
+    }, 420);
+
+    return () => window.clearTimeout(timer);
+  }, [searchInput, q, applyParams]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const sequence = ++requestRef.current;
+
+    if (hasLoadedRef.current) setRefreshing(true);
+    else setLoading(true);
+    setError(false);
+
+    const params: {
+      page: number;
+      size: number;
+      sort: string;
+      title?: string;
+      category?: string;
+      status?: string;
+      city?: string;
+      authorName?: string;
+    } = { page, size: PAGE_SIZE, sort: SORT_API[sort] };
+
+    if (q) params.title = q;
+    if (category) params.category = category;
+    if (status) params.status = status;
+    if (city) params.city = city;
+    if (author) params.authorName = author;
+
+    postsApi
+      .getAll(params, controller.signal)
+      .then((data) => {
+        if (sequence !== requestRef.current) return;
+        setPosts(data.content);
+        setTotal(data.totalElements);
+        setTotalPages(data.totalPages);
+        setLoadedPage(page);
+        hasLoadedRef.current = true;
+        setLoading(false);
+        setRefreshing(false);
+      })
+      .catch((requestError) => {
+        if (controller.signal.aborted || sequence !== requestRef.current) return;
+        console.error('Failed to load posts', requestError);
+        setError(true);
+        setLoading(false);
+        setRefreshing(false);
+      });
+
+    return () => controller.abort();
+  }, [q, category, status, city, author, sort, page, reloadTick]);
+
+  // If the URL points past the last page (e.g. after a filter narrowed the
+  // results), move to the closest valid page instead of showing an empty grid.
+  // Only act on data that actually belongs to the page in the URL.
+  useEffect(() => {
+    if (loadedPage !== page) return;
+
+    if (totalPages > 0 && page >= totalPages) {
+      setSearchParams(
+        (previous) => {
+          const next = new URLSearchParams(previous);
+          const lastPage = totalPages - 1;
+          if (lastPage <= 0) next.delete('page');
+          else next.set('page', String(lastPage));
+          return next;
+        },
+        { replace: true }
+      );
+    } else if (totalPages === 0 && page > 0) {
+      setSearchParams(
+        (previous) => {
+          const next = new URLSearchParams(previous);
+          next.delete('page');
+          return next;
+        },
+        { replace: true }
+      );
     }
+  }, [page, totalPages, loadedPage, setSearchParams]);
+
+  useEffect(() => {
+    if (!user) {
+      setFavorites([]);
+      return undefined;
+    }
+
+    let cancelled = false;
+    authApi
+      .getFavorites(user.id)
+      .then((ids) => {
+        if (!cancelled) setFavorites(ids);
+      })
+      .catch((favoriteError) => {
+        // Favorites are an enhancement — the catalogue must still work.
+        console.error('Failed to load favorites', favoriteError);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [user]);
 
   useEffect(() => {
-    console.log('Favorites state changed:', favorites);
-  }, [favorites]);
+    if (!sheetOpen) return undefined;
 
-  useEffect(() => {
-    if (status === 'Избранное' && favorites.length > 0) {
-      setLoading(true);
-      postsApi.getByIds(favorites)
-        .then(data => setPosts(data))
-        .catch(console.error)
-        .finally(() => setLoading(false));
-    } else if (status !== 'Избранное') {
-      loadPosts(page);
-    }
-  }, [status, page]);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setSheetOpen(false);
+    };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.addEventListener('keydown', onKeyDown);
 
-  const handleStatusChange = (value: string) => {
-    setStatus(value);
-    if (value !== 'Избранное') {
-      setLoading(true);
-      loadPosts(0, undefined, undefined, value);
-    }
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [sheetOpen]);
+
+  const hasActiveFilters = Boolean(q || category || status || city || author);
+  const activeCount = [q, category, status, city, author].filter(Boolean).length;
+  const isBlocked = Boolean(user?.blockedAt);
+
+  const submitSearch = () => {
+    const trimmed = searchInput.trim();
+    applyParams({ q: trimmed || null });
   };
 
-  const toggleFavorite = async (postId: number, e: React.MouseEvent, status: string) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!currentUserId) return;
-    
-    if (status !== 'OPEN') {
-      showToast('Нельзя добавить в избранное пост, который уже в работе или завершён', 'info');
-      return;
-    }
-    
-    const currentFavorites = favorites;
-    const isFav = currentFavorites.includes(postId);
-    const newFavorites = isFav 
-      ? currentFavorites.filter(id => id !== postId)
-      : [...currentFavorites, postId];
-    
-    console.log('Toggle favorite:', postId, 'isFav:', isFav, 'newFavorites:', newFavorites);
-    setFavorites(newFavorites);
-    
-    try {
-      if (isFav) {
-        await authApi.removeFavorite(currentUserId, postId);
-      } else {
-        await authApi.addFavorite(currentUserId, postId);
-      }
-    } catch (err) {
-      console.error('Favorite toggle failed:', err);
-      setFavorites(currentFavorites);
-    }
-  };
-
-  const handleSearch = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    setSearch(searchInput);
-    setLoading(true);
-    loadPosts(0, searchInput);
+  const clearSearch = () => {
+    setSearchInput('');
+    applyParams({ q: null }, { replace: true });
+    searchInputRef.current?.focus();
   };
 
   const handleCategoryChange = (value: string) => {
-    setCategory(value);
-    setLoading(true);
-    loadPosts(0, undefined, value);
+    if (value === category) return;
+    applyParams({ category: value || null });
   };
 
-  const handleCityChange = (value: string) => {
-    setCity(value);
-    setLoading(true);
-    loadPosts(0);
+  const handleStatusChange = (value: string) => {
+    if (value === status) return;
+    applyParams({ status: value || null });
   };
 
-  const handleCityInputChange = (value: string) => {
-    setCityInput(value);
+  const applyTextFilters = () => {
+    const nextCity = cityDraft.trim();
+    const nextAuthor = authorDraft.trim();
+    if (nextCity === city && nextAuthor === author) return;
+    applyParams({ city: nextCity || null, author: nextAuthor || null });
   };
 
-  const handleCitySearch = () => {
-    setCity(cityInput);
-    setLoading(true);
-    loadPosts(0, undefined, undefined, undefined, cityInput);
+  const handleUseUserCity = () => {
+    if (!user?.city) return;
+    setCityDraft(user.city);
+    applyParams({ city: user.city });
   };
 
-  const handleMyCity = () => {
-    setCity(currentUserCity);
-    setCityInput(currentUserCity);
-    setLoading(true);
-    loadPosts(0, undefined, undefined, undefined, currentUserCity);
-  };
+  const resetAllFilters = useCallback(() => {
+    setSearchInput('');
+    setCityDraft('');
+    setAuthorDraft('');
+    setDraft(EMPTY_DRAFT);
+    applyParams({ q: null, category: null, status: null, city: null, author: null });
+  }, [applyParams]);
 
-  const handlePageChange = (newPage: number) => {
-    setLoading(true);
-    loadPosts(newPage);
-  };
+  const toggleFavorite = useCallback(
+    async (post: Post) => {
+      if (!user) {
+        navigate('/login');
+        return;
+      }
+      if (post.status !== 'OPEN' || post.userId === user.id) return;
 
-  if (loading) return (
-    <>
-      <div style={styles.container} className="page-content">
-        <div style={styles.stickyContainer}>
-          <header className="page-header" style={styles.header}>
-            <h1 className="page-title" style={styles.title}>Посты о помощи</h1>
-          </header>
-        </div>
-        <div style={styles.masonry}>
-          {[1, 2, 3, 4, 5, 6].map((i) => (
-            <PostCardSkeleton key={i} />
-          ))}
-        </div>
-      </div>
-    </>
+      const wasFavorite = favorites.includes(post.id);
+      setFavorites((current) =>
+        wasFavorite ? current.filter((id) => id !== post.id) : [...current, post.id]
+      );
+
+      try {
+        if (wasFavorite) await authApi.removeFavorite(user.id, post.id);
+        else await authApi.addFavorite(user.id, post.id);
+      } catch (favoriteError) {
+        console.error('Failed to update favorite', favoriteError);
+        setFavorites((current) =>
+          wasFavorite ? [...current, post.id] : current.filter((id) => id !== post.id)
+        );
+        showToast('Не удалось обновить избранное', 'error');
+      }
+    },
+    [user, favorites, navigate, showToast]
   );
 
+  const goToPage = (nextPage: number) => {
+    if (nextPage < 0 || nextPage >= totalPages || nextPage === page) return;
+    applyParams(
+      { page: nextPage === 0 ? null : String(nextPage) },
+      { resetPage: false }
+    );
+    const reduceMotion =
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    resultsRef.current?.scrollIntoView({
+      behavior: reduceMotion ? 'auto' : 'smooth',
+      block: 'start',
+    });
+  };
+
+  const handleSortChange = (value: string) => {
+    if (value === sort) return;
+    applyParams({ sort: value === 'oldest' ? 'oldest' : null });
+  };
+
+  const handleViewChange = (nextView: ViewMode) => {
+    if (nextView === view) return;
+    applyParams(
+      { view: nextView === 'grid' ? null : nextView },
+      { resetPage: false, replace: true }
+    );
+  };
+
+  const openSheet = () => {
+    setDraft({ category, status, city: cityDraft, author: authorDraft });
+    setSheetOpen(true);
+  };
+
+  const applySheet = () => {
+    applyParams({
+      category: draft.category || null,
+      status: draft.status || null,
+      city: draft.city.trim() || null,
+      author: draft.author.trim() || null,
+    });
+    setSheetOpen(false);
+  };
+
+  const activeChips = useMemo(() => {
+    const chips: Array<{
+      key: string;
+      label: string;
+      icon?: React.ReactNode;
+      onRemove: () => void;
+    }> = [];
+
+    if (q) {
+      chips.push({
+        key: 'q',
+        label: `Поиск: ${q}`,
+        icon: <Search size={12} aria-hidden="true" />,
+        onRemove: () => {
+          setSearchInput('');
+          applyParams({ q: null }, { replace: true });
+        },
+      });
+    }
+    if (category) {
+      chips.push({
+        key: 'category',
+        label: category,
+        onRemove: () => applyParams({ category: null }),
+      });
+    }
+    if (status) {
+      chips.push({
+        key: 'status',
+        label: getStatusLabel(status),
+        onRemove: () => applyParams({ status: null }),
+      });
+    }
+    if (city) {
+      chips.push({
+        key: 'city',
+        label: city,
+        icon: <MapPin size={12} aria-hidden="true" />,
+        onRemove: () => {
+          setCityDraft('');
+          applyParams({ city: null });
+        },
+      });
+    }
+    if (author) {
+      chips.push({
+        key: 'author',
+        label: `Автор: ${author}`,
+        icon: <User size={12} aria-hidden="true" />,
+        onRemove: () => {
+          setAuthorDraft('');
+          applyParams({ author: null });
+        },
+      });
+    }
+
+    return chips;
+  }, [q, category, status, city, author, applyParams]);
+
+  const pageItems = useMemo(() => getPageItems(page, totalPages), [page, totalPages]);
+
+  const showSkeleton = !error && posts.length === 0 && (loading || refreshing);
+  const showEmpty = !loading && !refreshing && !error && posts.length === 0;
+  const showPagination = !error && !loading && !refreshing && totalPages > 1;
+
   return (
-    <div style={styles.container} className="page-content">
-      <div style={styles.stickyContainer}>
-        <header className="page-header" style={styles.header}>
-          <h1 className="page-title" style={styles.title}>Посты о помощи</h1>
-        </header>
+    <div className="catalog-page">
+      <header className="catalog-hero">
+        <div className="catalog-hero-text">
+          <h1>Найдите возможность помочь</h1>
+          <p>Здесь люди делятся своими потребностями и находят поддержку сообщества.</p>
+        </div>
 
-        <div style={styles.filters}>
-          <div style={styles.searchContainer}>
-            <div style={styles.searchForm}>
-              <input
-                type="text"
-                placeholder="Поиск постов..."
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                style={styles.searchInput}
-              />
-              <Button onClick={handleSearch} style={styles.searchBtn}>
-                <Search size={16} />
-              </Button>
-            </div>
-          </div>
-          <button 
-            onClick={() => setShowFilters(!showFilters)}
-            style={{
-              ...styles.filterToggle,
-              ...(showFilters || hasActiveFilters ? styles.filterToggleActive : {}),
-            }}
+        {isBlocked ? (
+          <button
+            type="button"
+            className="catalog-create is-disabled"
+            aria-disabled="true"
+            title="Создание заявок недоступно: аккаунт заблокирован"
+            onClick={() =>
+              showToast(
+                'Ваш аккаунт заблокирован за долг. Помогите другим пользователям, чтобы разблокировать аккаунт.',
+                'error'
+              )
+            }
           >
-            <Settings size={16} style={{marginRight: 6}} /> 
-            Фильтры
-            {hasActiveFilters && <span style={styles.filterCount}>{activeFilterCount}</span>}
+            <Plus size={17} aria-hidden="true" />
+            Создать заявку
           </button>
-          {user && 'blockedAt' in user && user.blockedAt ? (
-            <Button onClick={() => showToast('Ваш аккаунт заблокирован за долг. Помогите другим пользователям!', 'error')} disabled>
-              + Создать пост
-            </Button>
-          ) : (
-            <Link to="/posts/new">
-              <Button>+ Создать пост</Button>
-            </Link>
-          )}
-        </div>
-
-        <div style={{
-          ...styles.filterPanelWrapper,
-          maxHeight: showFilters ? '500px' : '0',
-          opacity: showFilters ? 1 : 0,
-          marginTop: showFilters ? '12px' : '0',
-          overflow: 'hidden',
-          transition: 'all 0.3s ease',
-        }}>
-          <div style={styles.filterPanel}>
-          <div style={styles.filterSection}>
-            <div style={styles.filterSectionHeader}>
-              <Sparkles size={14} style={{marginRight: 6}} />
-              Категория
-            </div>
-            <div style={styles.chipContainer}>
-              {CATEGORY_FILTERS.map((cat) => (
-                <button
-                  key={cat}
-                  onClick={() => handleCategoryChange(cat)}
-                  style={{
-                    ...styles.chip,
-                    ...(category === cat ? styles.chipActive : {}),
-                  }}
-                >
-                  {cat === 'Все' ? 'Все' : cat}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div style={styles.filterSection}>
-            <div style={styles.filterSectionHeader}>
-              <CircleDot size={14} style={{marginRight: 6}} />
-              Статус
-            </div>
-            <div style={styles.chipContainer}>
-              {STATUSES.map((s) => (
-                <button
-                  key={s}
-                  onClick={() => handleStatusChange(s)}
-                  style={{
-                    ...styles.chip,
-                    ...(status === s ? styles.chipActive : {}),
-                  }}
-                >
-                  {s === 'Все' ? 'Все' : getStatusLabel(s)}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div style={styles.filterSection}>
-            <div style={styles.filterSectionHeader}>
-              <User size={14} style={{marginRight: 6}} />
-              Автор
-            </div>
-            <div style={styles.cityFilter}>
-              <input
-                type="text"
-                placeholder="Имя автора..."
-                value={authorInput}
-                onChange={(e) => setAuthorInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    setAuthorSearch(authorInput);
-                    loadPosts(0, undefined, undefined, undefined, undefined, authorInput);
-                  }
-                }}
-                style={styles.cityInput}
-              />
-              <Button onClick={() => {
-                setAuthorSearch(authorInput);
-                loadPosts(0, undefined, undefined, undefined, undefined, authorInput);
-              }} style={styles.cityBtn}>
-                <Search size={14} />
-              </Button>
-            </div>
-          </div>
-
-          <div style={styles.filterSection}>
-            <div style={styles.filterSectionHeader}>
-              <MapPin size={14} style={{marginRight: 6}} />
-              Город
-            </div>
-            <div style={styles.cityFilter}>
-              <input
-                type="text"
-                placeholder="Введите город..."
-                value={cityInput}
-                onChange={(e) => handleCityInputChange(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleCitySearch()}
-                style={styles.cityInput}
-              />
-              <Button onClick={handleCitySearch} style={styles.cityBtn}>
-                <Search size={14} />
-              </Button>
-              {currentUserCity && (
-                <Button onClick={handleMyCity} style={styles.myCityBtn}>
-                  <MapPin size={14} />
-                </Button>
-              )}
-            </div>
-          </div>
-
-          {hasActiveFilters && (
-            <button 
-              onClick={() => {
-                setCategory('Все');
-                setStatus('Все');
-                setCity('');
-                setCityInput('');
-                setAuthorSearch('');
-                setAuthorInput('');
-                loadPosts(0, '', 'Все', 'Все', '', '');
-              }}
-              style={styles.clearBtn}
-            >
-              <X size={14} style={{marginRight: 4}} /> Очистить все
-            </button>
-          )}
-        </div>
-      </div>
-
-      <div style={styles.activeFilters}>
-        {authorSearch && (
-          <span style={styles.filterChip}>
-            <User size={12} style={{marginRight: 4}} />
-            Автор: {authorSearch}
-            <button 
-              onClick={() => { setAuthorSearch(''); setAuthorInput(''); loadPosts(0, undefined, undefined, undefined, undefined, ''); }}
-              style={styles.chipRemove}
-            >
-              <X size={12} />
-            </button>
-          </span>
-        )}
-        {category !== 'Все' && (
-          <span style={styles.filterChip}>
-            {category}
-            <button 
-              onClick={() => { setCategory('Все'); loadPosts(0, undefined, 'Все'); }}
-              style={styles.chipRemove}
-            >
-              <X size={12} />
-            </button>
-          </span>
-        )}
-        {status !== 'Все' && (
-          <span style={styles.filterChip}>
-            {getStatusLabel(status)}
-            <button 
-              onClick={() => { setStatus('Все'); loadPosts(0, undefined, undefined, 'Все'); }}
-              style={styles.chipRemove}
-            >
-              <X size={12} />
-            </button>
-          </span>
-        )}
-        {city && (
-          <span style={styles.filterChip}>
-            <MapPin size={12} style={{marginRight: 4}} />
-            {city}
-            <button 
-              onClick={() => { setCity(''); setCityInput(''); loadPosts(0, undefined, undefined, undefined, ''); }}
-              style={styles.chipRemove}
-            >
-              <X size={12} />
-            </button>
-          </span>
-        )}
-      </div>
-      </div>
-
-      <div style={styles.resultsInfo}>
-        Найдено постов: <span style={styles.resultsCount}>{posts.length}</span>
-      </div>
-
-      <div style={styles.masonry}>
-        {posts.map((post) => (
-          <Link key={post.id} to={`/posts/${post.id}`} style={styles.cardLink}>
-            <Card hoverable style={styles.postCard}>
-              {post.imageUrls && post.imageUrls.length > 0 ? (
-                <div style={styles.imageContainer}>
-                  <img 
-                    src={post.imageUrls[0]} 
-                    alt={post.title}
-                    style={styles.postImage}
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = 'none';
-                    }}
-                  />
-                  <div style={{ ...styles.imageStatusBadge, ...statusBadgeStyles[post.status] }}>
-                    <span style={statusDotStyles[post.status]}>●</span>
-                    {getStatusLabel(post.status)}
-                  </div>
-                  {post.imageUrls.length > 1 && (
-                    <div style={styles.imageOverlay}>
-                      <span style={styles.imageCount}>+{post.imageUrls.length - 1}</span>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div style={{ ...styles.imageContainer, background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <div style={{ ...styles.imageStatusBadge, ...statusBadgeStyles[post.status] }}>
-                    <span style={statusDotStyles[post.status]}>●</span>
-                    {getStatusLabel(post.status)}
-                  </div>
-                  {(() => {
-                    const IconComp = CATEGORY_ICONS[post.category];
-                    return IconComp ? <IconComp size={48} color={theme.colors.accent} style={{ opacity: 0.3 }} /> : <Pin size={48} color={theme.colors.accent} style={{ opacity: 0.3 }} />;
-                  })()}
-                </div>
-              )}
-              <div style={styles.cardContent}>
-                <div style={styles.postHeader}>
-                  <div style={styles.categoryRow}>
-                    {(() => {
-                      const IconComp = CATEGORY_ICONS[post.category];
-                      return IconComp ? <IconComp size={16} color={theme.colors.accent} /> : <Pin size={16} color={theme.colors.accent} />;
-                    })()}
-                    <span style={styles.category}>{post.category}</span>
-                  </div>
-                  <FavoriteButton 
-                    postId={post.id} 
-                    isFavorite={favorites.includes(post.id)} 
-                    onToggle={(postId, e) => toggleFavorite(postId, e, post.status)}
-                    disabled={user?.id === post.userId}
-                  />
-                </div>
-                <h3 style={styles.postTitle}>{post.title}</h3>
-                <p style={styles.postDescription}>
-                  {post.description.length > 120 
-                    ? post.description.substring(0, 120) + '...' 
-                    : post.description}
-                </p>
-                <div style={styles.postFooter}>
-                  <div style={styles.author}>
-                    <Avatar name={post.authorName} avatarUrl={post.authorAvatarUrl} size="small" showName withRating={post.authorRating} clickable userId={post.userId} />
-                  </div>
-                  <div style={styles.metaRight}>
-                    {post.userCity && <span style={styles.city}><MapPin size={12} style={{marginRight: 4}} />{post.userCity}</span>}
-                    <span style={post.boosted ? styles.boostedDate : styles.date}>
-                      {post.boosted && <Zap size={12} style={{marginRight: 4}} />}
-                      {post.boosted ? 'В топе' : getRelativeTime(post.createdAt)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </Card>
+        ) : (
+          <Link to="/posts/new" className="catalog-create">
+            <Plus size={17} aria-hidden="true" />
+            Создать заявку
           </Link>
-        ))}
+        )}
+      </header>
+
+      <form
+        className="catalog-search"
+        role="search"
+        onSubmit={(event) => {
+          event.preventDefault();
+          submitSearch();
+        }}
+      >
+        <div className="catalog-search-box">
+          <Search className="catalog-search-icon" size={20} aria-hidden="true" />
+          <input
+            ref={searchInputRef}
+            type="search"
+            value={searchInput}
+            placeholder="Поиск по названию или описанию заявки..."
+            aria-label="Поиск по названию или описанию заявки"
+            autoComplete="off"
+            onChange={(event) => setSearchInput(event.target.value)}
+          />
+          {searchInput && (
+            <button
+              type="button"
+              className="catalog-search-clear"
+              aria-label="Очистить поиск"
+              onClick={clearSearch}
+            >
+              <X size={16} aria-hidden="true" />
+            </button>
+          )}
+        </div>
+        <button type="submit" className="catalog-search-submit">
+          <Search size={17} aria-hidden="true" />
+          <span>Найти</span>
+        </button>
+      </form>
+
+      <div className="catalog-filters-panel">
+        <CatalogFilters
+          idPrefix="catalog-desktop"
+          category={category}
+          status={status}
+          city={cityDraft}
+          author={authorDraft}
+          userCity={user?.city}
+          onCategoryChange={handleCategoryChange}
+          onStatusChange={handleStatusChange}
+          onCityChange={setCityDraft}
+          onAuthorChange={setAuthorDraft}
+          onUseUserCity={handleUseUserCity}
+          onSubmit={applyTextFilters}
+        />
+        <div className="catalog-filter-actions">
+          <button type="button" className="catalog-btn catalog-btn--primary" onClick={applyTextFilters}>
+            <Search size={15} aria-hidden="true" />
+            Применить
+          </button>
+          <button
+            type="button"
+            className="catalog-btn catalog-btn--ghost"
+            onClick={resetAllFilters}
+            disabled={!hasActiveFilters}
+          >
+            <RotateCcw size={15} aria-hidden="true" />
+            Сбросить
+          </button>
+        </div>
       </div>
 
-      {posts.length === 0 && (
-        <EmptyState 
-          variant="posts"
-          title="Постов пока нет" 
-          description="Будьте первым, кто создаст пост о помощи!"
-          action={
-            <Link to="/posts/new">
-              <Button>+ Создать пост</Button>
-            </Link>
-          }
-        />
+      <button type="button" className="catalog-mobile-filters" onClick={openSheet}>
+        <SlidersHorizontal size={17} aria-hidden="true" />
+        Фильтры
+        {activeCount > 0 && <span className="catalog-filter-count">{activeCount}</span>}
+      </button>
+
+      {activeChips.length > 0 && (
+        <div className="catalog-active">
+          {activeChips.map((chip) => (
+            <span className="catalog-chip" key={chip.key}>
+              {chip.icon}
+              <span className="catalog-chip-label">{chip.label}</span>
+              <button
+                type="button"
+                aria-label={`Убрать фильтр: ${chip.label}`}
+                onClick={chip.onRemove}
+              >
+                <X size={12} aria-hidden="true" />
+              </button>
+            </span>
+          ))}
+          <button type="button" className="catalog-chip-clear-all" onClick={resetAllFilters}>
+            Сбросить все
+          </button>
+        </div>
       )}
 
-      {totalPages > 1 && (
-        <div style={styles.pagination}>
-          <Button
-            variant="outline"
+      <div className="catalog-results-bar" ref={resultsRef}>
+        <div className="catalog-results-count" aria-live="polite">
+          {loading ? (
+            <span>Загружаем заявки…</span>
+          ) : error && posts.length === 0 ? (
+            <span>Не удалось загрузить заявки</span>
+          ) : (
+            <span>
+              Найдено заявок: <strong>{total}</strong>
+              {totalPages > 1 && (
+                <span className="catalog-page-info">
+                  {' '}
+                  · страница {page + 1} из {totalPages}
+                </span>
+              )}
+            </span>
+          )}
+          {refreshing && <LoaderCircle className="catalog-spin" size={14} aria-label="Обновление" />}
+        </div>
+
+        <div className="catalog-results-tools">
+          <div className="catalog-sort">
+            <select
+              aria-label="Сортировка заявок"
+              value={sort}
+              onChange={(event) => handleSortChange(event.target.value)}
+            >
+              <option value="newest">Сначала новые</option>
+              <option value="oldest">Сначала старые</option>
+            </select>
+            <ChevronDown size={15} aria-hidden="true" />
+          </div>
+
+          <div className="catalog-view-toggle" role="group" aria-label="Вид отображения">
+            <button
+              type="button"
+              className={view === 'grid' ? 'is-active' : ''}
+              aria-pressed={view === 'grid'}
+              aria-label="Показать сеткой"
+              title="Сетка"
+              onClick={() => handleViewChange('grid')}
+            >
+              <LayoutGrid size={16} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className={view === 'list' ? 'is-active' : ''}
+              aria-pressed={view === 'list'}
+              aria-label="Показать списком"
+              title="Список"
+              onClick={() => handleViewChange('list')}
+            >
+              <List size={16} aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {error && posts.length > 0 && (
+        <div className="catalog-error-banner" role="alert">
+          <RefreshCw size={16} aria-hidden="true" />
+          <span>Не удалось обновить результаты.</span>
+          <button type="button" onClick={() => setReloadTick((tick) => tick + 1)}>
+            Повторить
+          </button>
+        </div>
+      )}
+
+      {showSkeleton && (
+        <div className={`catalog-grid${view === 'list' ? ' catalog-grid--list' : ''}`} aria-label="Загрузка заявок">
+          {Array.from({ length: 6 }, (_, index) => (
+            <div
+              className={`catalog-card catalog-card--skeleton${
+                view === 'list' ? ' catalog-card--list' : ''
+              }`}
+              key={index}
+              aria-hidden="true"
+            >
+              <div className="catalog-skeleton-media" />
+              <div className="catalog-skeleton-body">
+                <span className="catalog-skel catalog-skel--tag" />
+                <span className="catalog-skel catalog-skel--title" />
+                <span className="catalog-skel catalog-skel--title catalog-skel--short" />
+                <span className="catalog-skel catalog-skel--line" />
+                <span className="catalog-skel catalog-skel--line catalog-skel--short" />
+                <span className="catalog-skel catalog-skel--footer" />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {posts.length > 0 && (
+        <div
+          className={`catalog-grid${view === 'list' ? ' catalog-grid--list' : ''}${
+            refreshing ? ' catalog-results--refreshing' : ''
+          }`}
+          aria-busy={refreshing}
+        >
+          {posts.map((post, index) => (
+            <PostCatalogCard
+              key={post.id}
+              post={post}
+              view={view}
+              index={index}
+              isFavorite={favorites.includes(post.id)}
+              canFavorite={post.status === 'OPEN' && (!user || user.id !== post.userId)}
+              onToggleFavorite={toggleFavorite}
+            />
+          ))}
+        </div>
+      )}
+
+      {showEmpty && (
+        <div className="catalog-state">
+          <span className="catalog-state-icon">
+            {hasActiveFilters ? <SearchX size={27} aria-hidden="true" /> : <TreeDeciduous size={27} aria-hidden="true" />}
+          </span>
+          <h2>{hasActiveFilters ? 'Ничего не найдено' : 'Пока заявок нет'}</h2>
+          <p>
+            {hasActiveFilters
+              ? 'Попробуйте изменить поисковый запрос или сбросить часть фильтров.'
+              : 'Попробуйте изменить фильтры или поискать в другой категории.'}
+          </p>
+          <div className="catalog-state-actions">
+            {hasActiveFilters ? (
+              <button type="button" className="catalog-btn catalog-btn--primary" onClick={resetAllFilters}>
+                <RotateCcw size={15} aria-hidden="true" />
+                Сбросить фильтры
+              </button>
+            ) : (
+              user &&
+              !isBlocked && (
+                <Link to="/posts/new" className="catalog-btn catalog-btn--primary">
+                  <Plus size={15} aria-hidden="true" />
+                  Создать заявку
+                </Link>
+              )
+            )}
+          </div>
+        </div>
+      )}
+
+      {error && posts.length === 0 && (
+        <div className="catalog-state catalog-state--error">
+          <span className="catalog-state-icon">
+            <CircleSlash2 size={27} aria-hidden="true" />
+          </span>
+          <h2>Не удалось загрузить заявки</h2>
+          <p>Проверьте соединение и попробуйте ещё раз.</p>
+          <div className="catalog-state-actions">
+            <button
+              type="button"
+              className="catalog-btn catalog-btn--primary"
+              onClick={() => setReloadTick((tick) => tick + 1)}
+            >
+              <RefreshCw size={15} aria-hidden="true" />
+              Повторить
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showPagination && (
+        <nav className="catalog-pagination" aria-label="Пагинация заявок">
+          <button
+            type="button"
+            className="catalog-page-btn catalog-page-btn--arrow"
+            onClick={() => goToPage(page - 1)}
             disabled={page === 0}
-            onClick={() => handlePageChange(page - 1)}
+            aria-label="Предыдущая страница"
           >
-            ← Назад
-          </Button>
-          <span style={styles.pageInfo}>
+            <ChevronLeft size={16} aria-hidden="true" />
+            <span className="catalog-page-arrow-text">Назад</span>
+          </button>
+
+          <div className="catalog-pagination-pages">
+            {pageItems.map((item, index) =>
+              item === 'gap' ? (
+                <span className="catalog-page-ellipsis" key={`gap-${index}`} aria-hidden="true">
+                  …
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  key={item}
+                  className={`catalog-page-btn${item === page ? ' is-active' : ''}`}
+                  aria-current={item === page ? 'page' : undefined}
+                  aria-label={`Страница ${item + 1}`}
+                  onClick={() => goToPage(item)}
+                >
+                  {item + 1}
+                </button>
+              )
+            )}
+          </div>
+
+          <span className="catalog-pagination-compact">
             Страница {page + 1} из {totalPages}
           </span>
-          <Button
-            variant="outline"
+
+          <button
+            type="button"
+            className="catalog-page-btn catalog-page-btn--arrow"
+            onClick={() => goToPage(page + 1)}
             disabled={page >= totalPages - 1}
-            onClick={() => handlePageChange(page + 1)}
+            aria-label="Следующая страница"
           >
-            Вперёд →
-          </Button>
+            <span className="catalog-page-arrow-text">Вперёд</span>
+            <ChevronRight size={16} aria-hidden="true" />
+          </button>
+        </nav>
+      )}
+
+      {sheetOpen && (
+        <div
+          className="catalog-sheet-backdrop"
+          role="presentation"
+          onClick={() => setSheetOpen(false)}
+        >
+          <div
+            className="catalog-sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="catalog-sheet-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="catalog-sheet-grab" aria-hidden="true" />
+            <div className="catalog-sheet-head">
+              <h2 id="catalog-sheet-title">Фильтры</h2>
+              <button
+                type="button"
+                className="catalog-sheet-close"
+                onClick={() => setSheetOpen(false)}
+                aria-label="Закрыть фильтры"
+                autoFocus
+              >
+                <X size={18} aria-hidden="true" />
+              </button>
+            </div>
+
+            <div className="catalog-sheet-body">
+              <CatalogFilters
+                idPrefix="catalog-mobile"
+                category={draft.category}
+                status={draft.status}
+                city={draft.city}
+                author={draft.author}
+                userCity={user?.city}
+                onCategoryChange={(value) => setDraft((current) => ({ ...current, category: value }))}
+                onStatusChange={(value) => setDraft((current) => ({ ...current, status: value }))}
+                onCityChange={(value) => setDraft((current) => ({ ...current, city: value }))}
+                onAuthorChange={(value) => setDraft((current) => ({ ...current, author: value }))}
+                onUseUserCity={() =>
+                  setDraft((current) => ({ ...current, city: user?.city || '' }))
+                }
+              />
+            </div>
+
+            <div className="catalog-sheet-actions">
+              <button
+                type="button"
+                className="catalog-btn catalog-btn--ghost"
+                onClick={() => setDraft(EMPTY_DRAFT)}
+                disabled={
+                  !draft.category && !draft.status && !draft.city.trim() && !draft.author.trim()
+                }
+              >
+                <RotateCcw size={15} aria-hidden="true" />
+                Сбросить
+              </button>
+              <button type="button" className="catalog-btn catalog-btn--primary" onClick={applySheet}>
+                Показать результаты
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
   );
-};
-
-const statusBadgeStyles: Record<PostStatus, React.CSSProperties> = {
-  OPEN: {
-    background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(5, 150, 105, 0.3) 100%)',
-    border: '1px solid rgba(16, 185, 129, 0.5)',
-    color: '#34d399',
-    fontSize: '11px',
-    fontWeight: 600,
-    padding: '4px 10px',
-    borderRadius: '20px',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    textTransform: 'uppercase' as const,
-    letterSpacing: '0.5px',
-  },
-  IN_PROGRESS: {
-    background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.2) 0%, rgba(14, 165, 233, 0.3) 100%)',
-    border: '1px solid rgba(56, 189, 248, 0.5)',
-    color: '#38bdf8',
-    fontSize: '11px',
-    fontWeight: 600,
-    padding: '4px 10px',
-    borderRadius: '20px',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    textTransform: 'uppercase' as const,
-    letterSpacing: '0.5px',
-  },
-  COMPLETED: {
-    background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, rgba(217, 119, 6, 0.3) 100%)',
-    border: '1px solid rgba(245, 158, 11, 0.5)',
-    color: '#fbbf24',
-    fontSize: '11px',
-    fontWeight: 600,
-    padding: '4px 10px',
-    borderRadius: '20px',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    textTransform: 'uppercase' as const,
-    letterSpacing: '0.5px',
-  },
-  CANCELLED: {
-    background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(220, 38, 38, 0.3) 100%)',
-    border: '1px solid rgba(239, 68, 68, 0.5)',
-    color: '#f87171',
-    fontSize: '11px',
-    fontWeight: 600,
-    padding: '4px 10px',
-    borderRadius: '20px',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    textTransform: 'uppercase' as const,
-    letterSpacing: '0.5px',
-  },
-};
-
-const statusDotStyles: Record<PostStatus, React.CSSProperties> = {
-  OPEN: { color: '#34d399', fontSize: '10px' },
-  IN_PROGRESS: { color: '#38bdf8', fontSize: '10px' },
-  COMPLETED: { color: '#fbbf24', fontSize: '10px' },
-  CANCELLED: { color: '#f87171', fontSize: '10px' },
-};
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    padding: '24px',
-  },
-  stickyContainer: {
-    position: 'sticky',
-    top: 0,
-    zIndex: 100,
-    background: 'linear-gradient(180deg, rgba(6, 95, 70, 0.98) 0%, rgba(2, 44, 34, 0.99) 100%)',
-    backdropFilter: 'blur(24px)',
-    padding: '24px 28px 20px',
-    margin: '0 0 28px',
-    borderRadius: '16px',
-    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
-  },
-  header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '20px',
-    flexWrap: 'wrap',
-    gap: '16px',
-  },
-  title: {
-    color: theme.colors.text,
-    fontSize: '28px',
-    fontWeight: 700,
-    margin: 0,
-    letterSpacing: '-0.5px',
-    background: 'linear-gradient(135deg, #fff 0%, rgba(6, 182, 212, 0.9) 100%)',
-    WebkitBackgroundClip: 'text',
-    WebkitTextFillColor: 'transparent',
-    backgroundClip: 'text',
-  },
-  filters: {
-    display: 'flex',
-    gap: '16px',
-    marginBottom: '16px',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-  },
-  searchContainer: {
-    flex: 1,
-    minWidth: '300px',
-    maxWidth: '480px',
-  },
-  searchForm: {
-    display: 'flex',
-    gap: '10px',
-  },
-  searchInput: {
-    flex: 1,
-    padding: '12px 18px',
-    fontSize: '15px',
-    background: 'rgba(0, 0, 0, 0.2)',
-    border: `1px solid rgba(255,255,255,0.1)`,
-    borderRadius: '50px',
-    color: theme.colors.text,
-    outline: 'none',
-    transition: 'all 0.3s ease',
-  },
-  searchBtn: {
-    padding: '12px 18px',
-    whiteSpace: 'nowrap',
-    borderRadius: '50px',
-  },
-  filterToggle: {
-    background: 'rgba(0, 0, 0, 0.2)',
-    border: `1px solid rgba(255,255,255,0.1)`,
-    borderRadius: '50px',
-    color: theme.colors.textSecondary,
-    padding: '12px 20px',
-    fontSize: '14px',
-    cursor: 'pointer',
-    transition: 'all 0.3s ease',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-  },
-  filterToggleActive: {
-    background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.3) 0%, rgba(6, 182, 212, 0.2) 100%)',
-    borderColor: theme.colors.accent,
-    color: theme.colors.accentLight,
-    boxShadow: '0 0 20px rgba(6, 182, 212, 0.2)',
-  },
-  filterCount: {
-    background: theme.colors.accent,
-    color: '#fff',
-    fontSize: '11px',
-    fontWeight: 700,
-    padding: '3px 8px',
-    borderRadius: '12px',
-    marginLeft: '6px',
-    boxShadow: '0 2px 8px rgba(6, 182, 212, 0.4)',
-  },
-  filterPanelWrapper: {
-    background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.08) 0%, rgba(2, 44, 34, 0.15) 100%)',
-    borderRadius: '20px',
-    border: `1px solid rgba(6, 182, 212, 0.2)`,
-    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3), 0 0 40px rgba(6, 182, 212, 0.05)',
-  },
-  filterPanel: {
-    display: 'flex',
-    gap: '28px',
-    flexWrap: 'wrap',
-    padding: '24px',
-    background: 'linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.04) 100%)',
-    borderRadius: '16px',
-    alignItems: 'flex-start',
-    border: `1px solid rgba(255,255,255,0.08)`,
-    boxShadow: '0 4px 24px rgba(0, 0, 0, 0.2) inset',
-  },
-  filterSection: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '12px',
-    minWidth: '220px',
-  },
-  filterSectionHeader: {
-    color: theme.colors.accentLight,
-    fontSize: '11px',
-    fontWeight: 600,
-    textTransform: 'uppercase',
-    letterSpacing: '1px',
-    display: 'flex',
-    alignItems: 'center',
-  },
-  chipContainer: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: '10px',
-  },
-  chip: {
-    background: 'rgba(0, 0, 0, 0.2)',
-    border: '1px solid rgba(255,255,255,0.1)',
-    borderRadius: '50px',
-    padding: '10px 18px',
-    fontSize: '13px',
-    color: theme.colors.textSecondary,
-    cursor: 'pointer',
-    transition: 'all 0.3s ease',
-    fontWeight: 500,
-  },
-  chipActive: {
-    background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.35) 0%, rgba(6, 182, 212, 0.25) 100%)',
-    borderColor: theme.colors.accent,
-    color: theme.colors.accentLight,
-    fontWeight: 600,
-    boxShadow: '0 4px 15px rgba(6, 182, 212, 0.25)',
-  },
-  clearBtn: {
-    background: 'rgba(239, 68, 68, 0.15)',
-    border: '1px solid rgba(239, 68, 68, 0.4)',
-    borderRadius: '50px',
-    color: '#fca5a5',
-    padding: '10px 18px',
-    fontSize: '14px',
-    cursor: 'pointer',
-    transition: 'all 0.3s ease',
-    display: 'flex',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    marginTop: 'auto',
-  },
-  activeFilters: {
-    display: 'flex',
-    gap: '10px',
-    flexWrap: 'wrap',
-    marginTop: '16px',
-  },
-  filterChip: {
-    background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.25) 0%, rgba(6, 182, 212, 0.15) 100%)',
-    border: '1px solid rgba(6, 182, 212, 0.4)',
-    borderRadius: '50px',
-    padding: '8px 12px 8px 16px',
-    fontSize: '13px',
-    color: theme.colors.accentLight,
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    boxShadow: '0 2px 10px rgba(6, 182, 212, 0.15)',
-  },
-  chipRemove: {
-    background: 'rgba(255,255,255,0.1)',
-    border: 'none',
-    borderRadius: '50%',
-    width: '20px',
-    height: '20px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    cursor: 'pointer',
-    padding: 0,
-    color: theme.colors.accentLight,
-    transition: 'all 0.2s',
-  },
-  cityFilter: {
-    display: 'flex',
-    gap: '10px',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-  },
-  cityInput: {
-    padding: '10px 16px',
-    fontSize: '14px',
-    background: 'rgba(0, 0, 0, 0.2)',
-    border: `1px solid rgba(255,255,255,0.1)`,
-    borderRadius: '50px',
-    color: theme.colors.text,
-    outline: 'none',
-    width: '180px',
-  },
-  cityBtn: {
-    padding: '10px 16px',
-    whiteSpace: 'nowrap',
-    borderRadius: '50px',
-  },
-  myCityBtn: {
-    padding: '10px 16px',
-    whiteSpace: 'nowrap',
-    background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.25) 0%, rgba(5, 150, 105, 0.25) 100%)',
-    border: '1px solid rgba(16, 185, 129, 0.5)',
-    borderRadius: '50px',
-  },
-  resultsInfo: {
-    color: theme.colors.textSecondary,
-    fontSize: '14px',
-    marginBottom: '16px',
-    padding: '12px 16px',
-    background: 'rgba(0, 0, 0, 0.15)',
-    borderRadius: theme.borderRadius.md,
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-  },
-  resultsCount: {
-    color: theme.colors.accentLight,
-    fontWeight: 700,
-    fontSize: '16px',
-  },
-  masonry: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-    gap: '20px',
-    gridAutoRows: 'auto',
-  },
-  cardLink: {
-    textDecoration: 'none',
-    display: 'block',
-  },
-  postCard: {
-    height: '100%',
-    display: 'flex',
-    flexDirection: 'column',
-    overflow: 'hidden',
-    padding: 0,
-  },
-  imageContainer: {
-    position: 'relative',
-    width: '100%',
-    height: '220px',
-    overflow: 'hidden',
-    borderRadius: '16px 16px 0 0',
-  },
-  postImage: {
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover',
-    transition: 'transform 0.4s ease',
-  },
-  imageStatusBadge: {
-    position: 'absolute',
-    top: '12px',
-    left: '12px',
-    padding: '6px 12px',
-    borderRadius: '20px',
-    fontSize: '11px',
-    fontWeight: 600,
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    textTransform: 'uppercase' as const,
-    letterSpacing: '0.5px',
-    backdropFilter: 'blur(8px)',
-    zIndex: 2,
-  },
-  imageOverlay: {
-    position: 'absolute',
-    bottom: '8px',
-    right: '8px',
-    background: 'rgba(0,0,0,0.7)',
-    borderRadius: '8px',
-    padding: '4px 8px',
-  },
-  imageCount: {
-    color: '#fff',
-    fontSize: '12px',
-    fontWeight: 600,
-  },
-  cardContent: {
-    padding: '16px',
-    display: 'flex',
-    flexDirection: 'column',
-    flex: 1,
-  },
-  postHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: '8px',
-    marginBottom: '10px',
-  },
-  categoryRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    marginBottom: '10px',
-  },
-  categoryIcon: {
-    fontSize: '16px',
-  },
-  category: {
-    color: theme.colors.accentLight,
-    fontSize: '13px',
-    fontWeight: 500,
-  },
-  favoriteBtn: {
-    background: 'transparent',
-    border: 'none',
-    fontSize: '20px',
-    cursor: 'pointer',
-    padding: '4px',
-    color: 'rgba(255,255,255,0.5)',
-  },
-  postTitle: {
-    color: theme.colors.text,
-    fontSize: '17px',
-    fontWeight: 600,
-    margin: '0 0 10px 0',
-    lineHeight: 1.3,
-  },
-  postDescription: {
-    color: theme.colors.textSecondary,
-    fontSize: '14px',
-    lineHeight: 1.5,
-    flex: 1,
-    margin: 0,
-  },
-  postFooter: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: '14px',
-    paddingTop: '14px',
-    borderTop: `1px solid ${theme.colors.border}`,
-    flexWrap: 'wrap',
-    gap: '8px',
-  },
-  author: {
-    display: 'flex',
-    alignItems: 'center',
-  },
-  metaRight: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-  },
-  city: {
-    color: theme.colors.accentLight,
-    fontSize: '12px',
-    fontWeight: 500,
-  },
-  date: {
-    color: theme.colors.textMuted,
-    fontSize: '12px',
-  },
-  boostedDate: {
-    color: '#f59e0b',
-    fontSize: '12px',
-    fontWeight: 600,
-    display: 'flex',
-    alignItems: 'center',
-  },
-  pagination: {
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: '16px',
-    marginTop: '32px',
-  },
-  pageInfo: {
-    color: theme.colors.textSecondary,
-    fontSize: '14px',
-  },
 };

@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { TreeDeciduous, Users, Heart, FileText, Loader2 } from 'lucide-react';
+import { TreeDeciduous, Users, Heart, FileText, LoaderCircle } from 'lucide-react';
 import { statsApi } from '../api/statsApi';
-import { theme } from '../theme';
 import './Footer.css';
 
 interface NavItem {
@@ -11,9 +10,11 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { label: 'Посты', path: '/' },
-  { label: 'Достижения', path: '/achievements' },
+  { label: 'Главная', path: '/' },
+  { label: 'Все заявки', path: '/posts' },
   { label: 'Карта', path: '/map' },
+  { label: 'Граф помощи', path: '/graph' },
+  { label: 'Достижения', path: '/achievements' },
   { label: 'Мои заказы', path: '/my-orders' },
 ];
 
@@ -47,8 +48,12 @@ export const Footer: React.FC = () => {
         <div className="footer-grid">
           <div className="footer-brand">
             <div className="footer-logo">
-              <TreeDeciduous size={28} color={theme.colors.accent} />
-              <span className="footer-logo-text">helpTree</span>
+              <span className="footer-logo-mark" aria-hidden="true">
+                <TreeDeciduous size={22} strokeWidth={1.8} />
+              </span>
+              <span className="footer-logo-text">
+                help<span>Tree</span>
+              </span>
             </div>
             <p className="footer-description">
               Платформа взаимопомощи для сообщества. Помогайте другим и получайте помощь в ответ.
@@ -70,25 +75,37 @@ export const Footer: React.FC = () => {
             <h4 className="footer-stats-title">Сообщество</h4>
             <div className="footer-stats-list">
               <div className="footer-stat-item">
-                <Users size={18} color={theme.colors.accent} />
+                <Users size={18} aria-hidden="true" />
                 <span className="footer-stat-value">
-                  {loading ? <Loader2 size={14} className="footer-spinner" /> : stats?.totalUsers.toLocaleString('ru-RU')}
+                  {loading ? (
+                    <LoaderCircle size={14} className="footer-spinner" />
+                  ) : (
+                    stats?.totalUsers.toLocaleString('ru-RU') ?? '—'
+                  )}
                 </span>
-                <span className="footer-stat-label">пользователей</span>
+                <span className="footer-stat-label">участников</span>
               </div>
               <div className="footer-stat-item">
-                <Heart size={18} color="#10b981" />
+                <Heart size={18} aria-hidden="true" />
                 <span className="footer-stat-value">
-                  {loading ? <Loader2 size={14} className="footer-spinner" /> : stats?.totalHelps.toLocaleString('ru-RU')}
+                  {loading ? (
+                    <LoaderCircle size={14} className="footer-spinner" />
+                  ) : (
+                    stats?.totalHelps.toLocaleString('ru-RU') ?? '—'
+                  )}
                 </span>
                 <span className="footer-stat-label">актов помощи</span>
               </div>
               <div className="footer-stat-item">
-                <FileText size={18} color="#f59e0b" />
+                <FileText size={18} aria-hidden="true" />
                 <span className="footer-stat-value">
-                  {loading ? <Loader2 size={14} className="footer-spinner" /> : stats?.activePosts.toLocaleString('ru-RU')}
+                  {loading ? (
+                    <LoaderCircle size={14} className="footer-spinner" />
+                  ) : (
+                    stats?.activePosts.toLocaleString('ru-RU') ?? '—'
+                  )}
                 </span>
-                <span className="footer-stat-label">активных постов</span>
+                <span className="footer-stat-label">открытых заявок</span>
               </div>
             </div>
           </div>

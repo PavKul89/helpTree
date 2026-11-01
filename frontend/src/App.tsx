@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { PostsPage } from './pages/PostsPage';
+import { HomePage } from './pages/HomePage';
 import { PostDetailPage } from './pages/PostDetailPage';
 import { CreatePostPage } from './pages/CreatePostPage';
 import { ProfilePage } from './pages/ProfilePage';
@@ -38,7 +39,8 @@ const AppLayout = () => {
           <Routes>
             <Route path="/login" element={<Navigate to="/" />} />
             <Route path="/register" element={<Navigate to="/" />} />
-            <Route path="/" element={<PostsPage />} />
+            <Route path="/" element={<HomePage />} />
+            <Route path="/posts" element={<PostsPage />} />
             <Route path="/posts/new" element={
               <ProtectedRoute>
                 <CreatePostPage />
@@ -154,21 +156,17 @@ function App() {
             padding: 0;
           }
           select {
-            background-color: #065F46 !important;
-            color: #ffffff !important;
-            border: 1px solid rgba(255, 255, 255, 0.2) !important;
+            background-color: #102d20 !important;
+            color: #f5f8f1 !important;
+            border: 1px solid rgba(180, 225, 155, 0.2) !important;
           }
           select option {
-            background-color: #065F46 !important;
-            color: #ffffff !important;
+            background-color: #102d20 !important;
+            color: #f5f8f1 !important;
           }
           select:hover {
-            border-color: #22d3ee !important;
-            box-shadow: 0 0 10px rgba(34, 211, 238, 0.3);
-          }
-          input:hover, input:focus, textarea:hover, textarea:focus {
-            border-color: #22d3ee !important;
-            box-shadow: 0 0 15px rgba(34, 211, 238, 0.3) !important;
+            border-color: rgba(200, 245, 106, 0.6) !important;
+            box-shadow: 0 0 10px rgba(200, 245, 106, 0.18);
           }
           .post-card:hover {
             box-shadow: 0 12px 24px -4px rgba(0, 0, 0, 0.3);
@@ -183,7 +181,7 @@ function App() {
 
 const styles: Record<string, React.CSSProperties> = {
   main: {
-    padding: '24px',
+    padding: 0,
   },
   loading: {
     display: 'flex',

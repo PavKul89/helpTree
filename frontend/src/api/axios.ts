@@ -33,9 +33,26 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('token');
-      window.location.href = '/login';
+      const config = error.config || {};
+      const url = String(config.url || '');
+      const hadToken = Boolean(
+        config.headers?.Authorization ||
+          config.headers?.authorization ||
+          localStorage.getItem('accessToken') ||
+          localStorage.getItem('token')
+      );
+      const isAuthRequest = url.includes('/api/auth/');
+      const isAuthPage =
+        window.location.pathname.startsWith('/login') ||
+        window.location.pathname.startsWith('/register');
+
+      if (hadToken && !isAuthRequest) {
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('token');
+        if (!isAuthPage) {
+          window.location.href = '/login';
+        }
+      }
     }
     return Promise.reject(error);
   }

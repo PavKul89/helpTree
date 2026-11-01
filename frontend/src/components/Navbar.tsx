@@ -1,17 +1,45 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { chatApi } from '../api/chatApi';
 import { authApi } from '../api/authApi';
 import { walletApi } from '../api/walletApi';
 import { useWebSocketChat } from '../hooks/useWebSocketChat';
-import { theme } from '../theme';
-import { Map, GitBranch, Trophy, ClipboardList, User, Star, Package, MessageCircle, AlertTriangle, Ban, Plus, Coins } from 'lucide-react';
+import {
+  Map,
+  GitBranch,
+  Trophy,
+  ClipboardList,
+  User,
+  Star,
+  Package,
+  MessageCircle,
+  AlertTriangle,
+  Ban,
+  Plus,
+  Coins,
+  ChevronDown,
+  Leaf,
+  LogOut,
+  Menu,
+  X,
+} from 'lucide-react';
 import type { Chat } from '../types';
+import './Navbar.css';
+
+const getInitials = (name: string): string =>
+  name
+    .split(' ')
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
 
 export const Navbar: React.FC = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [chats, setChats] = useState<Chat[]>([]);
   const [debtWarning, setDebtWarning] = useState<number | null>(null);
   const [isBlocked, setIsBlocked] = useState(false);
@@ -19,6 +47,7 @@ export const Navbar: React.FC = () => {
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [helpCoins, setHelpCoins] = useState<number>(0);
   const [isVip, setIsVip] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const handleChatUpdated = useCallback((updatedChat: Chat) => {
@@ -53,6 +82,11 @@ export const Navbar: React.FC = () => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    setOpenDropdown(null);
+    setMobileOpen(false);
+  }, [location.pathname, location.search]);
 
   useEffect(() => {
     if (user) {
@@ -122,11 +156,8 @@ export const Navbar: React.FC = () => {
 
   const handleLogout = () => {
     logout();
+    setMobileOpen(false);
     navigate('/login');
-  };
-
-  const handleLogoClick = () => {
-    navigate('/');
   };
 
   const toggleDropdown = (name: string) => {
@@ -144,279 +175,239 @@ export const Navbar: React.FC = () => {
 
   const closeDropdown = () => {
     setOpenDropdown(null);
+    setMobileOpen(false);
   };
 
-  return (
-    <nav style={styles.navbar}>
-      <div style={styles.container}>
-        <div onClick={handleLogoClick} style={styles.logo}>
-          <svg viewBox="0 0 100 120" width="40" height="48">
-            <path d="M50 120 L50 70" stroke="#065F46" strokeWidth="4" fill="none"/>
-            <circle cx="50" cy="40" r="25" fill="#059669" opacity="0.9"/>
-            <circle cx="38" cy="48" r="16" fill="#10b981" opacity="0.8"/>
-            <circle cx="62" cy="48" r="16" fill="#10b981" opacity="0.8"/>
-            <circle cx="50" cy="28" r="16" fill="#34d399" opacity="0.7"/>
-          </svg>
-          <span style={styles.logoText}>helpTree</span>
-        </div>
+  const isActive = (path: string): boolean => {
+    if (path === '/') return location.pathname === '/';
+    return location.pathname === path || location.pathname.startsWith(`${path}/`);
+  };
 
-        <div style={styles.links} ref={dropdownRef}>
-          <div onClick={handleLogoClick} style={styles.link}>Главная</div>
-          
-          <div style={styles.dropdownWrapper}>
-            <button 
-              style={styles.dropdownTrigger}
+  const unreadChats = chats.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
+
+  const communityLinks = (
+    <>
+      <Link to="/map" className="navbar-dropdown-item" onClick={closeDropdown}>
+        <Map size={16} aria-hidden="true" /> Карта
+      </Link>
+      <Link to="/graph" className="navbar-dropdown-item" onClick={closeDropdown}>
+        <GitBranch size={16} aria-hidden="true" /> Граф помощи
+      </Link>
+      <Link to="/achievements" className="navbar-dropdown-item" onClick={closeDropdown}>
+        <Trophy size={16} aria-hidden="true" /> Достижения
+      </Link>
+      {user && (
+        <Link to="/activity" className="navbar-dropdown-item" onClick={closeDropdown}>
+          <ClipboardList size={16} aria-hidden="true" /> Активность
+        </Link>
+      )}
+    </>
+  );
+
+  return (
+    <nav className="navbar">
+      <div className="navbar-container">
+        <Link to="/" className="navbar-logo" onClick={closeDropdown} aria-label="HelpTree — на главную">
+          <span className="navbar-logo-mark" aria-hidden="true">
+            <Leaf size={20} strokeWidth={1.8} />
+          </span>
+          <span className="navbar-logo-text">
+            help<span>Tree</span>
+          </span>
+        </Link>
+
+        <div className="navbar-links" ref={dropdownRef}>
+          <Link to="/" className={`navbar-link ${isActive('/') ? 'navbar-link--active' : ''}`}>
+            Главная
+          </Link>
+          <Link to="/posts" className={`navbar-link ${isActive('/posts') ? 'navbar-link--active' : ''}`}>
+            Заявки
+          </Link>
+
+          <div className="navbar-dropdown-wrapper">
+            <button
+              type="button"
+              className={`navbar-link navbar-dropdown-trigger ${openDropdown === 'community' ? 'navbar-link--active' : ''}`}
               onClick={() => toggleDropdown('community')}
-              onMouseEnter={() => user && setOpenDropdown('community')}
+              aria-haspopup="true"
+              aria-expanded={openDropdown === 'community'}
             >
-              Сообщество ▾
+              Сообщество
+              <ChevronDown size={15} aria-hidden="true" />
             </button>
-            {(openDropdown === 'community' || !user) && (
-              <div style={styles.dropdown}>
-                <Link to="/map" style={styles.dropdownItem} onClick={closeDropdown}>
-                  <Map size={16} style={{marginRight: 8}} /> Карта
-                </Link>
-                <Link to="/graph" style={styles.dropdownItem} onClick={closeDropdown}>
-                  <GitBranch size={16} style={{marginRight: 8}} /> Граф помощи
-                </Link>
-                <Link to="/achievements" style={styles.dropdownItem} onClick={closeDropdown}>
-                  <Trophy size={16} style={{marginRight: 8}} /> Достижения
-                </Link>
-                {user && (
-                  <Link to="/activity" style={styles.dropdownItem} onClick={closeDropdown}>
-                    <ClipboardList size={16} style={{marginRight: 8}} /> Активность
-                  </Link>
-                )}
-              </div>
+            {openDropdown === 'community' && (
+              <div className="navbar-dropdown">{communityLinks}</div>
             )}
           </div>
 
           {user && (
-            <>
-              <div style={styles.dropdownWrapper}>
-                <button 
-                  style={styles.dropdownTrigger}
-                  onClick={() => toggleDropdown('profile')}
-                  onMouseEnter={() => {
-                    setOpenDropdown('profile');
-                    walletApi.getWallet(user.id)
-                      .then(wallet => setHelpCoins(wallet.balance))
-                      .catch(console.error);
+            <div className="navbar-dropdown-wrapper">
+              <button
+                type="button"
+                className={`navbar-link navbar-profile-trigger ${openDropdown === 'profile' ? 'navbar-link--active' : ''}`}
+                onClick={() => toggleDropdown('profile')}
+                aria-haspopup="true"
+                aria-expanded={openDropdown === 'profile'}
+              >
+                <span
+                  className="navbar-avatar"
+                  style={{
+                    background: user.avatarUrl
+                      ? `url(${user.avatarUrl}) center / cover no-repeat`
+                      : undefined,
                   }}
                 >
-                  <User size={16} style={{ marginRight: 6 }} /> 
-                  <span style={{ marginRight: 4 }}>
-                    {user.name}
-                  </span>
-                  {isVip ? <span style={{color: '#fbbf24', marginRight: 4}}>⭐</span> : null} ▾
-                </button>
-                {openDropdown === 'profile' && (
-                  <div style={styles.dropdown}>
-                    <Link to="/profile" style={styles.dropdownItem} onClick={closeDropdown}>
-                      <User size={16} style={{marginRight: 8}} /> Мой профиль
-                    </Link>
-                    <Link to="/favorites" style={styles.dropdownItem} onClick={closeDropdown}>
-                      <Star size={16} style={{marginRight: 8}} /> Избранное
-                    </Link>
-                    <Link to="/my-orders" style={styles.dropdownItem} onClick={closeDropdown}>
-                      <Package size={16} style={{marginRight: 8}} /> Мои заказы
-                    </Link>
-                    <Link to="/chats" style={styles.dropdownItem} onClick={closeDropdown}>
-                      <MessageCircle size={16} style={{marginRight: 8}} /> Чаты
-                      {chats.reduce((sum, c) => sum + (c.unreadCount || 0), 0) > 0 && <span style={styles.dropdownBadge}>{chats.reduce((sum, c) => sum + (c.unreadCount || 0), 0)}</span>}
-                    </Link>
-                    <Link to="/wallet" style={{...styles.dropdownItem, ...styles.walletItem}} onClick={closeDropdown}>
-                      <Coins size={16} style={{marginRight: 8, color: '#fbbf24'}} /> 
-                      <span style={{color: '#fbbf24', fontWeight: 700}}>{helpCoins}</span>
-                      <span style={{color: 'rgba(255,255,255,0.6)', fontSize: '12px', marginLeft: 4}}>HC</span>
-                      <span style={{marginLeft: 'auto', color: theme.colors.textMuted, fontSize: '12px'}}>Кошелёк →</span>
-                    </Link>
-                  </div>
-                )}
-              </div>
-
-              <button onClick={handleLogout} style={styles.logoutBtn}>
-                Выйти
+                  {!user.avatarUrl && getInitials(user.name)}
+                </span>
+                <span className="navbar-profile-name">{user.name}</span>
+                {isVip && <span className="navbar-vip" title="VIP-статус">★</span>}
+                <ChevronDown size={15} aria-hidden="true" />
               </button>
+              {openDropdown === 'profile' && (
+                <div className="navbar-dropdown navbar-dropdown--profile">
+                  <Link to="/profile" className="navbar-dropdown-item" onClick={closeDropdown}>
+                    <User size={16} aria-hidden="true" /> Мой профиль
+                  </Link>
+                  <Link to="/favorites" className="navbar-dropdown-item" onClick={closeDropdown}>
+                    <Star size={16} aria-hidden="true" /> Избранное
+                  </Link>
+                  <Link to="/my-orders" className="navbar-dropdown-item" onClick={closeDropdown}>
+                    <Package size={16} aria-hidden="true" /> Мои заказы
+                  </Link>
+                  <Link to="/chats" className="navbar-dropdown-item" onClick={closeDropdown}>
+                    <MessageCircle size={16} aria-hidden="true" /> Чаты
+                    {unreadChats > 0 && <span className="navbar-badge">{unreadChats}</span>}
+                  </Link>
+                  <Link to="/wallet" className="navbar-dropdown-item navbar-dropdown-item--wallet" onClick={closeDropdown}>
+                    <Coins size={16} aria-hidden="true" />
+                    <span className="navbar-wallet-value">{helpCoins}</span>
+                    <span className="navbar-wallet-unit">HC</span>
+                    <span className="navbar-wallet-link">Кошелёк →</span>
+                  </Link>
+                  <button type="button" className="navbar-dropdown-item navbar-dropdown-item--logout" onClick={handleLogout}>
+                    <LogOut size={16} aria-hidden="true" /> Выйти
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="navbar-actions">
+            {user ? (
+              <Link to="/posts/new" className="navbar-btn navbar-btn--primary">
+                <Plus size={16} aria-hidden="true" />
+                Создать заявку
+              </Link>
+            ) : (
+              <>
+                <Link to="/login" className="navbar-btn navbar-btn--ghost">
+                  Войти
+                </Link>
+                <Link to="/register" className="navbar-btn navbar-btn--primary">
+                  Регистрация
+                </Link>
+              </>
+            )}
+          </div>
+        </div>
+
+        <button
+          type="button"
+          className="navbar-mobile-toggle"
+          onClick={() => setMobileOpen((open) => !open)}
+          aria-label={mobileOpen ? 'Закрыть меню' : 'Открыть меню'}
+          aria-expanded={mobileOpen}
+        >
+          {mobileOpen ? <X size={22} aria-hidden="true" /> : <Menu size={22} aria-hidden="true" />}
+        </button>
+      </div>
+
+      {mobileOpen && (
+        <div className="navbar-mobile">
+          <Link to="/" className={`navbar-mobile-link ${isActive('/') ? 'navbar-mobile-link--active' : ''}`} onClick={closeDropdown}>
+            Главная
+          </Link>
+          <Link to="/posts" className={`navbar-mobile-link ${isActive('/posts') ? 'navbar-mobile-link--active' : ''}`} onClick={closeDropdown}>
+            Заявки
+          </Link>
+          <Link to="/map" className="navbar-mobile-link" onClick={closeDropdown}>
+            <Map size={16} aria-hidden="true" /> Карта
+          </Link>
+          <Link to="/graph" className="navbar-mobile-link" onClick={closeDropdown}>
+            <GitBranch size={16} aria-hidden="true" /> Граф помощи
+          </Link>
+          <Link to="/achievements" className="navbar-mobile-link" onClick={closeDropdown}>
+            <Trophy size={16} aria-hidden="true" /> Достижения
+          </Link>
+          {user && (
+            <>
+              <Link to="/activity" className="navbar-mobile-link" onClick={closeDropdown}>
+                <ClipboardList size={16} aria-hidden="true" /> Активность
+              </Link>
+              <Link to="/profile" className="navbar-mobile-link" onClick={closeDropdown}>
+                <User size={16} aria-hidden="true" /> Мой профиль
+              </Link>
+              <Link to="/favorites" className="navbar-mobile-link" onClick={closeDropdown}>
+                <Star size={16} aria-hidden="true" /> Избранное
+              </Link>
+              <Link to="/my-orders" className="navbar-mobile-link" onClick={closeDropdown}>
+                <Package size={16} aria-hidden="true" /> Мои заказы
+              </Link>
+              <Link to="/chats" className="navbar-mobile-link" onClick={closeDropdown}>
+                <MessageCircle size={16} aria-hidden="true" /> Чаты
+                {unreadChats > 0 && <span className="navbar-badge">{unreadChats}</span>}
+              </Link>
+              <Link to="/wallet" className="navbar-mobile-link" onClick={closeDropdown}>
+                <Coins size={16} aria-hidden="true" /> Кошелёк · {helpCoins} HC
+              </Link>
             </>
           )}
-          {!user && (
-            <Link to="/login" style={styles.loginBtn}>Войти</Link>
-          )}
+          <div className="navbar-mobile-actions">
+            {user ? (
+              <>
+                <Link to="/posts/new" className="navbar-btn navbar-btn--primary" onClick={closeDropdown}>
+                  <Plus size={16} aria-hidden="true" /> Создать заявку
+                </Link>
+                <button type="button" className="navbar-btn navbar-btn--ghost" onClick={handleLogout}>
+                  Выйти
+                </button>
+              </>
+            ) : (
+              <>
+                <Link to="/login" className="navbar-btn navbar-btn--ghost" onClick={closeDropdown}>
+                  Войти
+                </Link>
+                <Link to="/register" className="navbar-btn navbar-btn--primary" onClick={closeDropdown}>
+                  Регистрация
+                </Link>
+              </>
+            )}
+          </div>
         </div>
-      </div>
+      )}
+
       {isBlocked && (
-        <div style={styles.blockedBanner}>
-          <Ban size={16} style={{ marginRight: 6 }} /> Ваш аккаунт заблокирован за долг. Помогите другим или разблокируйте за 100 HC.
-          {daysUntilBlock !== null && daysUntilBlock > 0 && (
-            daysUntilBlock >= 24 
-              ? ` Осталось ${Math.floor(daysUntilBlock / 24)} дней и ${Math.floor(daysUntilBlock % 24)} часов.`
-              : ` Осталось ${Math.floor(daysUntilBlock)} часов.`
-          )}
-          {daysUntilBlock !== null && daysUntilBlock <= 0 && ` Ожидайте разблокировки.`}
+        <div className="navbar-banner navbar-banner--blocked">
+          <Ban size={16} aria-hidden="true" />
+          <span>
+            Ваш аккаунт заблокирован за долг. Помогите другим или разблокируйте за 100 HC.
+            {daysUntilBlock !== null && daysUntilBlock > 0 && (
+              daysUntilBlock >= 24
+                ? ` Осталось ${Math.floor(daysUntilBlock / 24)} дней и ${Math.floor(daysUntilBlock % 24)} часов.`
+                : ` Осталось ${Math.floor(daysUntilBlock)} часов.`
+            )}
+            {daysUntilBlock !== null && daysUntilBlock <= 0 && ' Ожидайте разблокировки.'}
+          </span>
         </div>
       )}
       {debtWarning && debtWarning > 2 && !isBlocked && (
-        <div style={styles.warningBanner}>
-          <AlertTriangle size={16} style={{marginRight: 8}} /> Внимание! Ваш долг: {debtWarning}. Помогите {debtWarning - 2} людям, чтобы избежать блокировки.
+        <div className="navbar-banner navbar-banner--warning">
+          <AlertTriangle size={16} aria-hidden="true" />
+          <span>
+            Внимание! Ваш долг: {debtWarning}. Помогите {debtWarning - 2} людям, чтобы избежать блокировки.
+          </span>
         </div>
       )}
     </nav>
   );
-};
-
-const styles: Record<string, React.CSSProperties> = {
-  navbar: {
-    background: 'linear-gradient(180deg, rgba(2, 44, 34, 0.98) 0%, rgba(2, 44, 34, 0.95) 100%)',
-    backdropFilter: 'blur(12px)',
-    borderBottom: `1px solid rgba(6, 182, 212, 0.15)`,
-    position: 'sticky',
-    top: 0,
-    zIndex: 1000,
-    boxShadow: '0 2px 20px rgba(0, 0, 0, 0.15)',
-  },
-  container: {
-    maxWidth: '1200px',
-    margin: '0 auto',
-    padding: '16px 24px',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  logo: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-    textDecoration: 'none',
-    cursor: 'pointer',
-    transition: 'opacity 0.2s',
-  } as React.CSSProperties,
-  logoText: {
-    fontSize: '20px',
-    fontWeight: 700,
-    color: theme.colors.text,
-  },
-  links: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '16px',
-  },
-  link: {
-    color: theme.colors.textSecondary,
-    textDecoration: 'none',
-    fontSize: '15px',
-    fontWeight: 500,
-    transition: 'color 0.2s',
-    cursor: 'pointer',
-  } as React.CSSProperties,
-  dropdownWrapper: {
-    position: 'relative',
-  },
-  dropdownTrigger: {
-    background: 'transparent',
-    border: 'none',
-    color: theme.colors.textSecondary,
-    fontSize: '15px',
-    fontWeight: 500,
-    cursor: 'pointer',
-    padding: '8px 12px',
-    borderRadius: theme.borderRadius.md,
-    transition: 'all 0.2s',
-    fontFamily: 'inherit',
-  },
-  dropdownWrapperHover: {
-    background: 'rgba(255,255,255,0.05)',
-  },
-  dropdown: {
-    position: 'absolute',
-    top: '100%',
-    right: 0,
-    marginTop: '8px',
-    background: 'linear-gradient(135deg, rgba(6, 95, 70, 0.98) 0%, rgba(2, 44, 34, 0.98) 100%)',
-    border: `1px solid rgba(6, 182, 212, 0.2)`,
-    borderRadius: theme.borderRadius.lg,
-    minWidth: '200px',
-    padding: '8px',
-    boxShadow: '0 10px 40px rgba(0, 0, 0, 0.4), 0 0 20px rgba(6, 182, 212, 0.1)',
-    zIndex: 1001,
-  },
-  dropdownItem: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: '10px 14px',
-    color: theme.colors.textSecondary,
-    textDecoration: 'none',
-    fontSize: '14px',
-    transition: 'all 0.2s',
-    borderRadius: theme.borderRadius.md,
-  } as React.CSSProperties,
-  dropdownBadge: {
-    background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
-    color: '#fff',
-    borderRadius: '12px',
-    padding: '3px 10px',
-    fontSize: '11px',
-    fontWeight: 600,
-    boxShadow: '0 2px 8px rgba(239, 68, 68, 0.4)',
-  },
-  walletItem: {
-    marginTop: '8px',
-    paddingTop: '12px',
-    borderTop: '1px solid rgba(255,255,255,0.1)',
-  } as React.CSSProperties,
-  loginBtn: {
-    background: theme.gradients.button,
-    color: theme.colors.text,
-    textDecoration: 'none',
-    padding: '10px 20px',
-    borderRadius: theme.borderRadius.md,
-    fontSize: '14px',
-    fontWeight: 600,
-    transition: 'all 0.3s',
-  },
-  logoutBtn: {
-    background: 'rgba(255, 255, 255, 0.05)',
-    border: `1px solid rgba(255, 255, 255, 0.15)`,
-    color: theme.colors.textSecondary,
-    padding: '8px 16px',
-    borderRadius: theme.borderRadius.lg,
-    fontSize: '14px',
-    fontWeight: 500,
-    cursor: 'pointer',
-    transition: 'all 0.2s',
-  },
-  createPostBtn: {
-    background: theme.gradients.button,
-    color: theme.colors.text,
-    textDecoration: 'none',
-    padding: '10px 18px',
-    borderRadius: theme.borderRadius.md,
-    fontSize: '14px',
-    fontWeight: 600,
-    display: 'flex',
-    alignItems: 'center',
-    transition: 'all 0.3s',
-    boxShadow: '0 4px 15px rgba(6, 182, 212, 0.3)',
-  },
-  warningBanner: {
-    background: 'linear-gradient(90deg, rgba(220, 38, 38, 0.95) 0%, rgba(245, 158, 11, 0.95) 100%)',
-    color: '#fff',
-    padding: '12px 24px',
-    textAlign: 'center',
-    fontSize: '14px',
-    fontWeight: 500,
-    borderRadius: '0 0 16px 16px',
-    boxShadow: '0 4px 15px rgba(220, 38, 38, 0.3)',
-  },
-  blockedBanner: {
-    background: 'linear-gradient(135deg, rgba(220, 38, 38, 0.95) 0%, rgba(185, 28, 28, 0.95) 100%)',
-    color: '#fff',
-    padding: '12px 24px',
-    textAlign: 'center',
-    fontSize: '14px',
-    fontWeight: 500,
-    borderRadius: '0 0 16px 16px',
-    boxShadow: '0 4px 15px rgba(220, 38, 38, 0.3)',
-  },
 };

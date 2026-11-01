@@ -1,49 +1,49 @@
 export const theme = {
   colors: {
-    primary: '#059669',
-    primaryLight: '#10B981',
-    primaryLighter: '#34D399',
-    primaryDark: '#047857',
-    primaryDarker: '#065F46',
-    
-    accent: '#06b6d4',
-    accentLight: '#22d3ee',
-    accentDark: '#0891b2',
-    
-    background: '#022c22',
-    backgroundLight: '#064E3B',
-    backgroundCard: '#065F46',
-    
-    text: '#ffffff',
-    textSecondary: 'rgba(255, 255, 255, 0.85)',
-    textMuted: 'rgba(255, 255, 255, 0.7)',
-    
-    border: 'rgba(255, 255, 255, 0.2)',
-    borderFocus: '#38bdf8',
-    
-    error: '#EF4444',
-    errorLight: '#FCA5A5',
-    success: '#10B981',
-    warning: '#F59E0B',
+    primary: '#8CCB55',
+    primaryLight: '#C8F56A',
+    primaryLighter: '#D7FF82',
+    primaryDark: '#6FAE4A',
+    primaryDarker: '#4E7A34',
+
+    accent: '#C8F56A',
+    accentLight: '#D7FF82',
+    accentDark: '#A8D95A',
+
+    background: '#071B13',
+    backgroundLight: '#0B2419',
+    backgroundCard: '#102D20',
+
+    text: '#F5F8F1',
+    textSecondary: '#B7C5B8',
+    textMuted: '#829688',
+
+    border: 'rgba(180, 225, 155, 0.2)',
+    borderFocus: '#C8F56A',
+
+    error: '#FF7777',
+    errorLight: '#FFB3B3',
+    success: '#8CCB55',
+    warning: '#F5B85C',
   },
   select: {
-    backgroundColor: '#065F46',
-    color: '#ffffff',
-    border: '1px solid rgba(255, 255, 255, 0.2)',
+    backgroundColor: '#102D20',
+    color: '#F5F8F1',
+    border: '1px solid rgba(180, 225, 155, 0.2)',
   },
   
   shadows: {
     card: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
     cardHover: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
-    button: '0 4px 14px -3px rgba(6, 182, 212, 0.5), 0 0 20px rgba(6, 182, 212, 0.2)',
-    buttonHover: '0 6px 20px -3px rgba(34, 211, 238, 0.6), 0 0 30px rgba(34, 211, 238, 0.3)',
+    button: '0 4px 14px -3px rgba(200, 245, 106, 0.35), 0 0 20px rgba(200, 245, 106, 0.15)',
+    buttonHover: '0 6px 20px -3px rgba(200, 245, 106, 0.45), 0 0 30px rgba(200, 245, 106, 0.22)',
   },
   
   gradients: {
-    background: 'linear-gradient(180deg, #0c4a6e 0%, #022c22 50%, #065F46 100%)',
-    card: 'linear-gradient(160deg, #047857 0%, #0e7490 50%, #164e63 100%)',
-    button: 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)',
-    buttonHover: 'linear-gradient(135deg, #22d3ee 0%, #06b6d4 100%)',
+    background: 'linear-gradient(180deg, #071B13 0%, #0B2419 50%, #071B13 100%)',
+    card: 'linear-gradient(160deg, #102D20 0%, #0B2419 100%)',
+    button: 'linear-gradient(135deg, #C8F56A 0%, #8CCB55 100%)',
+    buttonHover: 'linear-gradient(135deg, #D7FF82 0%, #9ADB64 100%)',
   },
   
   borderRadius: {

@@ -9,8 +9,20 @@ interface PostsResponse {
 }
 
 export const postsApi = {
-  getAll: async (params?: { page?: number; size?: number; status?: string; title?: string; authorName?: string; category?: string; city?: string }): Promise<PostsResponse> => {
-    const response = await api.get<PostsResponse>('/api/posts', { params });
+  getAll: async (
+    params?: {
+      page?: number;
+      size?: number;
+      status?: string;
+      title?: string;
+      authorName?: string;
+      category?: string;
+      city?: string;
+      sort?: string;
+    },
+    signal?: AbortSignal
+  ): Promise<PostsResponse> => {
+    const response = await api.get<PostsResponse>('/api/posts', { params, signal });
     return response.data;
   },
 

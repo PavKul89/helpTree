@@ -74,17 +74,17 @@ const getVariantStyles = (variant: string, isHovered: boolean): React.CSSPropert
       return isHovered ? {
         background: theme.gradients.buttonHover,
         boxShadow: theme.shadows.buttonHover,
-        color: '#ffffff',
+        color: '#10230f',
       } : {
         background: theme.gradients.button,
         boxShadow: theme.shadows.button,
-        color: '#ffffff',
+        color: '#10230f',
       };
     case 'outline':
       return isHovered ? {
-        background: 'rgba(255,255,255,0.1)',
-        borderColor: '#22d3ee',
-        color: '#22d3ee',
+        background: 'rgba(200, 245, 106, 0.1)',
+        borderColor: '#C8F56A',
+        color: '#C8F56A',
       } : {
         background: 'transparent',
         border: `1px solid ${theme.colors.border}`,
@@ -115,6 +115,6 @@ const styles: Record<string, React.CSSProperties> = {
     outline: 'none',
     position: 'relative',
     overflow: 'hidden',
-    color: '#ffffff',
+    color: '#10230f',
   },
 };

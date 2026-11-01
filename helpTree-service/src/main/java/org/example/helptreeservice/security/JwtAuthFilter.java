@@ -149,6 +149,15 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         if ("GET".equals(method) && path.matches("/api/posts(/\\d+)?")) {
             return true;
         }
+        if ("GET".equals(method) && path.equals("/api/stats")) {
+            return true;
+        }
+        if ("GET".equals(method) && path.equals("/api/users/public")) {
+            return true;
+        }
+        if ("GET".equals(method) && path.matches("/api/users/\\d+/public")) {
+            return true;
+        }
         if ("GET".equals(method) && path.matches("/api/reviews/help/\\d+")) {
             return true;
         }
