@@ -75,8 +75,8 @@ export const postsApi = {
     return response.data;
   },
 
-  getMapPosts: async (): Promise<Post[]> => {
-    const response = await api.get<Post[]>('/api/posts/map');
+  getMapPosts: async (signal?: AbortSignal): Promise<Post[]> => {
+    const response = await api.get<Post[]>('/api/posts/map', { signal });
     return response.data;
   },
 

@@ -1,3 +1,4 @@
+import { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { LoginPage } from './pages/LoginPage';
@@ -16,11 +17,22 @@ import { FavoritesPage } from './pages/FavoritesPage';
 import { HelpGraphPage } from './pages/HelpGraphPage';
 import { AchievementsPage } from './pages/AchievementsPage';
 import { ActivityPage } from './pages/ActivityPage';
-import { MapPage } from './pages/MapPage';
 import { WalletPage } from './pages/WalletPage';
 import { Navbar } from './components/Navbar';
 import { Layout } from './components/Layout';
 import { ToastProvider } from './components/Toast';
+
+// Leaflet and the map page are loaded only when /map is opened.
+const MapPage = lazy(() => import('./pages/MapPage'));
+
+const MapPageFallback = () => (
+  <div style={styles.mapFallback}>
+    <div style={styles.mapFallbackCard}>
+      <div style={styles.mapFallbackSpinner} />
+      <p style={styles.mapFallbackText}>Загружаем карту…</p>
+    </div>
+  </div>
+);
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, isLoading } = useAuth();
@@ -67,7 +79,9 @@ const AppLayout = () => {
             <Route path="/graph" element={<HelpGraphPage />} />
             <Route path="/map" element={
               <ProtectedRoute>
-                <MapPage />
+                <Suspense fallback={<MapPageFallback />}>
+                  <MapPage />
+                </Suspense>
               </ProtectedRoute>
             } />
             <Route path="/achievements" element={<AchievementsPage />} />
@@ -196,6 +210,37 @@ const styles: Record<string, React.CSSProperties> = {
     height: '100vh',
     color: '#fff',
     fontSize: '18px',
+  },
+  mapFallback: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 'calc(100vh - 72px)',
+    padding: '24px',
+  },
+  mapFallbackCard: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '14px',
+    padding: '30px 36px',
+    borderRadius: '20px',
+    border: '1px solid rgba(180, 225, 155, 0.2)',
+    background: '#102D20',
+    boxShadow: '0 20px 44px rgba(0, 0, 0, 0.28)',
+  },
+  mapFallbackSpinner: {
+    width: '34px',
+    height: '34px',
+    borderRadius: '50%',
+    border: '3px solid rgba(200, 245, 106, 0.18)',
+    borderTopColor: '#C8F56A',
+    animation: 'spin 1s linear infinite',
+  },
+  mapFallbackText: {
+    margin: 0,
+    color: '#B7C5B8',
+    fontSize: '14px',
   },
 };
 
