@@ -32,7 +32,10 @@ public final class PostSpecification {
 
             if (status != null) {
                 predicates.add(cb.equal(root.get("status"), status));
-            } else if (excludeCancelled) {
+            }
+
+            // Отменённые посты скрыты от публичного просмотра даже при явном status=CANCELLED
+            if (excludeCancelled) {
                 predicates.add(cb.notEqual(root.get("status"), PostStatus.CANCELLED));
             }
 
