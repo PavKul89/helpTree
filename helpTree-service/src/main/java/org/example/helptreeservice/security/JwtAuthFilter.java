@@ -65,15 +65,16 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
         String path = request.getRequestURI();
         String method = request.getMethod();
-
-        if (isPublicPath(path, method)) {
-            filterChain.doFilter(request, response);
-            return;
-        }
+        boolean publicPath = isPublicPath(path, method);
 
         String authHeader = request.getHeader("Authorization");
+        boolean hasBearerToken = authHeader != null && authHeader.startsWith("Bearer ");
 
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+        if (!hasBearerToken) {
+            if (publicPath) {
+                filterChain.doFilter(request, response);
+                return;
+            }
             sendError(response, HttpStatus.UNAUTHORIZED, "Требуется авторизация");
             return;
         }
@@ -95,6 +96,10 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
             if (userId == null) {
                 log.warn("JWT userId is null, all claims: {}", claims);
+                if (publicPath) {
+                    filterChain.doFilter(request, response);
+                    return;
+                }
                 sendError(response, HttpStatus.UNAUTHORIZED, "Требуется авторизация");
                 return;
             }
@@ -118,6 +123,13 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             SecurityContextHolder.getContext().setAuthentication(auth);
 
         } catch (Exception e) {
+            // Публичные GET-эндпоинты должны оставаться доступными без валидного токена,
+            // но при валидном токене получают контекст владельца/администратора.
+            if (publicPath) {
+                log.debug("Ignoring invalid token on public path {}: {}", path, e.getMessage());
+                filterChain.doFilter(request, response);
+                return;
+            }
             sendError(response, HttpStatus.UNAUTHORIZED, "Невалидный или истёкший токен");
             return;
         }
@@ -147,6 +159,18 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             return true;
         }
         if ("GET".equals(method) && path.matches("/api/posts(/\\d+)?")) {
+            return true;
+        }
+        if ("GET".equals(method) && path.equals("/api/posts/map")) {
+            return true;
+        }
+        if ("GET".equals(method) && path.matches("/api/posts/user/\\d+")) {
+            return true;
+        }
+        if ("GET".equals(method) && path.matches("/api/posts/\\d+/comments")) {
+            return true;
+        }
+        if ("POST".equals(method) && path.equals("/api/posts/by-ids")) {
             return true;
         }
         if ("GET".equals(method) && path.equals("/api/stats")) {

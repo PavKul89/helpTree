@@ -10,9 +10,12 @@ import org.example.helptreeservice.enums.UserStatus;
 import org.example.helptreeservice.exception.ConflictException;
 import org.example.helptreeservice.exception.NotFoundException;
 import org.example.helptreeservice.mapper.UserMapper;
+import org.example.helptreeservice.repository.PostRepository;
 import org.example.helptreeservice.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -29,6 +32,7 @@ import java.util.stream.Collectors;
 public class UserService {
 
     private final UserRepository userRepository;
+    private final PostRepository postRepository;
     private final UserMapper userMapper;
     private final PasswordService passwordService;
     private final ImageService imageService;
@@ -135,6 +139,18 @@ public class UserService {
         return userRepository.findByDeletedFalse().stream()
                 .map(userMapper::toPublicDto)
                 .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public Page<UserDto> getAllUsers(Pageable pageable) {
+        log.info("Запрос страницы пользователей: page={}, size={}", pageable.getPageNumber(), pageable.getPageSize());
+        return userRepository.findByDeletedFalse(pageable).map(userMapper::toDto);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<UserPublicDto> getAllUsersPublic(Pageable pageable) {
+        log.info("Запрос страницы публичных пользователей: page={}, size={}", pageable.getPageNumber(), pageable.getPageSize());
+        return userRepository.findByDeletedFalse(pageable).map(userMapper::toPublicDto);
     }
 
     public UserDto updateUser(Long id, UpdateUserRequest request) {
@@ -302,6 +318,18 @@ public class UserService {
         return user;
     }
 
+    @Transactional
+    public User getUserEntityByIdForUpdate(Long id) {
+        User user = userRepository.findByIdForUpdate(id)
+                .orElseThrow(() -> new NotFoundException("Пользователь не найден с id: " + id));
+
+        if (Boolean.TRUE.equals(user.getDeleted())) {
+            throw new NotFoundException("Пользователь не найден с id: " + id);
+        }
+
+        return user;
+    }
+
     public void incrementHelpedCount(Long receiverId) {
         log.info("Увеличение счетчика долгов для получателя помощи с ID: {}", receiverId);
         userRepository.updateDebtCount(receiverId, 2);
@@ -427,9 +455,7 @@ public class UserService {
 
     @Transactional(readOnly = true)
     public String getTelegramChatId(Long userId) {
-        return userRepository.findById(userId)
-                .map(User::getTelegramChatId)
-                .orElse(null);
+        return getUserEntityById(userId).getTelegramChatId();
     }
 
     public String uploadAvatar(Long userId, MultipartFile file) {
@@ -445,7 +471,12 @@ public class UserService {
     @Transactional
     public void addFavorite(Long userId, Long postId) {
         log.info("Добавление поста {} в избранное для пользователя {}", postId, userId);
-        User user = getUserEntityById(userId);
+
+        if (!postRepository.existsByIdAndDeletedFalse(postId)) {
+            throw new NotFoundException("Пост не найден");
+        }
+
+        User user = getUserEntityByIdForUpdate(userId);
         if (user.getFavoritePostIds() == null) {
             user.setFavoritePostIds(new ArrayList<>());
         }
@@ -459,7 +490,7 @@ public class UserService {
     @Transactional
     public void removeFavorite(Long userId, Long postId) {
         log.info("Удаление поста {} из избранного для пользователя {}", postId, userId);
-        User user = getUserEntityById(userId);
+        User user = getUserEntityByIdForUpdate(userId);
         if (user.getFavoritePostIds() != null && user.getFavoritePostIds().contains(postId)) {
             user.getFavoritePostIds().remove(postId);
             userRepository.save(user);
@@ -470,17 +501,14 @@ public class UserService {
     @Transactional(readOnly = true)
     public List<Long> getFavorites(Long userId) {
         log.debug("Получение избранных постов для пользователя {}", userId);
-        Long userIdOnly = userRepository.findUserIdOnly(userId);
-        if (userIdOnly == null) {
-            return new ArrayList<>();
-        }
+        getUserEntityById(userId);
         return userRepository.findFavoritePostIds(userId);
     }
 
     @Transactional(readOnly = true)
     public boolean isFavorite(Long userId, Long postId) {
-        User user = userRepository.findById(userId).orElse(null);
-        return user != null && user.getFavoritePostIds() != null && user.getFavoritePostIds().contains(postId);
+        User user = getUserEntityById(userId);
+        return user.getFavoritePostIds() != null && user.getFavoritePostIds().contains(postId);
     }
 
     @Transactional

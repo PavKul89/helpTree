@@ -2,6 +2,8 @@ package org.example.helptreeservice.repository;
 
 import jakarta.persistence.LockModeType;
 import org.example.helptreeservice.entity.User;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
@@ -17,11 +19,16 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByEmail(String email);
     boolean existsByEmail(String email);
 
+    Optional<User> findByIdAndDeletedFalse(Long id);
+    boolean existsByIdAndDeletedFalse(Long id);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT u FROM User u WHERE u.id = :userId")
     Optional<User> findByIdForUpdate(@Param("userId") Long userId);
 
     List<User> findByDeletedFalse();
+
+    Page<User> findByDeletedFalse(Pageable pageable);
 
     @Modifying
     @Query("UPDATE User u SET u.helpedCount = u.helpedCount + 1, u.updatedAt = CURRENT_TIMESTAMP WHERE u.id = :userId")

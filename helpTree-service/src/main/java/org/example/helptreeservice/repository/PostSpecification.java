@@ -18,7 +18,8 @@ public final class PostSpecification {
                                              final String title,
                                              final String authorName,
                                              final String category,
-                                             final String city) {
+                                             final String city,
+                                             final boolean excludeCancelled) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 
@@ -31,6 +32,8 @@ public final class PostSpecification {
 
             if (status != null) {
                 predicates.add(cb.equal(root.get("status"), status));
+            } else if (excludeCancelled) {
+                predicates.add(cb.notEqual(root.get("status"), PostStatus.CANCELLED));
             }
 
             if (StringUtils.hasText(title)) {

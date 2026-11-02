@@ -31,10 +31,10 @@ public class CommentService {
 
     @Transactional
     public CommentResponse createComment(Long postId, CreateCommentRequest request, Long userId) {
-        Post post = postRepository.findById(postId)
+        Post post = postRepository.findByIdAndDeletedFalse(postId)
                 .orElseThrow(() -> new NotFoundException("Пост не найден"));
 
-        User user = userRepository.findById(userId)
+        User user = userRepository.findByIdAndDeletedFalse(userId)
                 .orElseThrow(() -> new NotFoundException("Пользователь не найден"));
 
         if (request.getParentCommentId() != null) {
@@ -62,7 +62,7 @@ public class CommentService {
 
     @Transactional(readOnly = true)
     public List<CommentResponse> getCommentsByPost(Long postId) {
-        if (!postRepository.existsById(postId)) {
+        if (!postRepository.existsByIdAndDeletedFalse(postId)) {
             throw new NotFoundException("Пост не найден");
         }
 
@@ -72,7 +72,7 @@ public class CommentService {
 
     @Transactional(readOnly = true)
     public List<CommentResponse> getCommentsByUser(Long userId) {
-        if (!userRepository.existsById(userId)) {
+        if (!userRepository.existsByIdAndDeletedFalse(userId)) {
             throw new NotFoundException("Пользователь не найден");
         }
 
@@ -81,15 +81,23 @@ public class CommentService {
     }
 
     @Transactional
-    public void deleteComment(Long commentId, Long userId) {
+    public void deleteComment(Long postId, Long commentId, Long userId) {
+        if (!postRepository.existsByIdAndDeletedFalse(postId)) {
+            throw new NotFoundException("Пост не найден");
+        }
+
         Comment comment = commentRepository.findById(commentId)
                 .orElseThrow(() -> new NotFoundException("Комментарий не найден"));
+
+        if (comment.getPost() == null || !comment.getPost().getId().equals(postId)) {
+            throw new NotFoundException("Комментарий не найден");
+        }
 
         if (!comment.getUser().getId().equals(userId)) {
             throw new ForbiddenException("Вы можете удалить только свой комментарий");
         }
 
         commentRepository.delete(comment);
-        log.info("Удалён комментарий ID={} пользователем ID={}", commentId, userId);
+        log.info("Удалён комментарий ID={} поста ID={} пользователем ID={}", commentId, postId, userId);
     }
 }

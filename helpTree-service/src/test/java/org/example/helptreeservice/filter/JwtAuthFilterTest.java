@@ -78,6 +78,58 @@ class JwtAuthFilterTest {
     }
 
     @Test
+    void isPublicPath_shouldReturnTrueForPublicPostEndpoints() throws Exception {
+        Method method = JwtAuthFilter.class.getDeclaredMethod("isPublicPath", String.class, String.class);
+        method.setAccessible(true);
+
+        assertTrue((Boolean) method.invoke(jwtAuthFilter, "/api/posts/user/7", "GET"));
+        assertTrue((Boolean) method.invoke(jwtAuthFilter, "/api/posts/7/comments", "GET"));
+        assertTrue((Boolean) method.invoke(jwtAuthFilter, "/api/posts/map", "GET"));
+        assertTrue((Boolean) method.invoke(jwtAuthFilter, "/api/posts/by-ids", "POST"));
+        assertFalse((Boolean) method.invoke(jwtAuthFilter, "/api/posts/7/comments", "POST"));
+        assertFalse((Boolean) method.invoke(jwtAuthFilter, "/api/posts/user/7", "DELETE"));
+    }
+
+    @Test
+    void filter_shouldSetOwnerContextForValidTokenOnPublicPath() throws Exception {
+        String token = generateToken(42L, "owner@test.com", "USER");
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/posts/user/42");
+        request.addHeader("Authorization", "Bearer " + token);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        doFilterInternalMethod.invoke(jwtAuthFilter, request, response, filterChain);
+
+        assertEquals("42", request.getAttribute("X-User-Id"));
+        assertEquals("USER", request.getAttribute("X-User-Role"));
+        verify(filterChain).doFilter(request, response);
+    }
+
+    @Test
+    void filter_shouldIgnoreInvalidTokenOnPublicPath() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/posts/map");
+        request.addHeader("Authorization", "Bearer not-a-valid-token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        doFilterInternalMethod.invoke(jwtAuthFilter, request, response, filterChain);
+
+        assertNull(request.getAttribute("X-User-Id"));
+        assertEquals(200, response.getStatus());
+        verify(filterChain).doFilter(request, response);
+    }
+
+    @Test
+    void filter_shouldRejectInvalidTokenOnProtectedPath() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("PUT", "/api/posts/1");
+        request.addHeader("Authorization", "Bearer not-a-valid-token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        doFilterInternalMethod.invoke(jwtAuthFilter, request, response, filterChain);
+
+        assertEquals(401, response.getStatus());
+        verifyNoInteractions(filterChain);
+    }
+
+    @Test
     void isPublicPath_shouldReturnTrueForActuator() throws Exception {
         Method method = JwtAuthFilter.class.getDeclaredMethod("isPublicPath", String.class, String.class);
         method.setAccessible(true);

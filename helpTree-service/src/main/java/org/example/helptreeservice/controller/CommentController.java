@@ -54,7 +54,7 @@ public class CommentController {
         if (user == null) {
             throw new UnauthorizedException("Требуется авторизация");
         }
-        commentService.deleteComment(commentId, user.getUserId());
+        commentService.deleteComment(postId, commentId, user.getUserId());
         return ResponseEntity.noContent().build();
     }
 }

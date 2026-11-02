@@ -1,13 +1,16 @@
 package org.example.helptreeservice.service;
 
+import org.example.helptreeservice.config.EconomyConfig;
 import org.example.helptreeservice.dto.posts.CreatePostRequest;
 import org.example.helptreeservice.dto.posts.PostDto;
 import org.example.helptreeservice.dto.posts.UpdatePostRequest;
 import org.example.helptreeservice.entity.Post;
 import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.enums.PostStatus;
+import org.example.helptreeservice.enums.TransactionType;
 import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.ConflictException;
+import org.example.helptreeservice.exception.ForbiddenException;
 import org.example.helptreeservice.exception.NotFoundException;
 import org.example.helptreeservice.mapper.PostMapper;
 import org.example.helptreeservice.metrics.annotation.BusinessMetric;
@@ -37,6 +40,8 @@ public class PostService {
     private final GeocodingService geocodingService;
     private final UserService userService;
     private final ImageService imageService;
+    private final WalletService walletService;
+    private final EconomyConfig economyConfig;
 
     private PostDto toDto(Post post) {
         PostDto dto = postMapper.toDto(post);
@@ -103,11 +108,20 @@ public class PostService {
     }
 
     @Transactional(readOnly = true)
-    public List<PostDto> getPostsByUser(Long userId) {
-        log.info("Запрос всех постов пользователя с ID: {}", userId);
+    public List<PostDto> getPostsByUser(Long userId, boolean includeAllStatuses) {
+        log.info("Запрос постов пользователя с ID: {}, includeAllStatuses={}", userId, includeAllStatuses);
 
         try {
-            List<PostDto> posts = postRepository.findByUserId(userId).stream()
+            userService.getUserEntityById(userId);
+
+            List<Post> userPosts = postRepository.findByUserId(userId);
+            if (!includeAllStatuses) {
+                userPosts = userPosts.stream()
+                        .filter(post -> post.getStatus() != PostStatus.CANCELLED)
+                        .collect(Collectors.toList());
+            }
+
+            List<PostDto> posts = userPosts.stream()
                     .map(this::toDto)
                     .collect(Collectors.toList());
 
@@ -117,6 +131,9 @@ public class PostService {
 
             return posts;
 
+        } catch (NotFoundException e) {
+            log.warn("Пользователь с ID {} не найден или удалён", userId);
+            throw e;
         } catch (Exception e) {
             log.error("Ошибка при получении постов пользователя с ID: {}", userId, e);
             throw e;
@@ -166,12 +183,16 @@ public class PostService {
     }
 
     @Transactional(readOnly = true)
-    public Page<PostDto> getPosts(Long userId, PostStatus status, String title, String authorName, String category, String city, Pageable pageable) {
-        log.info("Запрос постов с фильтрацией: userId={}, status={}, title={}, authorName={}, category={}, city={}, page={}, size={}",
-                userId, status, title, authorName, category, city, pageable.getPageNumber(), pageable.getPageSize());
+    public Page<PostDto> getPosts(Long userId, PostStatus status, String title, String authorName, String category, String city, Pageable pageable, boolean excludeCancelled) {
+        log.info("Запрос постов с фильтрацией: userId={}, status={}, title={}, authorName={}, category={}, city={}, page={}, size={}, excludeCancelled={}",
+                userId, status, title, authorName, category, city, pageable.getPageNumber(), pageable.getPageSize(), excludeCancelled);
 
         try {
-            Specification<Post> spec = PostSpecification.filter(userId, status, title, authorName, category, city);
+            if (userId != null) {
+                userService.getUserEntityById(userId);
+            }
+
+            Specification<Post> spec = PostSpecification.filter(userId, status, title, authorName, category, city, excludeCancelled);
             
             Specification<Post> boostedSpec = (root, query, cb) -> {
                 var boostedOrder = cb.selectCase()
@@ -371,22 +392,40 @@ public class PostService {
         return posts.stream().map(this::toDto).collect(Collectors.toList());
     }
 
-    public PostDto boostPost(Long id) {
-        log.info("Запрос на поднятие поста в топ, ID: {}", id);
-        
+    @Transactional
+    public PostDto boostPost(Long id, Long payerId, boolean privileged) {
+        log.info("Запрос на поднятие поста в топ, ID: {}, payerId: {}", id, payerId);
+
         Post post = getPostEntityById(id);
+
+        if (!post.getUser().getId().equals(payerId) && !privileged) {
+            throw new ForbiddenException("Вы можете поднять только свои посты");
+        }
+
+        if (post.getStatus() != PostStatus.OPEN) {
+            throw new BadRequestException("Можно поднять только открытый пост");
+        }
+
+        // Списание и поднятие выполняются в одной транзакции: при ошибке монеты не теряются.
+        walletService.spendCoins(
+                payerId,
+                economyConfig.getBoostPrice(),
+                TransactionType.POST_BOOST,
+                "Поднятие поста #" + id
+        );
+
         LocalDateTime now = LocalDateTime.now();
-        LocalDateTime newBoostTime = now.plusHours(24);
-        
+        LocalDateTime newBoostTime = now.plusHours(economyConfig.getBoostHours());
+
         if (post.getBoostedUntil() != null && post.getBoostedUntil().isAfter(now)) {
-            post.setBoostedUntil(post.getBoostedUntil().plusHours(24));
+            post.setBoostedUntil(post.getBoostedUntil().plusHours(economyConfig.getBoostHours()));
             log.info("Пост {} уже бустится, продлеваем до {}", id, post.getBoostedUntil());
         } else {
             post.setBoostedUntil(newBoostTime);
             post.setCreatedAt(now);
             log.info("Пост {} поднят в топ до {}, перемещён наверх", id, newBoostTime);
         }
-        
+
         Post saved = postRepository.save(post);
         return toDto(saved);
     }

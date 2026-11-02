@@ -1,6 +1,7 @@
 package org.example.helptreeservice.controller;
 
 import lombok.extern.slf4j.Slf4j;
+import org.example.helptreeservice.config.PaginationConfig;
 import org.example.helptreeservice.dto.users.CreateUserRequest;
 import org.example.helptreeservice.dto.users.UpdateUserRequest;
 import org.example.helptreeservice.dto.users.UserDto;
@@ -10,6 +11,7 @@ import org.example.helptreeservice.dto.wallet.WalletDto;
 import org.example.helptreeservice.enums.TransactionType;
 import org.example.helptreeservice.exception.ForbiddenException;
 import org.example.helptreeservice.exception.BadRequestException;
+import org.example.helptreeservice.exception.UnauthorizedException;
 import org.example.helptreeservice.service.AuthorizationService;
 import org.example.helptreeservice.service.AuthorizationService.UserContext;
 import org.example.helptreeservice.service.UserService;
@@ -17,6 +19,9 @@ import org.example.helptreeservice.service.WalletService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -35,6 +40,7 @@ public class UserController {
     private final UserService userService;
     private final AuthorizationService authService;
     private final WalletService walletService;
+    private final PaginationConfig paginationConfig;
 
     @PostMapping
     public ResponseEntity<UserDto> createUser(@Valid @RequestBody CreateUserRequest request) {
@@ -46,23 +52,33 @@ public class UserController {
     }
 
     @GetMapping
-    public ResponseEntity<List<UserDto>> getAllUsers() {
+    public ResponseEntity<?> getAllUsers(
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size) {
         if (!authService.isAdmin()) {
             throw new ForbiddenException("Только администратор может просматривать всех пользователей");
         }
-        return ResponseEntity.ok(userService.getAllUsers());
+        if (page == null && size == null) {
+            return ResponseEntity.ok(userService.getAllUsers());
+        }
+        return ResponseEntity.ok(userService.getAllUsers(resolvePageable(page, size)));
     }
 
     @GetMapping("/public")
-    public ResponseEntity<List<UserPublicDto>> getAllUsersPublic() {
-        return ResponseEntity.ok(userService.getAllUsersPublic());
+    public ResponseEntity<?> getAllUsersPublic(
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size) {
+        if (page == null && size == null) {
+            return ResponseEntity.ok(userService.getAllUsersPublic());
+        }
+        return ResponseEntity.ok(userService.getAllUsersPublic(resolvePageable(page, size)));
     }
 
     @GetMapping("/me")
     public ResponseEntity<UserDto> getCurrentUser() {
         UserContext user = authService.getCurrentUser();
         if (user == null) {
-            throw new ForbiddenException("Вы не авторизованы");
+            throw new UnauthorizedException("Вы не авторизованы");
         }
         return ResponseEntity.ok(userService.getUserById(user.getUserId()));
     }
@@ -86,9 +102,7 @@ public class UserController {
 
     @GetMapping("/{id}")
     public ResponseEntity<UserDto> getUserById(@PathVariable Long id) {
-        if (!authService.canManageUser(id)) {
-            throw new ForbiddenException("Вы можете просматривать только свой профиль");
-        }
+        requireOwnerOrAdmin(id, "Вы можете просматривать только свой профиль");
         return ResponseEntity.ok(userService.getUserById(id));
     }
 
@@ -105,9 +119,7 @@ public class UserController {
     public ResponseEntity<UserDto> updateUser(
             @PathVariable Long id,
             @Valid @RequestBody UpdateUserRequest request) {
-        if (!authService.canManageUser(id)) {
-            throw new ForbiddenException("Вы можете редактировать только свой профиль");
-        }
+        requireOwnerOrAdmin(id, "Вы можете редактировать только свой профиль");
         return ResponseEntity.ok(userService.updateUser(id, request));
     }
 
@@ -125,9 +137,7 @@ public class UserController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteUser(@PathVariable Long id) {
-        if (!authService.canManageUser(id)) {
-            throw new ForbiddenException("Вы можете удалить только свой аккаунт");
-        }
+        requireOwnerOrAdmin(id, "Вы можете удалить только свой аккаунт");
         userService.deleteUser(id);
         return ResponseEntity.noContent().build();
     }
@@ -181,15 +191,14 @@ public class UserController {
 
     @GetMapping("/{id}/telegram-chat-id")
     public ResponseEntity<String> getTelegramChatId(@PathVariable Long id) {
+        requireOwnerOrAdmin(id, "Telegram chat ID доступен только владельцу аккаунта");
         String chatId = userService.getTelegramChatId(id);
         return ResponseEntity.ok(chatId != null ? chatId : "");
     }
 
     @PutMapping("/{id}/telegram")
     public ResponseEntity<Void> bindTelegram(@PathVariable Long id, @RequestBody java.util.Map<String, String> body) {
-        if (!authService.canManageUser(id)) {
-            throw new ForbiddenException("Вы можете привязать Telegram только к своему аккаунту");
-        }
+        requireOwnerOrAdmin(id, "Вы можете привязать Telegram только к своему аккаунту");
         String chatId = body.get("chatId");
         if (chatId == null || chatId.isBlank()) {
             throw new BadRequestException("chatId обязателен");
@@ -202,47 +211,41 @@ public class UserController {
     public ResponseEntity<Map<String, String>> uploadAvatar(
             @PathVariable Long id,
             @RequestParam("file") MultipartFile file) {
-        if (!authService.canManageUser(id)) {
-            throw new ForbiddenException("Вы можете загрузить аватар только для своего профиля");
-        }
+        requireOwnerOrAdmin(id, "Вы можете загрузить аватар только для своего профиля");
         String avatarUrl = userService.uploadAvatar(id, file);
         return ResponseEntity.ok(Map.of("url", avatarUrl));
     }
 
     @PostMapping("/{id}/favorites/{postId}")
     public ResponseEntity<Void> addFavorite(@PathVariable Long id, @PathVariable Long postId) {
-        if (!authService.canManageUser(id)) {
-            throw new ForbiddenException("Вы можете добавлять в избранное только для своего профиля");
-        }
+        requireOwnerOrAdmin(id, "Вы можете добавлять в избранное только для своего профиля");
         userService.addFavorite(id, postId);
         return ResponseEntity.ok().build();
     }
 
     @DeleteMapping("/{id}/favorites/{postId}")
     public ResponseEntity<Void> removeFavorite(@PathVariable Long id, @PathVariable Long postId) {
-        if (!authService.canManageUser(id)) {
-            throw new ForbiddenException("Вы можете удалять из избранного только для своего профиля");
-        }
+        requireOwnerOrAdmin(id, "Вы можете удалять из избранного только для своего профиля");
         userService.removeFavorite(id, postId);
         return ResponseEntity.ok().build();
     }
 
     @GetMapping("/{id}/favorites")
     public ResponseEntity<List<Long>> getFavorites(@PathVariable Long id) {
+        requireOwnerOrAdmin(id, "Вы можете просматривать избранное только своего профиля");
         List<Long> favorites = userService.getFavorites(id);
         return ResponseEntity.ok(favorites != null ? favorites : java.util.Collections.emptyList());
     }
 
     @GetMapping("/{id}/favorites/{postId}")
     public ResponseEntity<Map<String, Boolean>> isFavorite(@PathVariable Long id, @PathVariable Long postId) {
+        requireOwnerOrAdmin(id, "Вы можете просматривать избранное только своего профиля");
         return ResponseEntity.ok(Map.of("isFavorite", userService.isFavorite(id, postId)));
     }
 
     @GetMapping("/{id}/wallet")
     public ResponseEntity<WalletDto> getWallet(@PathVariable Long id) {
-        if (!authService.canManageUser(id)) {
-            throw new ForbiddenException("Вы можете просматривать только свой кошелёк");
-        }
+        requireOwnerOrAdmin(id, "Вы можете просматривать только свой кошелёк");
         return ResponseEntity.ok(walletService.getWallet(id));
     }
 
@@ -251,20 +254,13 @@ public class UserController {
             @PathVariable Long id,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        if (!authService.canManageUser(id)) {
-            throw new ForbiddenException("Вы можете просматривать только свои транзакции");
-        }
+        requireOwnerOrAdmin(id, "Вы можете просматривать только свои транзакции");
         return ResponseEntity.ok(walletService.getTransactions(id, page, size));
     }
 
     @PostMapping("/{id}/wallet/daily-bonus")
     public ResponseEntity<Map<String, Object>> claimDailyBonus(@PathVariable Long id) {
-        if (authService.getCurrentUser() == null) {
-            throw new ForbiddenException("Необходимо авторизоваться");
-        }
-        if (!authService.canManageUser(id)) {
-            throw new ForbiddenException("Вы можете получить бонус только для своего аккаунта");
-        }
+        requireOwnerOrAdmin(id, "Вы можете получить бонус только для своего аккаунта");
         boolean claimed = walletService.addDailyLoginBonus(id);
         WalletDto wallet = walletService.getWallet(id);
         return ResponseEntity.ok(Map.of(
@@ -298,9 +294,7 @@ public class UserController {
             @RequestParam long amount,
             @RequestParam TransactionType type,
             @RequestParam String description) {
-        if (!authService.canManageUser(id)) {
-            throw new ForbiddenException("Вы можете тратить монеты только со своего аккаунта");
-        }
+        requireOwnerOrAdmin(id, "Вы можете тратить монеты только со своего аккаунта");
         walletService.spendCoins(id, amount, type, description);
         WalletDto wallet = walletService.getWallet(id);
         return ResponseEntity.ok(Map.of(
@@ -314,9 +308,7 @@ public class UserController {
     public ResponseEntity<Map<String, Object>> changeNicknameColor(
             @PathVariable Long id,
             @RequestParam String color) {
-        if (!authService.canManageUser(id)) {
-            throw new ForbiddenException("Вы можете менять цвет ника только своего аккаунта");
-        }
+        requireOwnerOrAdmin(id, "Вы можете менять цвет ника только своего аккаунта");
         if (color == null || !color.matches("^#[0-9A-Fa-f]{6}$")) {
             throw new BadRequestException("Цвет должен быть в формате #RRGGBB (например, #FF5733)");
         }
@@ -327,5 +319,32 @@ public class UserController {
             "newBalance", wallet.getBalance(),
             "color", color
         ));
+    }
+
+    /**
+     * Единая проверка владельца/администратора для операций над пользовательскими ресурсами.
+     */
+    private void requireOwnerOrAdmin(Long targetUserId, String message) {
+        if (targetUserId == null || !authService.canManageUser(targetUserId)) {
+            throw new ForbiddenException(message);
+        }
+    }
+
+    /**
+     * Опциональная пагинация: параметры ограничиваются серверными настройками.
+     */
+    private Pageable resolvePageable(Integer page, Integer size) {
+        int resolvedSize = size != null ? size : paginationConfig.getDefaultPageSize();
+        if (resolvedSize < 1) {
+            throw new BadRequestException("Параметр size должен быть положительным");
+        }
+        resolvedSize = Math.min(resolvedSize, paginationConfig.getMaxPageSize());
+
+        int resolvedPage = page != null ? page : 0;
+        if (resolvedPage < 0) {
+            throw new BadRequestException("Параметр page не может быть отрицательным");
+        }
+
+        return PageRequest.of(resolvedPage, resolvedSize, Sort.by(Sort.Direction.ASC, "id"));
     }
 }

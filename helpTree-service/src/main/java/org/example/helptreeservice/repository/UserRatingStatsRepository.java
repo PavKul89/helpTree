@@ -16,7 +16,8 @@ public interface UserRatingStatsRepository extends JpaRepository<UserRatingStats
     
     Optional<UserRatingStats> findByUserId(Long userId);
     
-    @Query("SELECT u FROM UserRatingStats u ORDER BY u.currentRating DESC")
+    @Query("SELECT s FROM UserRatingStats s JOIN User u ON u.id = s.userId " +
+            "WHERE u.deleted = false ORDER BY s.currentRating DESC")
     Page<UserRatingStats> findTopRated(Pageable pageable);
     
     @Query("SELECT u FROM UserRatingStats u WHERE u.lastCalculated < :threshold")

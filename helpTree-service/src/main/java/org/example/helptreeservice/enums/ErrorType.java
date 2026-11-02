@@ -10,6 +10,10 @@ public enum ErrorType {
     CONFLICT("Conflict"),
     BAD_REQUEST("Bad Request"),
     VALIDATION_FAILED("Validation Failed"),
+    UNAUTHORIZED("Unauthorized"),
+    FORBIDDEN("Forbidden"),
+    METHOD_NOT_ALLOWED("Method Not Allowed"),
+    UNSUPPORTED_MEDIA_TYPE("Unsupported Media Type"),
     INTERNAL_SERVER_ERROR("Internal Server Error");
 
     private final String title;

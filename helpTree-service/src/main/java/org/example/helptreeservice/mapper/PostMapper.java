@@ -9,7 +9,6 @@ import org.mapstruct.Mapping;
 public interface PostMapper {
 
     @Mapping(source = "user.id", target = "userId")
-    @Mapping(source = "user.email", target = "userEmail")
     @Mapping(source = "user.rating", target = "authorRating")
     @Mapping(source = "user.city", target = "userCity")
     @Mapping(source = "user.blockedAt", target = "authorBlockedAt")

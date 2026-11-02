@@ -5,13 +5,11 @@ import org.example.helptreeservice.dto.posts.CreatePostRequest;
 import org.example.helptreeservice.dto.posts.PostDto;
 import org.example.helptreeservice.dto.posts.UpdatePostRequest;
 import org.example.helptreeservice.enums.PostStatus;
-import org.example.helptreeservice.enums.TransactionType;
 import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.ForbiddenException;
 import org.example.helptreeservice.service.AuthorizationService;
 import org.example.helptreeservice.service.PostService;
 import org.example.helptreeservice.service.UserService;
-import org.example.helptreeservice.service.WalletService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -35,7 +33,6 @@ public class PostController {
     private final PostService postService;
     private final AuthorizationService authService;
     private final UserService userService;
-    private final WalletService walletService;
     private final EconomyConfig economyConfig;
 
     @PostMapping
@@ -61,7 +58,9 @@ public class PostController {
             @RequestParam(required = false) String city,
             @PageableDefault(page = 0, size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
     ) {
-        Page<PostDto> result = postService.getPosts(userId, status, title, authorName, category, city, pageable);
+        boolean excludeCancelled = userId != null && !authService.canManageUser(userId);
+        Page<PostDto> result = postService.getPosts(
+                userId, status, title, authorName, category, city, pageable, excludeCancelled);
         return ResponseEntity.ok(result);
     }
 
@@ -105,10 +104,8 @@ public class PostController {
 
     @GetMapping("/user/{userId}")
     public ResponseEntity<List<PostDto>> getPostsByUser(@PathVariable Long userId) {
-        if (!authService.canManagePost(userId)) {
-            throw new ForbiddenException("Вы можете просматривать только свои посты");
-        }
-        return ResponseEntity.ok(postService.getPostsByUser(userId));
+        boolean includeAllStatuses = authService.canManagePost(userId);
+        return ResponseEntity.ok(postService.getPostsByUser(userId, includeAllStatuses));
     }
 
     @PostMapping("/by-ids")
@@ -136,27 +133,15 @@ public class PostController {
             throw new ForbiddenException("Необходимо авторизоваться");
         }
         
-        PostDto post = postService.getPostById(id);
-        if (!authService.canManagePost(post.getUserId())) {
-            throw new ForbiddenException("Вы можете поднять только свои посты");
-        }
-        
-        if (post.getStatus() != PostStatus.OPEN) {
-            throw new BadRequestException("Можно поднять только открытый пост");
-        }
-        
-        try {
-            walletService.spendCoins(currentUser.getUserId(), economyConfig.getBoostPrice(), TransactionType.POST_BOOST, "Поднятие поста #" + id);
-            PostDto boosted = postService.boostPost(id);
-            return ResponseEntity.ok(Map.of(
-                "success", true,
-                "post", boosted,
-                "message", "Пост поднят в топ на " + economyConfig.getBoostHours() + " часов!"
-            ));
-        } catch (BadRequestException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new BadRequestException("Не удалось поднять пост: " + e.getMessage());
-        }
+        PostDto boosted = postService.boostPost(
+                id,
+                currentUser.getUserId(),
+                "ADMIN".equals(currentUser.getRole())
+        );
+        return ResponseEntity.ok(Map.of(
+            "success", true,
+            "post", boosted,
+            "message", "Пост поднят в топ на " + economyConfig.getBoostHours() + " часов!"
+        ));
     }
 }

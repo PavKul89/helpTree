@@ -11,6 +11,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface PostRepository extends JpaRepository<Post, Long>, JpaSpecificationExecutor<Post> {
@@ -20,13 +21,17 @@ public interface PostRepository extends JpaRepository<Post, Long>, JpaSpecificat
     
     @Query("SELECT p FROM Post p LEFT JOIN FETCH p.user LEFT JOIN FETCH p.helper WHERE p.id = :id")
     Post findByIdWithUser(@Param("id") Long id);
+
+    Optional<Post> findByIdAndDeletedFalse(Long id);
+
+    boolean existsByIdAndDeletedFalse(Long id);
     
     long countByUserId(Long userId);
 
     @Query("SELECT p FROM Post p LEFT JOIN FETCH p.user LEFT JOIN FETCH p.helper WHERE p.deleted = false AND p.status = 'OPEN'")
     List<Post> findAllActive();
 
-    @Query("SELECT p FROM Post p LEFT JOIN FETCH p.user LEFT JOIN FETCH p.helper WHERE p.id IN :ids")
+    @Query("SELECT p FROM Post p LEFT JOIN FETCH p.user LEFT JOIN FETCH p.helper WHERE p.id IN :ids AND (p.deleted = false OR p.deleted IS NULL)")
     List<Post> findByIdsWithUser(@Param("ids") List<Long> ids);
 
     @Query("SELECT p FROM Post p LEFT JOIN FETCH p.user LEFT JOIN FETCH p.helper WHERE p.deleted = false OR p.deleted IS NULL")

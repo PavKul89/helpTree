@@ -13,6 +13,7 @@ import org.example.helptreeservice.repository.UserRepository;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
@@ -20,6 +21,7 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Service
@@ -36,7 +38,7 @@ public class RatingService {
     public RatingResponse getUserRating(Long userId) {
         log.info("Получение рейтинга для пользователя ID: {}", userId);
 
-        User user = userRepository.findById(userId)
+        User user = userRepository.findByIdAndDeletedFalse(userId)
                 .orElseThrow(() -> new NotFoundException("Пользователь не найден"));
         
         UserRatingStats stats = statsRepository.findByUserId(userId)
@@ -63,7 +65,7 @@ public class RatingService {
 
         Double newRating = calculationService.calculateUserRating(userId);
 
-        User user = userRepository.findById(userId)
+        User user = userRepository.findByIdAndDeletedFalse(userId)
                 .orElseThrow(() -> new NotFoundException("Пользователь не найден"));
         UserRatingStats stats = statsRepository.findByUserId(userId)
                 .orElseThrow(() -> new NotFoundException("Статистика не найдена"));
@@ -77,24 +79,33 @@ public class RatingService {
         Page<UserRatingStats> topStats = statsRepository.findTopRated(pageable);
 
         List<Long> userIds = topStats.getContent().stream()
-                .map(stats -> stats.getUserId())
+                .map(UserRatingStats::getUserId)
                 .collect(Collectors.toList());
 
         Map<Long, User> userMap = userRepository.findAllById(userIds).stream()
-                .collect(Collectors.toMap(user -> user.getId(), user -> user));
+                .filter(user -> !Boolean.TRUE.equals(user.getDeleted()))
+                .collect(Collectors.toMap(User::getId, user -> user));
 
-        return topStats.map(stats -> {
-            User user = userMap.get(stats.getUserId());
-            if (user == null) {
-                log.warn("Пользователь ID {} не найден", stats.getUserId());
-                return null;
-            }
-            return buildRatingResponse(user, stats);
-        });
+        List<RatingResponse> content = topStats.getContent().stream()
+                .map(stats -> {
+                    User user = userMap.get(stats.getUserId());
+                    if (user == null) {
+                        log.warn("Пользователь ID {} не найден или удалён, пропущен в топе рейтингов", stats.getUserId());
+                        return null;
+                    }
+                    return buildRatingResponse(user, stats);
+                })
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+
+        return new PageImpl<>(content, pageable, topStats.getTotalElements());
     }
 
     public Page<RatingHistory> getRatingHistory(Long userId, Pageable pageable) {
         log.info("Получение истории рейтинга для пользователя ID: {}", userId);
+        if (!userRepository.existsByIdAndDeletedFalse(userId)) {
+            throw new NotFoundException("Пользователь не найден");
+        }
         return historyRepository.findByUserIdOrderByCalculatedAtDesc(userId, pageable);
     }
 

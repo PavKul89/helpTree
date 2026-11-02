@@ -7,6 +7,7 @@ import org.example.helptreeservice.entity.CoinTransaction;
 import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.enums.TransactionType;
 import org.example.helptreeservice.exception.BadRequestException;
+import org.example.helptreeservice.exception.NotFoundException;
 import org.example.helptreeservice.repository.CoinTransactionRepository;
 import org.example.helptreeservice.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -139,7 +140,10 @@ public class WalletService {
         // Блокируем строку пользователя, чтобы два одновременных запроса
         // не смогли оба пройти проверку и начислить бонус дважды.
         User user = userRepository.findByIdForUpdate(userId)
-                .orElseThrow(() -> new BadRequestException("Пользователь не найден"));
+                .orElseThrow(() -> new NotFoundException("Пользователь не найден"));
+        if (Boolean.TRUE.equals(user.getDeleted())) {
+            throw new NotFoundException("Пользователь не найден");
+        }
 
         boolean alreadyClaimed = transactionRepository.existsByUserIdAndTypeAndCreatedAtAfter(
                 userId, TransactionType.DAILY_LOGIN, now.minusHours(24));
@@ -174,7 +178,11 @@ public class WalletService {
         if (amount <= 0) {
             throw new BadRequestException("Сумма должна быть положительной");
         }
-        
+
+        if (!userRepository.existsByIdAndDeletedFalse(userId)) {
+            throw new NotFoundException("Пользователь не найден");
+        }
+
         int updated = userRepository.deductHelpCoins(userId, amount);
         if (updated == 0) {
             User user = getUserOrThrow(userId);
@@ -257,8 +265,8 @@ public class WalletService {
     }
 
     private User getUserOrThrow(Long userId) {
-        return userRepository.findById(userId)
-                .orElseThrow(() -> new BadRequestException("Пользователь не найден"));
+        return userRepository.findByIdAndDeletedFalse(userId)
+                .orElseThrow(() -> new NotFoundException("Пользователь не найден"));
     }
 
     private CoinTransactionDto toDto(CoinTransaction transaction) {

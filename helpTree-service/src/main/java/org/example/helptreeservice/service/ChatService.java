@@ -10,6 +10,7 @@ import org.example.helptreeservice.entity.Chat;
 import org.example.helptreeservice.entity.Message;
 import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.exception.BadRequestException;
+import org.example.helptreeservice.exception.ForbiddenException;
 import org.example.helptreeservice.exception.NotFoundException;
 import org.example.helptreeservice.mapper.ChatMapper;
 import org.example.helptreeservice.repository.ChatRepository;
@@ -43,13 +44,11 @@ public class ChatService {
             throw new BadRequestException("Нельзя создать чат с самим собой");
         }
 
-        User participant = userRepository.findById(request.getParticipantId())
-                .orElseThrow(() -> new NotFoundException("Пользователь не найден"));
+        User participant = getActiveUser(request.getParticipantId());
 
         Chat chat = chatRepository.findByUsers(currentUserId, request.getParticipantId())
                 .orElseGet(() -> {
-                    User currentUser = userRepository.findById(currentUserId)
-                            .orElseThrow(() -> new NotFoundException("Пользователь не найден"));
+                    User currentUser = getActiveUser(currentUserId);
                     
                     Chat newChat = Chat.builder()
                             .user1(currentUser)
@@ -64,6 +63,7 @@ public class ChatService {
 
     @Transactional(readOnly = true)
     public List<ChatResponse> getChats(Long currentUserId) {
+        getActiveUser(currentUserId);
         List<Chat> chats = chatRepository.findByUserId(currentUserId);
         return chats.stream()
                 .map(chat -> chatMapper.toResponse(chat, currentUserId))
@@ -72,15 +72,8 @@ public class ChatService {
 
     @Transactional
     public MessageResponse sendMessage(Long chatId, CreateMessageRequest request, Long currentUserId) {
-        Chat chat = chatRepository.findById(chatId)
-                .orElseThrow(() -> new NotFoundException("Чат не найден"));
-
-        if (!chat.getUser1().getId().equals(currentUserId) && !chat.getUser2().getId().equals(currentUserId)) {
-            throw new BadRequestException("Вы не участник этого чата");
-        }
-
-        User sender = userRepository.findById(currentUserId)
-                .orElseThrow(() -> new NotFoundException("Пользователь не найден"));
+        Chat chat = getChatForParticipant(chatId, currentUserId);
+        User sender = getActiveUser(currentUserId);
 
         Message message = Message.builder()
                 .chat(chat)
@@ -113,12 +106,7 @@ public class ChatService {
 
     @Transactional(readOnly = true)
     public Page<MessageResponse> getMessages(Long chatId, Long currentUserId, Pageable pageable) {
-        Chat chat = chatRepository.findById(chatId)
-                .orElseThrow(() -> new NotFoundException("Чат не найден"));
-
-        if (!chat.getUser1().getId().equals(currentUserId) && !chat.getUser2().getId().equals(currentUserId)) {
-            throw new BadRequestException("Вы не участник этого чата");
-        }
+        getChatForParticipant(chatId, currentUserId);
 
         return messageRepository.findByChatIdOrderByCreatedAtDesc(chatId, pageable)
                 .map(chatMapper::toMessageResponse);
@@ -126,12 +114,7 @@ public class ChatService {
 
     @Transactional
     public void markMessagesAsRead(Long chatId, Long currentUserId) {
-        Chat chat = chatRepository.findById(chatId)
-                .orElseThrow(() -> new NotFoundException("Чат не найден"));
-
-        if (!chat.getUser1().getId().equals(currentUserId) && !chat.getUser2().getId().equals(currentUserId)) {
-            throw new BadRequestException("Вы не участник этого чата");
-        }
+        getChatForParticipant(chatId, currentUserId);
 
         messageRepository.markMessagesAsRead(chatId, currentUserId);
         log.info("Пользователь {} прочитал сообщения в чате {}", currentUserId, chatId);
@@ -141,12 +124,7 @@ public class ChatService {
 
     @Transactional
     public void deleteChat(Long chatId, Long currentUserId) {
-        Chat chat = chatRepository.findById(chatId)
-                .orElseThrow(() -> new NotFoundException("Чат не найден"));
-
-        if (!chat.getUser1().getId().equals(currentUserId) && !chat.getUser2().getId().equals(currentUserId)) {
-            throw new BadRequestException("Вы не участник этого чата");
-        }
+        Chat chat = getChatForParticipant(chatId, currentUserId);
 
         Long otherUserId = chat.getUser1().getId().equals(currentUserId) 
                 ? chat.getUser2().getId() 
@@ -161,23 +139,44 @@ public class ChatService {
 
     @Transactional
     public void deleteMessage(Long chatId, Long messageId, Long currentUserId) {
-        Chat chat = chatRepository.findById(chatId)
-                .orElseThrow(() -> new NotFoundException("Чат не найден"));
-
-        if (!chat.getUser1().getId().equals(currentUserId) && !chat.getUser2().getId().equals(currentUserId)) {
-            throw new BadRequestException("Вы не участник этого чата");
-        }
+        getChatForParticipant(chatId, currentUserId);
 
         Message message = messageRepository.findById(messageId)
-                .orElseThrow(() -> new NotFoundException("Сообщение не найден"));
+                .orElseThrow(() -> new NotFoundException("Сообщение не найдено"));
+
+        if (message.getChat() == null || !message.getChat().getId().equals(chatId)) {
+            throw new NotFoundException("Сообщение не найдено");
+        }
 
         if (!message.getSender().getId().equals(currentUserId)) {
-            throw new BadRequestException("Вы можете удалить только свое сообщение");
+            throw new ForbiddenException("Вы можете удалить только свое сообщение");
         }
 
         messageRepository.delete(message);
         log.info("Пользователь {} удалил сообщение {} из чата {}", currentUserId, messageId, chatId);
 
         messagingTemplate.convertAndSend("/topic/chat/" + chatId, WsMessageEnvelope.messageDeleted(chatId, messageId));
+    }
+
+    private Chat getChatForParticipant(Long chatId, Long currentUserId) {
+        Chat chat = chatRepository.findById(chatId)
+                .orElseThrow(() -> new NotFoundException("Чат не найден"));
+
+        if (!chat.getUser1().getId().equals(currentUserId) && !chat.getUser2().getId().equals(currentUserId)) {
+            throw new ForbiddenException("Вы не участник этого чата");
+        }
+
+        return chat;
+    }
+
+    private User getActiveUser(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new NotFoundException("Пользователь не найден"));
+
+        if (Boolean.TRUE.equals(user.getDeleted())) {
+            throw new NotFoundException("Пользователь не найден");
+        }
+
+        return user;
     }
 }
