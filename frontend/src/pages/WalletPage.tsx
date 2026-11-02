@@ -1,655 +1,843 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
+import {
+  AlertCircle,
+  ArrowDownLeft,
+  ArrowLeft,
+  Award,
+  CalendarCheck,
+  ChevronLeft,
+  ChevronRight,
+  Coins,
+  Crown,
+  Gift,
+  HandHeart,
+  History,
+  Loader2,
+  Lock,
+  Palette,
+  RefreshCw,
+  Sparkles,
+  Star,
+  Unlock,
+  Wallet,
+  X,
+  Zap,
+} from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { walletApi, WalletDto, CoinTransactionDto } from '../api/walletApi';
+import {
+  walletApi,
+  notifyWalletUpdated,
+  type CoinTransactionDto,
+  type PageResponse,
+  type WalletDto,
+} from '../api/walletApi';
 import { postsApi } from '../api/postsApi';
-import { authApi } from '../api/authApi';
-import { theme } from '../theme';
-import { Coins, ArrowUpRight, ArrowDownLeft, Gift, Star, Calendar, TrendingUp, History, Gift as GiftIcon, Sparkles, Crown, Zap, Unlock, CreditCard, Award } from 'lucide-react';
-import { Button } from '../components';
 import { useToast } from '../components/Toast';
 import { getRelativeTime } from '../utils/dateUtils';
 import type { Post } from '../types';
+import './WalletPage.css';
 
-const getTransactionIcon = (type: string) => {
-  switch (type) {
-    case 'HELP_GIVEN':
-      return <Gift size={18} color="#10B981" />;
-    case 'HELP_RECEIVED':
-      return <ArrowDownLeft size={18} color="#06b6d4" />;
-    case 'REVIEW_BONUS':
-      return <Star size={18} color="#fbbf24" />;
-    case 'DAILY_LOGIN':
-      return <Calendar size={18} color="#a78bfa" />;
-    case 'ADMIN_BONUS':
-      return <TrendingUp size={18} color="#f472b6" />;
-    case 'FIRST_HELP':
-      return <Award size={18} color="#f97316" />;
-    default:
-      return <Coins size={18} color="#9ca3af" />;
-  }
+const HISTORY_PAGE_SIZE = 10;
+// Matches the app.economy.boost-price value used by POST /api/posts/{id}/boost.
+const BOOST_PRICE = 5;
+
+type Direction = 'in' | 'out';
+type TxIcon = React.ComponentType<{ size?: number | string; className?: string }>;
+
+interface TransactionMeta {
+  label: string;
+  direction: Direction;
+  Icon: TxIcon;
+}
+
+const TRANSACTION_META: Record<string, TransactionMeta> = {
+  HELP_GIVEN: { label: 'Награда за помощь', direction: 'in', Icon: HandHeart },
+  HELP_RECEIVED: { label: 'Помощь получена', direction: 'in', Icon: ArrowDownLeft },
+  REVIEW_BONUS: { label: 'Бонус за отзыв', direction: 'in', Icon: Star },
+  DAILY_LOGIN: { label: 'Ежедневный вход', direction: 'in', Icon: CalendarCheck },
+  GIFT_RECEIVED: { label: 'Подарок получен', direction: 'in', Icon: Gift },
+  ADMIN_BONUS: { label: 'Бонус от администратора', direction: 'in', Icon: Sparkles },
+  FIRST_HELP: { label: 'Бонус новичка', direction: 'in', Icon: Award },
+  POST_BOOST: { label: 'Поднятие заявки', direction: 'out', Icon: Zap },
+  BOOST: { label: 'Поднятие заявки', direction: 'out', Icon: Zap },
+  VIP_STATUS: { label: 'VIP-статус', direction: 'out', Icon: Crown },
+  VIP: { label: 'VIP-статус', direction: 'out', Icon: Crown },
+  ACCOUNT_UNBLOCK: { label: 'Разблокировка аккаунта', direction: 'out', Icon: Unlock },
+  GIFT_SENT: { label: 'Подарок отправлен', direction: 'out', Icon: Gift },
+  NICKNAME_COLOR: { label: 'Смена цвета ника', direction: 'out', Icon: Palette },
 };
 
-const getTransactionLabel = (type: string) => {
-  switch (type) {
-    case 'HELP_GIVEN':
-      return 'Помощь оказана';
-    case 'HELP_RECEIVED':
-      return 'Помощь получена';
-    case 'REVIEW_BONUS':
-      return 'Бонус за отзыв';
-    case 'DAILY_LOGIN':
-      return 'Ежедневный вход';
-    case 'ADMIN_BONUS':
-      return 'Бонус от админа';
-    case 'POST_BOOST':
-      return 'Поднятие поста';
-    case 'VIP_STATUS':
-      return 'VIP статус';
-    case 'ACCOUNT_UNBLOCK':
-      return 'Разблокировка';
-    case 'GIFT_SENT':
-      return 'Подарок отправлен';
-    case 'GIFT_RECEIVED':
-      return 'Подарок получен';
-    case 'FIRST_HELP':
-      return 'Бонус новичка';
-    default:
-      return 'Транзакция';
-  }
+const numberFormatter = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 });
+
+const formatNumber = (value: number): string => numberFormatter.format(value);
+
+const formatCoins = (value: number): string => `${formatNumber(value)} HC`;
+
+const formatSignedCoins = (amount: number): string => {
+  const sign = amount > 0 ? '+' : amount < 0 ? '−' : '';
+  return `${sign}${formatNumber(Math.abs(amount))} HC`;
 };
 
-const getTransactionColor = (type: string) => {
-  switch (type) {
-    case 'HELP_GIVEN':
-    case 'HELP_RECEIVED':
-    case 'REVIEW_BONUS':
-    case 'DAILY_LOGIN':
-    case 'ADMIN_BONUS':
-    case 'GIFT_RECEIVED':
-    case 'FIRST_HELP':
-      return '#10B981';
-    case 'POST_BOOST':
-    case 'VIP_STATUS':
-    case 'ACCOUNT_UNBLOCK':
-    case 'GIFT_SENT':
-      return '#f87171';
-    default:
-      return '#9ca3af';
-  }
+const formatFullDate = (value: string): string => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleString('ru-RU', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
+const pluralize = (count: number, forms: [string, string, string]): string => {
+  const abs = Math.abs(count) % 100;
+  const last = abs % 10;
+  if (abs > 10 && abs < 20) return forms[2];
+  if (last > 1 && last < 5) return forms[1];
+  if (last === 1) return forms[0];
+  return forms[2];
+};
+
+const getTransactionMeta = (transaction: CoinTransactionDto): TransactionMeta =>
+  TRANSACTION_META[transaction.type] ?? {
+    label: 'Операция',
+    direction: transaction.amount < 0 ? 'out' : 'in',
+    Icon: Coins,
+  };
+
+const isCanceled = (error: unknown): boolean => {
+  const candidate = error as { code?: string; name?: string } | null;
+  return (
+    candidate?.code === 'ERR_CANCELED' ||
+    candidate?.name === 'CanceledError' ||
+    candidate?.name === 'AbortError'
+  );
+};
+
+const getErrorMessage = (error: unknown, fallback: string): string => {
+  const message = (error as { response?: { data?: { message?: unknown } } } | null)?.response
+    ?.data?.message;
+  return typeof message === 'string' && message.trim() ? message : fallback;
+};
+
+const getErrorStatus = (error: unknown): number | undefined =>
+  (error as { response?: { status?: number } } | null)?.response?.status;
+
+const dedupeTransactions = (transactions: CoinTransactionDto[]): CoinTransactionDto[] => {
+  const seen = new Set<number>();
+  return transactions.filter((transaction) => {
+    if (seen.has(transaction.id)) return false;
+    seen.add(transaction.id);
+    return true;
+  });
 };
 
 export const WalletPage: React.FC = () => {
-  const { user, setUser } = useAuth();
-  const [wallet, setWallet] = useState<WalletDto | null>(null);
-  const [transactions, setTransactions] = useState<CoinTransactionDto[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [spending, setSpending] = useState<string | null>(null);
-  const [showBoostModal, setShowBoostModal] = useState(false);
-  const [userPosts, setUserPosts] = useState<Post[]>([]);
+  const { user } = useAuth();
   const { showToast } = useToast();
-  const dailyLoginShownRef = useRef<number | null>(null);
 
-  const loadWallet = async () => {
-    if (!user) return;
-    try {
-      const data = await walletApi.getWallet(user.id);
-      setWallet(data);
-    } catch (err) {
-      console.error('Error loading wallet:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [wallet, setWallet] = useState<WalletDto | null>(null);
+  const [walletLoading, setWalletLoading] = useState(true);
+  const [walletError, setWalletError] = useState<string | null>(null);
+  const [forbidden, setForbidden] = useState(false);
 
-  const loadTransactions = async () => {
-    if (!user) return;
-    try {
-      const data = await walletApi.getTransactions(user.id, 0, 50);
-      setTransactions(data.content);
-      
-      const lastTx = data.content[0];
-      if (lastTx && lastTx.type === 'DAILY_LOGIN') {
-        const txTime = new Date(lastTx.createdAt).getTime();
-        const now = Date.now();
-        if (now - txTime < 60000 && dailyLoginShownRef.current !== lastTx.id) {
-          dailyLoginShownRef.current = lastTx.id;
-          showToast('+1 HC за ежедневный вход!', 'success');
-        }
-      }
-    } catch (err) {
-      console.error('Error loading transactions:', err);
-    }
-  };
+  const [page, setPage] = useState(0);
+  const [history, setHistory] = useState<PageResponse<CoinTransactionDto> | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyError, setHistoryError] = useState<string | null>(null);
 
-  const loadUserPosts = async () => {
-    if (!user) return;
-    try {
-      const posts = await postsApi.getByUser(user.id);
-      setUserPosts(posts);
-    } catch (err) {
-      console.error('Error loading user posts:', err);
-    }
-  };
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [selectedTransaction, setSelectedTransaction] = useState<CoinTransactionDto | null>(null);
 
-  const handleBoostClick = () => {
-    if (!wallet || wallet.balance < 5) {
-      showToast('Недостаточно HC. Нужно 5 HC', 'error');
-      return;
-    }
-    loadUserPosts();
-    setShowBoostModal(true);
-  };
-
-  const handleBoostPost = async (postId: number) => {
-    if (!user) return;
-    setSpending('BOOST');
-    try {
-      await postsApi.boost(postId);
-      showToast('Пост поднят в топ!', 'success');
-      loadWallet();
-      loadTransactions();
-      setShowBoostModal(false);
-    } catch (err: any) {
-      showToast(err.response?.data?.message || 'Ошибка при поднятии поста', 'error');
-    } finally {
-      setSpending(null);
-    }
-  };
-
-  const styles: Record<string, React.CSSProperties> = {
-    container: {
-      padding: '24px',
-      maxWidth: '800px',
-      margin: '0 auto',
-    },
-    loading: {
-      textAlign: 'center',
-      color: theme.colors.textSecondary,
-      padding: '40px',
-    },
-    header: {
-      marginBottom: '24px',
-    },
-    title: {
-      color: theme.colors.text,
-      fontSize: '28px',
-      fontWeight: 700,
-      margin: 0,
-    },
-    balanceCard: {
-      background: `linear-gradient(135deg, ${theme.colors.primaryDark} 0%, ${theme.colors.primary} 50%, ${theme.colors.accentDark} 100%)`,
-      borderRadius: theme.borderRadius.xl,
-      padding: '32px',
-      marginBottom: '24px',
-      boxShadow: '0 10px 40px rgba(6, 182, 212, 0.3)',
-      textAlign: 'center' as const,
-    },
-    balanceLabel: {
-      color: 'rgba(255,255,255,0.8)',
-      fontSize: '14px',
-      textTransform: 'uppercase' as const,
-      letterSpacing: '2px',
-      marginBottom: '8px',
-    },
-    balanceAmount: {
-      color: '#fff',
-      fontSize: '56px',
-      fontWeight: 700,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: '12px',
-    },
-    balanceCoins: {
-      color: '#fbbf24',
-    },
-    statsRow: {
-      display: 'flex',
-      gap: '16px',
-      marginTop: '24px',
-    },
-    statItem: {
-      flex: 1,
-      background: 'rgba(255,255,255,0.1)',
-      borderRadius: theme.borderRadius.lg,
-      padding: '16px',
-      textAlign: 'center' as const,
-    },
-    statValue: {
-      color: '#fff',
-      fontSize: '20px',
-      fontWeight: 700,
-    },
-    statLabel: {
-      color: 'rgba(255,255,255,0.7)',
-      fontSize: '12px',
-      marginTop: '4px',
-    },
-    section: {
-      background: 'rgba(255,255,255,0.05)',
-      borderRadius: theme.borderRadius.lg,
-      padding: '24px',
-      marginBottom: '24px',
-    },
-    sectionTitle: {
-      color: theme.colors.text,
-      fontSize: '18px',
-      fontWeight: 600,
-      marginBottom: '16px',
-      display: 'flex',
-      alignItems: 'center',
-      gap: '8px',
-    },
-    dailyBonus: {
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      padding: '20px',
-      background: 'linear-gradient(135deg, rgba(251, 191, 36, 0.15) 0%, rgba(251, 191, 36, 0.05) 100%)',
-      borderRadius: theme.borderRadius.lg,
-      border: '1px solid rgba(251, 191, 36, 0.3)',
-    },
-    bonusInfo: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: '12px',
-    },
-    bonusText: {
-      color: theme.colors.text,
-      fontSize: '14px',
-    },
-    bonusSubtext: {
-      color: theme.colors.textSecondary,
-      fontSize: '12px',
-      marginTop: '2px',
-    },
-    transactionItem: {
-      display: 'flex',
-      alignItems: 'center',
-      padding: '16px 0',
-      borderBottom: `1px solid ${theme.colors.border}`,
-    },
-    transactionIcon: {
-      width: '40px',
-      height: '40px',
-      borderRadius: '50%',
-      background: 'rgba(255,255,255,0.1)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginRight: '12px',
-    },
-    transactionInfo: {
-      flex: 1,
-    },
-    transactionTitle: {
-      color: theme.colors.text,
-      fontSize: '14px',
-      fontWeight: 500,
-    },
-    transactionDesc: {
-      color: theme.colors.textSecondary,
-      fontSize: '12px',
-      marginTop: '2px',
-    },
-    transactionAmount: {
-      fontSize: '16px',
-      fontWeight: 700,
-      display: 'flex',
-      alignItems: 'center',
-      gap: '4px',
-    },
-    transactionTime: {
-      color: theme.colors.textMuted,
-      fontSize: '11px',
-      marginTop: '2px',
-      textAlign: 'right' as const,
-    },
-    emptyState: {
-      textAlign: 'center',
-      padding: '40px',
-      color: theme.colors.textSecondary,
-    },
-    modalOverlay: {
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      background: 'rgba(0, 0, 0, 0.8)',
-      backdropFilter: 'blur(8px)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 1000,
-    },
-    modalContent: {
-      background: 'linear-gradient(160deg, #0e7490 0%, #065F46 50%, #164e63 100%)',
-      borderRadius: '20px',
-      padding: '24px',
-      maxWidth: '500px',
-      width: '90%',
-      maxHeight: '80vh',
-      overflow: 'hidden',
-      display: 'flex',
-      flexDirection: 'column',
-    },
-    modalTitle: {
-      color: '#fff',
-      fontSize: '18px',
-      fontWeight: 700,
-      margin: '0 0 16px 0',
-      textAlign: 'center' as const,
-    },
-    howToEarn: {
-      display: 'grid',
-      gridTemplateColumns: 'repeat(2, 1fr)',
-      gap: '12px',
-    },
-    earnItem: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: '10px',
-      padding: '12px',
-      background: 'rgba(255,255,255,0.05)',
-      borderRadius: theme.borderRadius.md,
-    },
-    earnIcon: {
-      width: '32px',
-      height: '32px',
-      borderRadius: '8px',
-      background: 'rgba(16, 185, 129, 0.2)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    earnText: {
-      color: theme.colors.text,
-      fontSize: '13px',
-    },
-    earnAmount: {
-      color: '#10B981',
-      fontWeight: 700,
-      marginLeft: 'auto',
-    },
-    spendSection: {
-      display: 'grid',
-      gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-      gap: '12px',
-    },
-    spendItem: {
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      padding: '20px 16px',
-      background: 'rgba(255,255,255,0.05)',
-      borderRadius: theme.borderRadius.lg,
-      border: '1px solid rgba(255,255,255,0.1)',
-      cursor: 'pointer',
-      transition: 'all 0.2s',
-    },
-    spendItemDisabled: {
-      opacity: 0.5,
-      cursor: 'not-allowed',
-    },
-    spendIcon: {
-      width: '48px',
-      height: '48px',
-      borderRadius: '12px',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginBottom: '12px',
-    },
-    spendTitle: {
-      color: theme.colors.text,
-      fontSize: '14px',
-      fontWeight: 600,
-      textAlign: 'center',
-      marginBottom: '4px',
-    },
-    spendDesc: {
-      color: theme.colors.textSecondary,
-      fontSize: '11px',
-      textAlign: 'center',
-      marginBottom: '12px',
-    },
-    spendPrice: {
-      color: '#fbbf24',
-      fontWeight: 700,
-      fontSize: '16px',
-    },
-  };
+  const [boostOpen, setBoostOpen] = useState(false);
+  const [posts, setPosts] = useState<Post[] | null>(null);
+  const [postsLoading, setPostsLoading] = useState(false);
+  const [postsError, setPostsError] = useState<string | null>(null);
+  const [selectedPostId, setSelectedPostId] = useState<number | null>(null);
+  const [boostError, setBoostError] = useState<string | null>(null);
+  const [boosting, setBoosting] = useState(false);
+  const boostingRef = useRef(false);
 
   useEffect(() => {
-    if (user) {
-      loadWallet();
-      loadTransactions();
-    }
-  }, [user]);
-
-  const handleSpend = async (type: 'VIP' | 'BOOST' | 'UNBLOCK') => {
-    if (!user || !wallet) return;
-    
-    const prices = { VIP: 50, BOOST: 5, UNBLOCK: 100 };
-    const price = prices[type];
-    const names = { VIP: 'VIP статус', BOOST: 'поднятие поста', UNBLOCK: 'разблокировку' };
-    
-    if (wallet.balance < price) {
-      showToast(`Недостаточно HC. Нужно ${price}, у вас ${wallet.balance}`, 'error');
+    if (!user) {
+      setWallet(null);
+      setWalletLoading(false);
+      setHistory(null);
+      setHistoryLoading(false);
       return;
     }
-    
-    setSpending(type);
+
+    const controller = new AbortController();
+    setForbidden(false);
+    setWalletLoading(true);
+    setWalletError(null);
+
+    walletApi
+      .getWallet(user.id, controller.signal)
+      .then((data) => {
+        if (controller.signal.aborted) return;
+        setWallet(data);
+        notifyWalletUpdated(data.balance);
+      })
+      .catch((error) => {
+        if (controller.signal.aborted || isCanceled(error)) return;
+        if (getErrorStatus(error) === 403) {
+          setForbidden(true);
+          setWallet(null);
+          return;
+        }
+        setWalletError(getErrorMessage(error, 'Не удалось загрузить баланс'));
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setWalletLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [user, refreshKey]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const controller = new AbortController();
+    setHistoryLoading(true);
+    setHistoryError(null);
+
+    walletApi
+      .getTransactions(user.id, page, HISTORY_PAGE_SIZE, controller.signal)
+      .then((data) => {
+        if (controller.signal.aborted) return;
+        setHistory({ ...data, content: dedupeTransactions(data.content) });
+        if (data.totalPages > 0 && page > data.totalPages - 1) {
+          setPage(data.totalPages - 1);
+        }
+      })
+      .catch((error) => {
+        if (controller.signal.aborted || isCanceled(error)) return;
+        if (getErrorStatus(error) === 403) {
+          setForbidden(true);
+          return;
+        }
+        setHistoryError(getErrorMessage(error, 'Не удалось загрузить историю операций'));
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setHistoryLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [user, page, refreshKey]);
+
+  useEffect(() => {
+    const modalOpen = Boolean(selectedTransaction) || boostOpen;
+    if (!modalOpen) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (selectedTransaction) {
+        setSelectedTransaction(null);
+      } else if (!boostingRef.current) {
+        setBoostOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [selectedTransaction, boostOpen]);
+
+  const refreshWalletData = () => {
+    setPage(0);
+    setRefreshKey((key) => key + 1);
+  };
+
+  const openBoostModal = async () => {
+    if (!user || boostingRef.current) return;
+
+    setBoostOpen(true);
+    setBoostError(null);
+    setSelectedPostId(null);
+    setPosts(null);
+    setPostsError(null);
+    setPostsLoading(true);
+
     try {
-      await walletApi.spend(user.id, type.toUpperCase(), names[type]);
-      showToast(`Вы потратили ${price} HC на ${names[type]}`, 'success');
-      loadWallet();
-      loadTransactions();
-      
-      const updatedUser = await authApi.getCurrentUser();
-      setUser(updatedUser);
-    } catch (err: any) {
-      showToast(err.response?.data?.message || 'Ошибка при покупке', 'error');
+      const userPosts = await postsApi.getByUser(user.id);
+      setPosts(userPosts.filter((post) => post.status === 'OPEN'));
+    } catch (error) {
+      setPostsError(getErrorMessage(error, 'Не удалось загрузить ваши заявки'));
     } finally {
-      setSpending(null);
+      setPostsLoading(false);
     }
   };
 
-  if (loading) {
+  const closeBoostModal = () => {
+    if (boostingRef.current) return;
+    setBoostOpen(false);
+  };
+
+  const handleBoost = async () => {
+    if (!user || !selectedPostId || boostingRef.current) return;
+
+    boostingRef.current = true;
+    setBoosting(true);
+    setBoostError(null);
+
+    try {
+      const result = await postsApi.boost(selectedPostId);
+      showToast(result.message || 'Заявка поднята в топ', 'success');
+      setBoostOpen(false);
+      setSelectedPostId(null);
+      refreshWalletData();
+    } catch (error) {
+      const message = getErrorMessage(error, 'Не удалось поднять заявку');
+      setBoostError(message);
+      showToast(message, 'error');
+      // Never leave an old balance on screen after a financial operation.
+      refreshWalletData();
+    } finally {
+      boostingRef.current = false;
+      setBoosting(false);
+    }
+  };
+
+  const renderWalletBody = () => {
+    if (walletLoading) {
+      return (
+        <div className="wallet-balance-loading" aria-label="Загрузка баланса">
+          <span className="wallet-skeleton wallet-skeleton--label" />
+          <span className="wallet-skeleton wallet-skeleton--amount" />
+          <div className="wallet-balance-stats">
+            <span className="wallet-skeleton wallet-skeleton--stat" />
+            <span className="wallet-skeleton wallet-skeleton--stat" />
+          </div>
+        </div>
+      );
+    }
+
+    if (walletError) {
+      return (
+        <div className="wallet-balance-error" role="alert">
+          <span className="wallet-balance-error-icon" aria-hidden="true">
+            <AlertCircle size={22} />
+          </span>
+          <div>
+            <strong>Не удалось загрузить баланс</strong>
+            <p>{walletError}</p>
+          </div>
+          <button type="button" className="wallet-ghost-button" onClick={refreshWalletData}>
+            <RefreshCw size={15} /> Повторить
+          </button>
+        </div>
+      );
+    }
+
+    if (!wallet) return null;
+
     return (
-      <div style={styles.container}>
-        <div style={styles.loading}>Загрузка...</div>
-      </div>
+      <>
+        <span className="wallet-balance-label">
+          <Coins size={15} aria-hidden="true" /> Текущий баланс
+        </span>
+        <div className="wallet-balance-value">
+          <span className="wallet-balance-number">{formatNumber(wallet.balance)}</span>
+          <span className="wallet-balance-unit">HC</span>
+        </div>
+        {wallet.balance === 0 && (
+          <p className="wallet-zero-note">
+            Баланс пока пуст. Первые HC можно получить за помощь сообществу.
+          </p>
+        )}
+        <div className="wallet-balance-stats">
+          <div className="wallet-balance-stat">
+            <span>Получено</span>
+            <strong className="wallet-balance-stat-in">+{formatCoins(wallet.totalEarned)}</strong>
+          </div>
+          <div className="wallet-balance-stat">
+            <span>Потрачено</span>
+            <strong className="wallet-balance-stat-out">−{formatCoins(wallet.totalSpent)}</strong>
+          </div>
+        </div>
+      </>
     );
-  }
+  };
+
+  const renderHistoryBody = () => {
+    if (historyLoading) {
+      return (
+        <div className="wallet-history-skeleton" aria-label="Загрузка истории операций">
+          {[0, 1, 2, 3, 4].map((row) => (
+            <div className="wallet-history-skeleton-row" key={row}>
+              <span className="wallet-skeleton wallet-skeleton--icon" />
+              <span className="wallet-history-skeleton-text">
+                <span className="wallet-skeleton wallet-skeleton--line" />
+                <span className="wallet-skeleton wallet-skeleton--line wallet-skeleton--short" />
+              </span>
+              <span className="wallet-skeleton wallet-skeleton--amount-small" />
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    if (historyError) {
+      return (
+        <div className="wallet-state wallet-state--inside" role="alert">
+          <span className="wallet-state-icon" aria-hidden="true">
+            <AlertCircle size={25} />
+          </span>
+          <h3>История не загрузилась</h3>
+          <p>{historyError}</p>
+          <button type="button" className="wallet-ghost-button" onClick={refreshWalletData}>
+            <RefreshCw size={15} /> Повторить
+          </button>
+        </div>
+      );
+    }
+
+    if (!history || history.content.length === 0) {
+      return (
+        <div className="wallet-state wallet-state--inside">
+          <span className="wallet-state-icon" aria-hidden="true">
+            <History size={25} />
+          </span>
+          <h3>Пока нет операций</h3>
+          <p>Здесь появятся начисления и списания HC, когда вы начнёте помогать по заявкам.</p>
+          <Link className="wallet-ghost-button" to="/posts">
+            Перейти к заявкам
+          </Link>
+        </div>
+      );
+    }
+
+    return (
+      <ul className="wallet-transactions">
+        {history.content.map((transaction) => {
+          const meta = getTransactionMeta(transaction);
+          const Icon = meta.Icon;
+          const direction = meta.direction;
+
+          return (
+            <li key={transaction.id}>
+              <button
+                type="button"
+                className={`wallet-transaction wallet-transaction--${direction}`}
+                onClick={() => setSelectedTransaction(transaction)}
+                aria-label={`${meta.label}: ${formatSignedCoins(transaction.amount)}. Подробности операции`}
+              >
+                <span className="wallet-transaction-icon" aria-hidden="true">
+                  <Icon size={19} />
+                </span>
+                <span className="wallet-transaction-main">
+                  <span className="wallet-transaction-title">{meta.label}</span>
+                  {transaction.description && transaction.description.trim() !== meta.label && (
+                    <span className="wallet-transaction-description">{transaction.description}</span>
+                  )}
+                </span>
+                <span className="wallet-transaction-side">
+                  <span className={`wallet-transaction-amount wallet-transaction-amount--${direction}`}>
+                    {formatSignedCoins(transaction.amount)}
+                  </span>
+                  <time className="wallet-transaction-date" dateTime={transaction.createdAt}>
+                    {getRelativeTime(transaction.createdAt)}
+                  </time>
+                </span>
+                <ChevronRight className="wallet-transaction-chevron" size={17} aria-hidden="true" />
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    );
+  };
+
+  const renderPagination = () => {
+    if (!history || history.totalPages <= 1) return null;
+
+    const currentPage = history.number;
+    const isFirst = currentPage <= 0;
+    const isLast = currentPage >= history.totalPages - 1;
+
+    return (
+      <nav className="wallet-pagination" aria-label="Страницы истории операций">
+        <button
+          type="button"
+          className="wallet-pagination-button"
+          onClick={() => setPage((value) => Math.max(0, value - 1))}
+          disabled={isFirst || historyLoading}
+        >
+          <ChevronLeft size={16} aria-hidden="true" /> Назад
+        </button>
+        <span className="wallet-pagination-status">
+          Страница <strong>{currentPage + 1}</strong> из {history.totalPages}
+        </span>
+        <button
+          type="button"
+          className="wallet-pagination-button"
+          onClick={() => setPage((value) => value + 1)}
+          disabled={isLast || historyLoading}
+        >
+          Вперёд <ChevronRight size={16} aria-hidden="true" />
+        </button>
+      </nav>
+    );
+  };
+
+  const selectedMeta = selectedTransaction ? getTransactionMeta(selectedTransaction) : null;
+  const SelectedIcon = selectedMeta?.Icon;
+  const totalLabel = history
+    ? `${formatNumber(history.totalElements)} ${pluralize(history.totalElements, [
+        'операция',
+        'операции',
+        'операций',
+      ])}`
+    : null;
 
   return (
-    <div style={styles.container}>
-      <div style={styles.header}>
-        <h1 style={styles.title}>Кошелёк</h1>
-      </div>
+    <main className="wallet-page">
+      <header className="wallet-heading">
+        <span className="wallet-heading-mark" aria-hidden="true">
+          <Wallet size={23} />
+        </span>
+        <div>
+          <span className="wallet-eyebrow">HelpTree · баланс и история</span>
+          <h1>Мой кошелёк</h1>
+          <p>Управляйте средствами и следите за историей операций.</p>
+        </div>
+      </header>
 
-      <div style={styles.balanceCard}>
-        <div style={styles.balanceLabel}>Ваш баланс</div>
-        <div style={styles.balanceAmount}>
-          <Coins size={48} color="#fbbf24" />
-          <span>{wallet?.balance || 0}</span>
-          <span style={styles.balanceCoins}>HC</span>
-        </div>
-        <div style={styles.statsRow}>
-          <div style={styles.statItem}>
-            <div style={styles.statValue}>+{wallet?.totalEarned || 0}</div>
-            <div style={styles.statLabel}>Заработано</div>
-          </div>
-          <div style={styles.statItem}>
-            <div style={styles.statValue}>-{wallet?.totalSpent || 0}</div>
-            <div style={styles.statLabel}>Потрачено</div>
-          </div>
-        </div>
-      </div>
+      {forbidden ? (
+        <section className="wallet-state wallet-state--page" role="alert">
+          <span className="wallet-state-icon" aria-hidden="true">
+            <Lock size={26} />
+          </span>
+          <h2>Нет доступа к кошельку</h2>
+          <p>Сервер разрешает просматривать только собственный баланс и историю операций.</p>
+          <Link className="wallet-ghost-button" to="/">
+            <ArrowLeft size={15} /> На главную
+          </Link>
+        </section>
+      ) : (
+        <>
+          <section className="wallet-overview" aria-label="Баланс и финансовые действия">
+            <div className="wallet-balance-card">
+              <span className="wallet-balance-orbit wallet-balance-orbit--one" aria-hidden="true" />
+              <span className="wallet-balance-orbit wallet-balance-orbit--two" aria-hidden="true" />
+              <div className="wallet-balance-content">{renderWalletBody()}</div>
+            </div>
 
-      <div style={styles.section}>
-        <div style={styles.sectionTitle}>
-          <TrendingUp size={20} color={theme.colors.accent} />
-          Как заработать
-        </div>
-        <div style={styles.howToEarn}>
-          <div style={styles.earnItem}>
-            <div style={styles.earnIcon}>
-              <Gift size={16} color="#10B981" />
-            </div>
-            <div style={styles.earnText}>Помочь другому</div>
-            <div style={styles.earnAmount}>+10</div>
-          </div>
-          <div style={styles.earnItem}>
-            <div style={styles.earnIcon}>
-              <Award size={16} color="#f97316" />
-            </div>
-            <div style={styles.earnText}>Первая помощь новичка</div>
-            <div style={styles.earnAmount}>+3</div>
-          </div>
-          <div style={styles.earnItem}>
-            <div style={styles.earnIcon}>
-              <ArrowDownLeft size={16} color="#06b6d4" />
-            </div>
-            <div style={styles.earnText}>Получить помощь</div>
-            <div style={styles.earnAmount}>+2</div>
-          </div>
-          <div style={styles.earnItem}>
-            <div style={styles.earnIcon}>
-              <Star size={16} color="#fbbf24" />
-            </div>
-            <div style={styles.earnText}>Оставить отзыв</div>
-            <div style={styles.earnAmount}>+2</div>
-          </div>
-          <div style={styles.earnItem}>
-            <div style={styles.earnIcon}>
-              <Calendar size={16} color="#a78bfa" />
-            </div>
-            <div style={styles.earnText}>Ежедневный вход</div>
-            <div style={styles.earnAmount}>+1</div>
-          </div>
-        </div>
-      </div>
+            <aside className="wallet-action-card">
+              <span className="wallet-action-icon" aria-hidden="true">
+                <Zap size={21} />
+              </span>
+              <span className="wallet-action-eyebrow">Финансовое действие</span>
+              <h2>Поднять заявку</h2>
+              <p>Выберите свою открытую заявку — она окажется выше в ленте на 24 часа.</p>
+              <button type="button" className="wallet-primary-button" onClick={openBoostModal}>
+                <Zap size={16} aria-hidden="true" /> Выбрать заявку
+              </button>
+              <span className="wallet-action-note">
+                Стоимость {BOOST_PRICE} HC спишет сервер после подтверждения.
+              </span>
+            </aside>
+          </section>
 
-      <div style={styles.section}>
-        <div style={styles.sectionTitle}>
-          <CreditCard size={20} color={theme.colors.accent} />
-          Потратить HC
-        </div>
-        <div style={styles.spendSection}>
-          <div style={styles.spendItem} onClick={() => handleSpend('VIP')}>
-            <div style={{...styles.spendIcon, background: 'linear-gradient(135deg, rgba(251, 191, 36, 0.2) 0%, rgba(251, 191, 36, 0.1) 100%)'}}>
-              <Crown size={24} color="#fbbf24" />
-            </div>
-            <div style={styles.spendTitle}>VIP статус</div>
-            <div style={styles.spendDesc}>Золотая рамка профиля на месяц</div>
-            <div style={styles.spendPrice}>50 HC</div>
-          </div>
-          
-          <div style={styles.spendItem} onClick={handleBoostClick}>
-            <div style={{...styles.spendIcon, background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.2) 0%, rgba(6, 182, 212, 0.1) 100%)'}}>
-              <Zap size={24} color="#06b6d4" />
-            </div>
-            <div style={styles.spendTitle}>Поднять пост</div>
-            <div style={styles.spendDesc}>Пост в топе на 24 часа</div>
-            <div style={styles.spendPrice}>5 HC</div>
-          </div>
-          
-          <div style={styles.spendItem} onClick={() => handleSpend('UNBLOCK')}>
-            <div style={{...styles.spendIcon, background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(239, 68, 68, 0.1) 100%)'}}>
-              <Unlock size={24} color="#ef4444" />
-            </div>
-            <div style={styles.spendTitle}>Разблокировка</div>
-            <div style={styles.spendDesc}>Снять блокировку за долг</div>
-            <div style={styles.spendPrice}>100 HC</div>
-          </div>
-        </div>
-      </div>
-
-      <div style={styles.section}>
-        <div style={styles.sectionTitle}>
-          <History size={20} color={theme.colors.accent} />
-          История транзакций
-        </div>
-        {transactions.length === 0 ? (
-          <div style={styles.emptyState}>
-            Пока нет транзакций
-          </div>
-        ) : (
-          transactions.map((tx) => (
-            <div key={tx.id} style={styles.transactionItem}>
-              <div style={styles.transactionIcon}>
-                {getTransactionIcon(tx.type)}
-              </div>
-              <div style={styles.transactionInfo}>
-                <div style={styles.transactionTitle}>{getTransactionLabel(tx.type)}</div>
-                {tx.description && (
-                  <div style={styles.transactionDesc}>{tx.description}</div>
+          <div className="wallet-content">
+            <section className="wallet-history-card" aria-labelledby="wallet-history-title">
+              <header className="wallet-history-header">
+                <div>
+                  <span className="wallet-section-eyebrow">Движение средств</span>
+                  <h2 id="wallet-history-title">История операций</h2>
+                </div>
+                {totalLabel && !historyLoading && !historyError && (
+                  <span className="wallet-history-count">{totalLabel}</span>
                 )}
-              </div>
-              <div>
-                <div style={{
-                  ...styles.transactionAmount,
-                  color: getTransactionColor(tx.type),
-                }}>
-                  {tx.amount > 0 ? '+' : ''}{tx.amount}
-                </div>
-                <div style={styles.transactionTime}>
-                  {getRelativeTime(tx.createdAt)}
-                </div>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
+              </header>
 
-      {showBoostModal && (
-        <div style={styles.modalOverlay} onClick={() => setShowBoostModal(false)}>
-          <div style={styles.modalContent} onClick={(e) => e.stopPropagation()}>
-            <h3 style={styles.modalTitle}>Выберите пост для поднятия</h3>
-            {userPosts.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '20px', color: theme.colors.textSecondary }}>
-                У вас пока нет постов
-              </div>
-            ) : (
-              <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-                {userPosts.map((post) => (
-                  <div
-                    key={post.id}
-                    onClick={() => handleBoostPost(post.id)}
-                    style={{
-                      padding: '12px',
-                      marginBottom: '8px',
-                      background: theme.colors.backgroundCard,
-                      borderRadius: theme.borderRadius.md,
-                      cursor: 'pointer',
-                      border: post.boosted ? '2px solid #fbbf24' : '1px solid ' + theme.colors.border,
-                    }}
-                  >
-                    <div style={{ fontWeight: 600, marginBottom: '4px' }}>{post.title}</div>
-                    <div style={{ fontSize: '12px', color: theme.colors.textSecondary }}>
-                      {post.boosted ? (
-                        <span style={{ color: '#fbbf24' }}>★ Уже в топе до {new Date(post.boostedUntil!).toLocaleString()}</span>
-                      ) : (
-                        <span>Статус: {post.status}</span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            <Button 
-              variant="outline" 
-              onClick={() => setShowBoostModal(false)}
-              style={{ marginTop: '16px', width: '100%' }}
-            >
-              Отмена
-            </Button>
+              {renderHistoryBody()}
+              {renderPagination()}
+            </section>
+
+            <aside className="wallet-facts-card" aria-labelledby="wallet-facts-title">
+              <header>
+                <span className="wallet-facts-icon" aria-hidden="true">
+                  <Sparkles size={18} />
+                </span>
+                <div>
+                  <span className="wallet-section-eyebrow">Правила сервера</span>
+                  <h2 id="wallet-facts-title">Как получить HC</h2>
+                </div>
+              </header>
+              <ul className="wallet-facts-list">
+                <li>
+                  <HandHeart size={16} aria-hidden="true" />
+                  <span>Помощь по заявке</span>
+                  <strong>+10</strong>
+                </li>
+                <li>
+                  <ArrowDownLeft size={16} aria-hidden="true" />
+                  <span>Полученная помощь</span>
+                  <strong>+2</strong>
+                </li>
+                <li>
+                  <Star size={16} aria-hidden="true" />
+                  <span>Отзыв</span>
+                  <strong>+2</strong>
+                </li>
+                <li>
+                  <CalendarCheck size={16} aria-hidden="true" />
+                  <span>Ежедневный вход</span>
+                  <strong>+1</strong>
+                </li>
+                <li>
+                  <Award size={16} aria-hidden="true" />
+                  <span>Бонус новичка</span>
+                  <strong>+3</strong>
+                </li>
+              </ul>
+              <p className="wallet-facts-note">
+                Ежедневный бонус начисляется автоматически при входе. Первые три помощи дополнительно
+                приносят бонус новичка.
+              </p>
+            </aside>
           </div>
+        </>
+      )}
+
+      {selectedTransaction && selectedMeta && SelectedIcon && (
+        <div
+          className="wallet-modal-overlay"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setSelectedTransaction(null);
+          }}
+        >
+          <section
+            className="wallet-modal wallet-modal--details"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="wallet-detail-title"
+          >
+            <header className="wallet-modal-header">
+              <span
+                className={`wallet-modal-mark wallet-modal-mark--${selectedMeta.direction}`}
+                aria-hidden="true"
+              >
+                <SelectedIcon size={21} />
+              </span>
+              <div>
+                <span className="wallet-section-eyebrow">Операция #{selectedTransaction.id}</span>
+                <h2 id="wallet-detail-title">{selectedMeta.label}</h2>
+              </div>
+              <button
+                type="button"
+                className="wallet-modal-close"
+                onClick={() => setSelectedTransaction(null)}
+                aria-label="Закрыть подробности операции"
+              >
+                <X size={18} />
+              </button>
+            </header>
+
+            <div className="wallet-modal-body">
+              <div
+                className={`wallet-detail-amount wallet-detail-amount--${selectedMeta.direction}`}
+              >
+                {formatSignedCoins(selectedTransaction.amount)}
+              </div>
+
+              <dl className="wallet-detail-list">
+                <div>
+                  <dt>Тип операции</dt>
+                  <dd>{selectedMeta.label}</dd>
+                </div>
+                {selectedTransaction.description &&
+                  selectedTransaction.description.trim() !== selectedMeta.label && (
+                    <div>
+                      <dt>Описание</dt>
+                      <dd>{selectedTransaction.description}</dd>
+                    </div>
+                  )}
+                <div>
+                  <dt>Дата и время</dt>
+                  <dd>{formatFullDate(selectedTransaction.createdAt)}</dd>
+                </div>
+                <div>
+                  <dt>Идентификатор</dt>
+                  <dd>#{selectedTransaction.id}</dd>
+                </div>
+                {selectedTransaction.relatedPostId && (
+                  <div>
+                    <dt>Связанная заявка</dt>
+                    <dd>
+                      <Link
+                        to={`/posts/${selectedTransaction.relatedPostId}`}
+                        onClick={() => setSelectedTransaction(null)}
+                      >
+                        Открыть заявку #{selectedTransaction.relatedPostId}
+                      </Link>
+                    </dd>
+                  </div>
+                )}
+                {selectedTransaction.relatedUserId && (
+                  <div>
+                    <dt>Связанный участник</dt>
+                    <dd>
+                      <Link
+                        to={`/profile/${selectedTransaction.relatedUserId}`}
+                        onClick={() => setSelectedTransaction(null)}
+                      >
+                        Профиль участника #{selectedTransaction.relatedUserId}
+                      </Link>
+                    </dd>
+                  </div>
+                )}
+              </dl>
+            </div>
+          </section>
         </div>
       )}
-    </div>
+
+      {boostOpen && (
+        <div
+          className="wallet-modal-overlay"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closeBoostModal();
+          }}
+        >
+          <section
+            className="wallet-modal wallet-modal--boost"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="wallet-boost-title"
+          >
+            <header className="wallet-modal-header">
+              <span className="wallet-modal-mark wallet-modal-mark--lime" aria-hidden="true">
+                <Zap size={21} />
+              </span>
+              <div>
+                <span className="wallet-section-eyebrow">Поднятие заявки</span>
+                <h2 id="wallet-boost-title">Выберите заявку</h2>
+              </div>
+              <button
+                type="button"
+                className="wallet-modal-close"
+                onClick={closeBoostModal}
+                aria-label="Закрыть выбор заявки"
+                disabled={boosting}
+              >
+                <X size={18} />
+              </button>
+            </header>
+
+            <div className="wallet-modal-body">
+              {postsLoading ? (
+                <div className="wallet-boost-skeleton" aria-label="Загрузка заявок">
+                  {[0, 1, 2].map((row) => (
+                    <span className="wallet-skeleton wallet-skeleton--post" key={row} />
+                  ))}
+                </div>
+              ) : postsError ? (
+                <div className="wallet-state wallet-state--inside" role="alert">
+                  <span className="wallet-state-icon" aria-hidden="true">
+                    <AlertCircle size={24} />
+                  </span>
+                  <h3>Заявки не загрузились</h3>
+                  <p>{postsError}</p>
+                  <button type="button" className="wallet-ghost-button" onClick={openBoostModal}>
+                    <RefreshCw size={15} /> Повторить
+                  </button>
+                </div>
+              ) : !posts || posts.length === 0 ? (
+                <div className="wallet-state wallet-state--inside">
+                  <span className="wallet-state-icon" aria-hidden="true">
+                    <History size={24} />
+                  </span>
+                  <h3>Нет открытых заявок</h3>
+                  <p>Поднять можно только свою заявку в статусе «Открыта».</p>
+                  <Link className="wallet-ghost-button" to="/posts/new" onClick={closeBoostModal}>
+                    Создать заявку
+                  </Link>
+                </div>
+              ) : (
+                <ul className="wallet-boost-list">
+                  {posts.map((post) => {
+                    const selected = post.id === selectedPostId;
+                    const boosted =
+                      Boolean(post.boostedUntil) && new Date(post.boostedUntil as string) > new Date();
+
+                    return (
+                      <li key={post.id}>
+                        <button
+                          type="button"
+                          className={`wallet-boost-option${selected ? ' is-selected' : ''}`}
+                          onClick={() => setSelectedPostId(post.id)}
+                          aria-pressed={selected}
+                          disabled={boosting}
+                        >
+                          <span className="wallet-boost-option-mark" aria-hidden="true">
+                            {selected ? <Zap size={17} /> : <span />}
+                          </span>
+                          <span className="wallet-boost-option-main">
+                            <span className="wallet-boost-option-title">{post.title}</span>
+                            <span className="wallet-boost-option-meta">
+                              {boosted
+                                ? `Уже в топе до ${formatFullDate(post.boostedUntil as string)}`
+                                : 'Открытая заявка'}
+                            </span>
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+
+              {boostError && (
+                <p className="wallet-inline-error" role="alert">
+                  <AlertCircle size={15} aria-hidden="true" /> {boostError}
+                </p>
+              )}
+            </div>
+
+            <footer className="wallet-modal-footer">
+              <div className="wallet-modal-actions">
+                <button
+                  type="button"
+                  className="wallet-ghost-button"
+                  onClick={closeBoostModal}
+                  disabled={boosting}
+                >
+                  Отмена
+                </button>
+                <button
+                  type="button"
+                  className="wallet-primary-button"
+                  onClick={handleBoost}
+                  disabled={!selectedPostId || boosting}
+                >
+                  {boosting ? (
+                    <>
+                      <Loader2 className="wallet-spinner" size={16} aria-hidden="true" /> Поднимаем…
+                    </>
+                  ) : (
+                    <>
+                      <Zap size={16} aria-hidden="true" /> Поднять за {BOOST_PRICE} HC
+                    </>
+                  )}
+                </button>
+              </div>
+              <p className="wallet-modal-note">
+                Стоимость спишет сервер. Баланс и история обновятся после подтверждения операции.
+              </p>
+            </footer>
+          </section>
+        </div>
+      )}
+    </main>
   );
 };

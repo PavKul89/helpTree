@@ -1,898 +1,785 @@
-import { useEffect, useState, useRef } from 'react';
-import { Link, useParams, useNavigate } from 'react-router-dom';
-import { Star, Camera, Trophy, Sprout, HandHeart, Crown, Zap, Clock, Sun, MessageSquare, MessageCircle, FileText, Shield, Scale3D, Gem, Egg, Ghost, PartyPopper, Snowflake } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import {
+  ArrowUpRight,
+  CalendarDays,
+  Check,
+  Clock3,
+  FileText,
+  HandHeart,
+  MapPin,
+  MessageCircle,
+  Pencil,
+  RefreshCw,
+  ShieldAlert,
+  Star,
+  Trophy,
+  Upload,
+  X,
+} from 'lucide-react';
 import { authApi } from '../api/authApi';
+import { achievementApi, type Achievement } from '../api/achievementApi';
+import { activityApi, type Activity } from '../api/activityApi';
 import { chatApi } from '../api/chatApi';
 import { postsApi } from '../api/postsApi';
-import { achievementApi, Achievement } from '../api/achievementApi';
+import { reviewApi } from '../api/reviewApi';
 import { useAuth } from '../context/AuthContext';
-import { Card } from '../components/Card';
-import { Button } from '../components/Button';
-import { Spinner } from '../components/Spinner';
 import { useToast } from '../components/Toast';
-import { StatusBadge, getStatusColor, getStatusLabel } from '../components/StatusBadge';
-import { Tabs } from '../components/Tabs';
-import { theme } from '../theme';
+import { Avatar } from '../components/Avatar';
+import { getStatusLabel } from '../components/StatusBadge';
 import { formatDate } from '../utils/dateUtils';
-import type { User, UserPublic, Post } from '../types';
 import { geocodeCity } from '../utils/geocoding';
+import type { Post, Review, User, UserPublic } from '../types';
+import './ProfilePage.css';
 
-const ACHIEVEMENT_ICONS: Record<string, React.ElementType> = {
-  SEEDLING: Sprout,
-  FIRST_HELP: HandHeart,
-  HELPER_5: HandHeart,
-  HELPER_10: HandHeart,
-  HELPER_25: HandHeart,
-  HELPER_50: HandHeart,
-  HELPER_100: Crown,
-  FAST_HELP: Zap,
-  NIGHT_OWL: Clock,
-  WEEKEND_HERO: Sun,
-  FIRST_CHAT: MessageSquare,
-  CHATTER_10: MessageCircle,
-  FIRST_POST: FileText,
-  POSTER_10: FileText,
-  DEBT_FREE: Shield,
-  BALANCED: Scale3D,
-  REPUTATION_5: Star,
-  NEW_YEAR_WIZARD: Gem,
-  EASTER_BUNNY: Egg,
-  HALLOWEEN_HERO: Ghost,
-  BIRTHDAY_HERO: PartyPopper,
-  WINTER_HELPER: Snowflake,
+type ProfileUser = User | UserPublic;
+type SectionKey = 'posts' | 'achievements' | 'activities' | 'reviews';
+type SectionState = Record<SectionKey, { loading: boolean; error: boolean }>;
+
+const EMPTY_SECTIONS: SectionState = {
+  posts: { loading: true, error: false },
+  achievements: { loading: true, error: false },
+  activities: { loading: true, error: false },
+  reviews: { loading: true, error: false },
+};
+
+const PROFILE_POST_PAGE_SIZE = 6;
+
+const getErrorStatus = (error: unknown): number | undefined =>
+  (error as { response?: { status?: number } })?.response?.status;
+
+const getInitials = (name: string): string =>
+  name
+    .trim()
+    .split(/\s+/)
+    .map((part) => part[0] || '')
+    .join('')
+    .slice(0, 2)
+    .toLocaleUpperCase('ru');
+
+const isPublicActivity = (activity: Activity): boolean => {
+  if (activity.type === 'ACHIEVEMENT_EARNED') return true;
+  if (activity.type === 'POST_CREATED') {
+    return ['OPEN', 'IN_PROGRESS', 'COMPLETED'].includes(activity.status || '');
+  }
+  return (
+    (activity.type === 'HELP_GIVEN' || activity.type === 'HELP_RECEIVED') &&
+    activity.status === 'CONFIRMED'
+  );
 };
 
 export const ProfilePage = () => {
-  const { userId } = useParams<{ userId?: string }>();
+  const { userId: routeUserId } = useParams<{ userId?: string }>();
   const navigate = useNavigate();
   const { user: currentUser, setUser } = useAuth();
   const { showToast } = useToast();
-  
-  const [profileUser, setProfileUser] = useState<User | UserPublic | null>(null);
-  const [userPosts, setUserPosts] = useState<Post[]>([]);
-  const [achievements, setAchievements] = useState<Achievement[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [isOwnProfile, setIsOwnProfile] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
-  const [activeTab, setActiveTab] = useState<'info' | 'posts' | 'achievements'>('info');
-  const [editForm, setEditForm] = useState({ name: '', email: '', phone: '', city: '', birthDate: '' });
-  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
+
+  const parsedUserId = routeUserId ? Number(routeUserId) : undefined;
+  const invalidUserId =
+    routeUserId !== undefined &&
+    (!Number.isSafeInteger(parsedUserId) || (parsedUserId ?? 0) <= 0);
+  const isOwnProfile =
+    !routeUserId || (parsedUserId !== undefined && parsedUserId === currentUser?.id);
+
+  const [profileUser, setProfileUser] = useState<ProfileUser | null>(null);
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [profileError, setProfileError] = useState<
+    'not-found' | 'access' | 'general' | null
+  >(null);
+  const [sections, setSections] = useState<SectionState>(EMPTY_SECTIONS);
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [totalPosts, setTotalPosts] = useState(0);
+  const [postPage, setPostPage] = useState(0);
+  const [loadingMorePosts, setLoadingMorePosts] = useState(false);
+  const [achievements, setAchievements] = useState<Achievement[]>([]);
+  const [activities, setActivities] = useState<Activity[]>([]);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [isEditing, setIsEditing] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [startingChat, setStartingChat] = useState(false);
+  const [editForm, setEditForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    city: '',
+    birthDate: '',
+  });
 
   useEffect(() => {
     let cancelled = false;
-    const currentUserId = currentUser?.id;
-    
-    const loadUser = async () => {
-      setLoading(true);
+
+    const loadProfile = async () => {
+      setProfileLoading(true);
+      setProfileError(null);
+      setProfileUser(null);
+
+      if (invalidUserId) {
+        setProfileError('not-found');
+        setProfileLoading(false);
+        return;
+      }
+
       try {
-        if (userId && !isNaN(Number(userId))) {
-          const id = Number(userId);
-          const userData = await authApi.getUserById(id);
-          if (!cancelled) {
-            setProfileUser(userData);
-            setIsOwnProfile(currentUserId === id);
-          }
-        } else {
-          const userData = await authApi.getCurrentUser();
-          if (!cancelled) {
-            setProfileUser(userData);
-            setIsOwnProfile(true);
-            setEditForm({
-              name: userData.name,
-              email: userData.email,
-              phone: (userData as User).phone || '',
-              city: (userData as User).city || '',
-              birthDate: (userData as User).birthDate ? ((userData as User).birthDate || '').split('T')[0] : '',
-            });
-          }
+        const viewingOwnProfile = !routeUserId || parsedUserId === currentUser?.id;
+        const userData = viewingOwnProfile
+          ? await authApi.getCurrentUser()
+          : await authApi.getUserById(parsedUserId!);
+        if (cancelled) return;
+
+        setProfileUser(userData);
+        if (viewingOwnProfile) {
+          const ownProfile = userData as User;
+          setEditForm({
+            name: ownProfile.name || '',
+            email: ownProfile.email || '',
+            phone: ownProfile.phone || '',
+            city: ownProfile.city || '',
+            birthDate: ownProfile.birthDate?.split('T')[0] || '',
+          });
         }
-      } catch (err: any) {
-        console.error('Error loading user:', err?.response?.data || err);
+
+        setSections({
+          posts: { loading: true, error: false },
+          achievements: { loading: true, error: false },
+          activities: { loading: true, error: false },
+          reviews: { loading: true, error: false },
+        });
+
+        const targetId = userData.id;
+        const [postResult, achievementResult, activityResult, reviewResult] =
+          await Promise.allSettled([
+            postsApi.getAll({ userId: targetId, size: PROFILE_POST_PAGE_SIZE, page: 0 }),
+            achievementApi.getAllAchievements(targetId),
+            activityApi.getAllActivities(targetId, 20),
+            reviewApi.getByUser(targetId),
+          ]);
+
+        if (cancelled) return;
+
+        if (postResult.status === 'fulfilled') {
+          setPosts(postResult.value.content || []);
+          setTotalPosts(postResult.value.totalElements || 0);
+          setPostPage(0);
+        }
+        if (achievementResult.status === 'fulfilled') {
+          setAchievements(achievementResult.value.filter((item) => item.isEarned !== false));
+        }
+        if (activityResult.status === 'fulfilled') {
+          setActivities(activityResult.value.filter(isPublicActivity));
+        }
+        if (reviewResult.status === 'fulfilled') setReviews(reviewResult.value);
+
+        setSections({
+          posts: { loading: false, error: postResult.status === 'rejected' },
+          achievements: { loading: false, error: achievementResult.status === 'rejected' },
+          activities: { loading: false, error: activityResult.status === 'rejected' },
+          reviews: { loading: false, error: reviewResult.status === 'rejected' },
+        });
+      } catch (error) {
+        if (cancelled) return;
+        const status = getErrorStatus(error);
+        setProfileError(
+          status === 404 ? 'not-found' : status === 401 || status === 403 ? 'access' : 'general'
+        );
       } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        if (!cancelled) setProfileLoading(false);
       }
     };
 
-    const loadUserPosts = async () => {
-      const targetUserId = userId && !isNaN(Number(userId)) 
-        ? Number(userId) 
-        : currentUser?.id;
-      
-      if (!targetUserId) return;
-      
-      try {
-        const response = await postsApi.getAll({ size: 100 });
-        const posts = Array.isArray(response) ? response : response.content || [];
-        const userPosts = posts.filter((post: Post) => post.userId === targetUserId);
-        if (!cancelled) {
-          setUserPosts(userPosts);
-        }
-      } catch (err) {
-        console.error('Error loading user posts:', err);
-      }
+    void loadProfile();
+    return () => {
+      cancelled = true;
     };
+  }, [currentUser?.id, invalidUserId, parsedUserId, routeUserId]);
 
-    const loadAchievements = async () => {
-      const targetUserId = userId && !isNaN(Number(userId)) 
-        ? Number(userId) 
-        : currentUser?.id;
-      
-      if (!targetUserId) return;
-      
-      try {
-        const allAchievements = await achievementApi.getAllAchievements(targetUserId);
-        const earnedAchievements = allAchievements.filter(a => a.isEarned);
-        if (!cancelled) {
-          setAchievements(earnedAchievements);
-          
-          if (isOwnProfile && earnedAchievements.length > 0) {
-            const lastSeenKey = 'lastSeenAchievementDate';
-            const lastSeenDate = localStorage.getItem(lastSeenKey);
-            const latestAchievement = earnedAchievements[0];
-            
-            if (latestAchievement.earnedAt) {
-              if (lastSeenDate) {
-                const lastSeen = new Date(lastSeenDate);
-                const latest = new Date(latestAchievement.earnedAt);
-                if (latest > lastSeen) {
-                  showToast(`Получено достижение: ${latestAchievement.name}!`, 'success');
-                }
-              }
-              localStorage.setItem(lastSeenKey, latestAchievement.earnedAt);
-            }
-          }
-        }
-      } catch (err) {
-        console.error('Error loading achievements:', err);
-      }
-    };
-    
-    loadUser();
-    loadUserPosts();
-    loadAchievements();
-    
-    return () => { cancelled = true; };
-  }, [userId, currentUser?.id]);
+  const publicActivities = useMemo(
+    () => activities.filter(isPublicActivity),
+    [activities]
+  );
 
-  const handleStartChat = async () => {
+  const handleStartChat = useCallback(async () => {
     if (!profileUser || isOwnProfile) return;
+    if (!currentUser) {
+      navigate('/login');
+      return;
+    }
+
+    setStartingChat(true);
     try {
       const chat = await chatApi.createChat({ participantId: profileUser.id });
       navigate(`/chats/${chat.id}`);
-    } catch (err) {
-      console.error('Ошибка при создании чата:', err);
+    } catch {
+      showToast('Не удалось открыть диалог. Попробуйте ещё раз.', 'error');
+    } finally {
+      setStartingChat(false);
     }
-  };
+  }, [currentUser, isOwnProfile, navigate, profileUser, showToast]);
 
   const handleSaveProfile = async () => {
     if (!currentUser) return;
+    setSavingProfile(true);
     try {
       let latitude: number | undefined;
       let longitude: number | undefined;
-      
-      if (editForm.city) {
-        const coords = await geocodeCity(editForm.city);
+      if (editForm.city.trim()) {
+        const coords = await geocodeCity(editForm.city.trim());
         if (coords) {
           latitude = coords.lat;
           longitude = coords.lng;
         }
       }
-      
+
       const updatedUser = await authApi.updateProfile(currentUser.id, {
-        name: editForm.name,
-        email: editForm.email,
-        phone: editForm.phone || undefined,
-        city: editForm.city || undefined,
-        birthDate: editForm.birthDate ? new Date(editForm.birthDate).toISOString() : null,
+        name: editForm.name.trim(),
+        email: editForm.email.trim(),
+        phone: editForm.phone.trim() || undefined,
+        city: editForm.city.trim() || undefined,
+        birthDate: editForm.birthDate
+          ? new Date(editForm.birthDate).toISOString()
+          : null,
         latitude,
         longitude,
       });
       setProfileUser(updatedUser);
       setUser(updatedUser);
       setIsEditing(false);
-    } catch (err) {
-      console.error('Ошибка при обновлении профиля:', err);
+      showToast('Профиль обновлён', 'success');
+    } catch {
+      showToast('Не удалось сохранить профиль. Проверьте данные и повторите попытку.', 'error');
+    } finally {
+      setSavingProfile(false);
     }
   };
 
-  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !currentUser) return;
-    
+  const handleAvatarChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !currentUser || !isOwnProfile) return;
+
     setUploadingAvatar(true);
     try {
       const avatarUrl = await authApi.uploadAvatar(currentUser.id, file);
       const updatedUser = { ...currentUser, avatarUrl };
       setProfileUser(updatedUser);
       setUser(updatedUser);
-    } catch (err) {
-      console.error('Ошибка при загрузке аватара:', err);
+      showToast('Фото профиля обновлено', 'success');
+    } catch {
+      showToast('Не удалось загрузить фото профиля.', 'error');
     } finally {
       setUploadingAvatar(false);
+      event.target.value = '';
     }
   };
 
-  const getInitials = (name: string) => {
-    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-  };
-
-  const getRarityColor = (rarity: string) => {
-    switch (rarity) {
-      case 'COMMON': return '#9ca3af';
-      case 'UNCOMMON': return '#22c55e';
-      case 'RARE': return '#3b82f6';
-      case 'EPIC': return '#a855f7';
-      case 'LEGENDARY': return '#f59e0b';
-      default: return '#9ca3af';
+  const handleLoadMorePosts = async () => {
+    if (!profileUser || loadingMorePosts) return;
+    const nextPage = postPage + 1;
+    setLoadingMorePosts(true);
+    try {
+      const result = await postsApi.getAll({
+        userId: profileUser.id,
+        size: PROFILE_POST_PAGE_SIZE,
+        page: nextPage,
+      });
+      setPosts((current) => [...current, ...result.content]);
+      setTotalPosts(result.totalElements);
+      setPostPage(nextPage);
+    } catch {
+      showToast('Не удалось загрузить следующие заявки.', 'error');
+    } finally {
+      setLoadingMorePosts(false);
     }
   };
 
-  if (loading) return <Spinner message="Загрузка профиля..." />;
-  if (!profileUser) return <div style={styles.notFound}>Пользователь не найден</div>;
+  const handleRetrySection = async (section: SectionKey) => {
+    if (!profileUser) return;
+    setSections((current) => ({
+      ...current,
+      [section]: { loading: true, error: false },
+    }));
 
-  const fullUser = profileUser as User;
-  const isAdmin = 'role' in fullUser && fullUser.role === 'ADMIN';
-  const userAvatar = 'avatarUrl' in profileUser ? (profileUser as UserPublic).avatarUrl : undefined;
-  const isVip = fullUser.vipUntil && new Date(fullUser.vipUntil) > new Date();
-  const vipDaysLeft = fullUser.vipUntil 
-    ? Math.ceil((new Date(fullUser.vipUntil).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-    : 0;
+    try {
+      if (section === 'posts') {
+        const result = await postsApi.getAll({
+          userId: profileUser.id,
+          size: PROFILE_POST_PAGE_SIZE,
+          page: 0,
+        });
+        setPosts(result.content || []);
+        setTotalPosts(result.totalElements || 0);
+        setPostPage(0);
+      } else if (section === 'achievements') {
+        const result = await achievementApi.getAllAchievements(profileUser.id);
+        setAchievements(result.filter((item) => item.isEarned !== false));
+      } else if (section === 'activities') {
+        setActivities((await activityApi.getAllActivities(profileUser.id, 20)).filter(isPublicActivity));
+      } else {
+        setReviews(await reviewApi.getByUser(profileUser.id));
+      }
+      setSections((current) => ({
+        ...current,
+        [section]: { loading: false, error: false },
+      }));
+    } catch {
+      setSections((current) => ({
+        ...current,
+        [section]: { loading: false, error: true },
+      }));
+    }
+  };
+
+  if (profileLoading) {
+    return (
+      <main className="public-profile">
+        <div className="profile-loading" role="status" aria-label="Загрузка профиля">
+          <span className="profile-spinner" />
+          <span>Загружаем профиль…</span>
+        </div>
+      </main>
+    );
+  }
+
+  if (!profileUser || profileError) {
+    const missing = profileError === 'not-found';
+    const noAccess = profileError === 'access';
+    return (
+      <main className="public-profile">
+        <section className="profile-state">
+          <span className="profile-state-icon">
+            {missing || noAccess ? <ShieldAlert size={25} /> : <RefreshCw size={25} />}
+          </span>
+          <h1>
+            {missing
+              ? 'Пользователь не найден'
+              : noAccess
+              ? 'Нет доступа к профилю'
+              : 'Не удалось загрузить профиль'}
+          </h1>
+          <p>
+            {missing
+              ? 'Проверьте ссылку или вернитесь к списку участников.'
+              : noAccess
+              ? 'Войдите в аккаунт или обратитесь к администратору, если считаете, что это ошибка.'
+              : 'Проверьте соединение и попробуйте загрузить страницу ещё раз.'}
+          </p>
+          <div className="profile-state-actions">
+            {!missing && !noAccess && (
+              <button
+                type="button"
+                className="profile-button profile-button--primary"
+                onClick={() => window.location.reload()}
+              >
+                <RefreshCw size={15} /> Повторить
+              </button>
+            )}
+            {noAccess && !currentUser && (
+              <Link className="profile-button profile-button--primary" to="/login">
+                Войти
+              </Link>
+            )}
+            <Link className="profile-button profile-button--secondary" to="/users">
+              К участникам
+            </Link>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  const avatarUrl = profileUser.avatarUrl;
+  const createdAt = isOwnProfile ? (profileUser as User).createdAt : undefined;
+  const rating =
+    typeof profileUser.rating === 'number' && Number.isFinite(profileUser.rating)
+      ? profileUser.rating
+      : null;
+  const helpedCount =
+    typeof profileUser.helpedCount === 'number' && Number.isFinite(profileUser.helpedCount)
+      ? profileUser.helpedCount
+      : null;
+  const hasMorePosts = posts.length < totalPosts;
 
   return (
-    <div style={styles.container}>
-      <Link to="/" style={styles.backLink}>← На главную</Link>
-      
-      <Card style={styles.mainCard}>
-        <div style={styles.header}>
-        <div 
-          style={{
-            ...styles.avatarLarge,
-            ...(isOwnProfile ? { cursor: 'pointer' } : {}),
-            ...(isVip ? { 
-              boxShadow: '0 0 20px rgba(251, 191, 36, 0.7), 0 0 40px rgba(251, 191, 36, 0.4)',
-              border: '3px solid #fbbf24',
-            } : {}),
-          }} 
-          onClick={() => isOwnProfile && avatarInputRef.current?.click()}
-        >
-          {userAvatar ? (
-            <img src={userAvatar} alt="Avatar" style={styles.avatarImage} />
-          ) : (
-            getInitials(profileUser.name)
-          )}
-          {isOwnProfile && (
-            <div style={styles.avatarOverlay}>
-              {uploadingAvatar ? '...' : <Camera size={20} color="#fff" />}
-            </div>
-          )}
-        </div>
-          <input
-            type="file"
-            ref={avatarInputRef}
-            onChange={handleAvatarChange}
-            accept="image/*"
-            style={{ display: 'none' }}
-          />
-          <div style={styles.headerInfo}>
-            <h1 style={styles.name}>{profileUser.name}</h1>
-            <div>
-              {isAdmin && <span style={styles.adminBadge}>Администратор</span>}
-              {isVip && <span style={styles.vipBadge}>⭐ VIP ({vipDaysLeft} дн.)</span>}
-            </div>
-            <div style={styles.metaRow}>
-              <span style={styles.metaItem}>
-                <Star size={14} color={theme.colors.accent} fill={theme.colors.accent} />
-                <span style={styles.metaValue}>{profileUser.rating.toFixed(1)}</span>
-                <span style={styles.metaLabel}>рейтинг</span>
-              </span>
-              {'createdAt' in fullUser && (
-                <span style={styles.metaItem}>
-                  <span style={styles.metaValue}>{formatDate(fullUser.createdAt)}</span>
-                  <span style={styles.metaLabel}>на сайте</span>
+    <main className="public-profile">
+      <nav className="profile-breadcrumb" aria-label="Навигационная цепочка">
+        <Link to="/">Главная</Link>
+        <span aria-hidden="true">/</span>
+        <Link to="/users">Участники</Link>
+        <span aria-hidden="true">/</span>
+        <span>{profileUser.name}</span>
+      </nav>
+
+      <section className="profile-hero" aria-labelledby="profile-name">
+        <div className="profile-hero-glow" aria-hidden="true" />
+        <div className="profile-hero-main">
+          <div className="profile-avatar-frame">
+            <Avatar
+              name={profileUser.name}
+              avatarUrl={avatarUrl}
+              size="xlarge"
+            />
+            {isOwnProfile && (
+              <button
+                type="button"
+                className="profile-avatar-edit"
+                onClick={() => avatarInputRef.current?.click()}
+                disabled={uploadingAvatar}
+                aria-label="Изменить фото профиля"
+                title="Изменить фото профиля"
+              >
+                {uploadingAvatar ? <span className="profile-spinner" /> : <Upload size={15} />}
+              </button>
+            )}
+            {isOwnProfile && (
+              <input
+                ref={avatarInputRef}
+                className="profile-file-input"
+                type="file"
+                accept="image/*"
+                onChange={handleAvatarChange}
+                aria-label="Выберите фото профиля"
+              />
+            )}
+          </div>
+          <div className="profile-identity">
+            <span className="profile-eyebrow">Сообщество HelpTree</span>
+            <h1 id="profile-name">{profileUser.name || getInitials('Участник')}</h1>
+            <div className="profile-meta">
+              {createdAt && (
+                <span>
+                  <CalendarDays size={14} aria-hidden="true" />
+                  В сообществе с {formatDate(createdAt)}
+                </span>
+              )}
+              {isOwnProfile && (profileUser as User).city && (
+                <span>
+                  <MapPin size={14} aria-hidden="true" />
+                  {(profileUser as User).city}
                 </span>
               )}
             </div>
           </div>
-          <div style={styles.headerActions}>
-            {isOwnProfile && !isEditing && (
-              <Button onClick={() => setIsEditing(true)} variant="outline">
-                Редактировать
-              </Button>
-            )}
-            {!isOwnProfile && (
-              <Button onClick={handleStartChat}>
-                Написать
-              </Button>
-            )}
-          </div>
-        </div>
-
-        <div style={styles.statsRow}>
-          {'helpedCount' in profileUser && (
-            <div style={{ ...styles.statBox, background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}>
-              <div style={styles.statValue}>{profileUser.helpedCount}</div>
-              <div style={styles.statLabel}>помог людям</div>
-            </div>
-          )}
-          <div style={{ 
-            ...styles.statBox, 
-            background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' 
-          }}>
-            <div style={styles.statValue}>{Math.floor((profileUser.debtCount || 0) / 2)}</div>
-            <div style={styles.statLabel}>мне помогли</div>
-          </div>
-          <div style={styles.statBox}>
-            <div style={styles.statValue}>{userPosts.length}</div>
-            <div style={styles.statLabel}>мои посты</div>
-          </div>
-        </div>
-
-        <div style={{
-          background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(124, 58, 237, 0.1) 100%)',
-          border: '1px solid rgba(139, 92, 246, 0.3)',
-          borderRadius: '16px',
-          padding: '16px 20px',
-          marginBottom: '20px',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
-            <div style={{
-              background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
-              borderRadius: '10px',
-              padding: '8px 14px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-            }}>
-              <span style={{ fontSize: '18px', fontWeight: 700 }}>{profileUser.debtCount || 0}</span>
-              <span style={{ fontSize: '12px', opacity: 0.9 }}>долг</span>
-            </div>
-          <div style={{ fontSize: '14px', color: 'rgba(255,255,255,0.8)', fontWeight: 500 }}>
-            {(profileUser.debtCount || 0) === 0 
-                ? 'Отлично! Вы в балансе' 
-                : (profileUser.debtCount || 0) > 5 
-                  ? 'Внимание! Вы заблокированы' 
-                  : `Вам помогли на ${Math.floor((profileUser.debtCount || 0) / 2)} раз больше чем вы`}
-          </div>
-          <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', lineHeight: 1.5 }}>
-            💡 Правило: за каждую полученную помощь +2 к долгу, за помощь другим -1. 
-            Если долг &gt; 5 — аккаунт заблокирован на 7 дней. 
-            {(profileUser.debtCount || 0) > 0 ? `Помогите ${profileUser.debtCount} людям чтобы снизить долг.` : 'Продолжайте помогать!'}
-          </div>
-          </div>
-        </div>
-
-        <Tabs
-          tabs={[
-            { key: 'info', label: 'Информация' },
-            { key: 'posts', label: 'Публикации', count: userPosts.length },
-            { key: 'achievements', label: 'Достижения', count: achievements.length },
-          ]}
-          activeTab={activeTab}
-          onChange={(key) => setActiveTab(key as 'info' | 'posts' | 'achievements')}
-        />
-
-        {activeTab === 'info' && (
-          <div style={styles.content}>
-            {isEditing ? (
-              <div style={styles.editForm}>
-                <div style={styles.formRow}>
-                  <label style={styles.formLabel}>Имя</label>
-                  <input
-                    type="text"
-                    value={editForm.name}
-                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                    style={styles.input}
-                  />
-                </div>
-                <div style={styles.formRow}>
-                  <label style={styles.formLabel}>Email</label>
-                  <input
-                    type="email"
-                    value={editForm.email}
-                    onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                    style={styles.input}
-                  />
-                </div>
-                <div style={styles.formRow}>
-                  <label style={styles.formLabel}>Телефон</label>
-                  <input
-                    type="text"
-                    value={editForm.phone}
-                    onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
-                    style={styles.input}
-                    placeholder="+7 (999) 123-45-67"
-                  />
-                </div>
-                <div style={styles.formRow}>
-                  <label style={styles.formLabel}>Город</label>
-                  <input
-                    type="text"
-                    value={editForm.city}
-                    onChange={(e) => setEditForm({ ...editForm, city: e.target.value })}
-                    style={styles.input}
-                  />
-                </div>
-                <div style={styles.formRow}>
-                  <label style={styles.formLabel}>Дата рождения</label>
-                  <input
-                    type="date"
-                    value={editForm.birthDate}
-                    onChange={(e) => setEditForm({ ...editForm, birthDate: e.target.value })}
-                    style={styles.input}
-                  />
-                </div>
-                <div style={styles.formActions}>
-                  <Button onClick={handleSaveProfile}>Сохранить</Button>
-                  <Button variant="outline" onClick={() => setIsEditing(false)}>Отмена</Button>
-                </div>
-              </div>
+          <div className="profile-actions">
+            {isOwnProfile ? (
+              <button
+                type="button"
+                className="profile-button profile-button--secondary"
+                onClick={() => setIsEditing((editing) => !editing)}
+              >
+                {isEditing ? <X size={15} /> : <Pencil size={15} />}
+                {isEditing ? 'Закрыть' : 'Редактировать'}
+              </button>
             ) : (
-              <div style={styles.infoList}>
-                {'phone' in fullUser && fullUser.phone && (
-                  <div style={styles.infoRow}>
-                    <span style={styles.infoLabel}>Телефон</span>
-                    <span style={styles.infoValue}>{fullUser.phone}</span>
-                  </div>
-                )}
-                {'city' in fullUser && fullUser.city && (
-                  <div style={styles.infoRow}>
-                    <span style={styles.infoLabel}>Город</span>
-                    <span style={styles.infoValue}>{fullUser.city}</span>
-                  </div>
-                )}
-                {'birthDate' in fullUser && fullUser.birthDate && (
-                  <div style={styles.infoRow}>
-                    <span style={styles.infoLabel}>Дата рождения</span>
-                    <span style={styles.infoValue}>{formatDate(fullUser.birthDate as string)}</span>
-                  </div>
-                )}
-                {'email' in profileUser && (
-                  <div style={styles.infoRow}>
-                    <span style={styles.infoLabel}>Email</span>
-                    <span style={styles.infoValue}>{profileUser.email}</span>
-                  </div>
-                )}
-                {'role' in fullUser && (
-                  <div style={styles.infoRow}>
-                    <span style={styles.infoLabel}>Telegram</span>
-                    <span style={styles.infoValue}>
-                      {fullUser.telegramChatId ? 'Подключён' : 'Не подключён'}
-                    </span>
-                  </div>
-                )}
-                {'createdAt' in fullUser && (
-                  <div style={styles.infoRow}>
-                    <span style={styles.infoLabel}>Дата регистрации</span>
-                    <span style={styles.infoValue}>{formatDate(fullUser.createdAt)}</span>
-                  </div>
-                )}
-              </div>
+              <button
+                type="button"
+                className="profile-button profile-button--primary"
+                onClick={handleStartChat}
+                disabled={startingChat}
+              >
+                <MessageCircle size={16} />
+                {startingChat ? 'Открываем…' : currentUser ? 'Написать' : 'Войти и написать'}
+              </button>
             )}
+          </div>
+        </div>
+
+        {isEditing && isOwnProfile && (
+          <div className="profile-edit-panel">
+            <div className="profile-edit-heading">
+              <div>
+                <span className="profile-eyebrow">Настройки владельца</span>
+                <h2>Личные данные</h2>
+              </div>
+              <p>Email, телефон и дата рождения доступны только вам.</p>
+            </div>
+            <div className="profile-edit-grid">
+              <label>
+                Имя
+                <input
+                  value={editForm.name}
+                  onChange={(event) =>
+                    setEditForm((form) => ({ ...form, name: event.target.value }))
+                  }
+                  autoComplete="name"
+                />
+              </label>
+              <label>
+                Email
+                <input
+                  type="email"
+                  value={editForm.email}
+                  onChange={(event) =>
+                    setEditForm((form) => ({ ...form, email: event.target.value }))
+                  }
+                  autoComplete="email"
+                />
+              </label>
+              <label>
+                Телефон
+                <input
+                  type="tel"
+                  value={editForm.phone}
+                  onChange={(event) =>
+                    setEditForm((form) => ({ ...form, phone: event.target.value }))
+                  }
+                  autoComplete="tel"
+                />
+              </label>
+              <label>
+                Город
+                <input
+                  value={editForm.city}
+                  onChange={(event) =>
+                    setEditForm((form) => ({ ...form, city: event.target.value }))
+                  }
+                  autoComplete="address-level2"
+                />
+              </label>
+              <label>
+                Дата рождения
+                <input
+                  type="date"
+                  value={editForm.birthDate}
+                  onChange={(event) =>
+                    setEditForm((form) => ({ ...form, birthDate: event.target.value }))
+                  }
+                />
+              </label>
+            </div>
+            <div className="profile-edit-actions">
+              <button
+                type="button"
+                className="profile-button profile-button--primary"
+                onClick={handleSaveProfile}
+                disabled={savingProfile}
+              >
+                <Check size={15} />
+                {savingProfile ? 'Сохраняем…' : 'Сохранить'}
+              </button>
+              <button
+                type="button"
+                className="profile-button profile-button--secondary"
+                onClick={() => setIsEditing(false)}
+              >
+                Отмена
+              </button>
+            </div>
           </div>
         )}
 
-        {activeTab === 'posts' && (
-          <div style={styles.content}>
-            {userPosts.length === 0 ? (
-              <div style={styles.emptyState}>Публикаций пока нет</div>
-            ) : (
-              <div style={styles.postsList}>
-                {userPosts.map(post => (
-                  <Link 
-                    key={post.id} 
-                    to={`/posts/${post.id}`}
-                    style={styles.postItem}
-                  >
-                    <div style={styles.postStatus}>
-                      <span style={{
-                        ...styles.statusDot,
-                        backgroundColor: getStatusColor(post.status)
-                      }} />
-                      <span style={styles.statusText}>{getStatusLabel(post.status)}</span>
-                    </div>
-                    <div style={styles.postTitle}>{post.title}</div>
-                    <div style={styles.postMeta}>
-                      <span>{post.category}</span>
-                      <span>•</span>
-                      <span>{formatDate(post.createdAt)}</span>
-                    </div>
+        <div className="profile-stats" aria-label="Статистика участника">
+          {rating !== null && (
+            <div className="profile-stat">
+              <span className="profile-stat-icon"><Star size={16} /></span>
+              <strong>{rating.toFixed(1)}</strong>
+              <span>рейтинг</span>
+            </div>
+          )}
+          {helpedCount !== null && (
+            <div className="profile-stat">
+              <span className="profile-stat-icon"><HandHeart size={17} /></span>
+              <strong>{helpedCount}</strong>
+              <span>помощь оказана</span>
+            </div>
+          )}
+          <div className="profile-stat">
+            <span className="profile-stat-icon"><FileText size={16} /></span>
+            <strong>{sections.posts.loading ? '…' : sections.posts.error ? '—' : totalPosts}</strong>
+            <span>заявки</span>
+          </div>
+        </div>
+      </section>
+
+      <div className="profile-content-grid">
+        <section className="profile-section profile-posts" aria-labelledby="profile-posts-title">
+          <div className="profile-section-heading">
+            <div>
+              <span className="profile-eyebrow">Публикации</span>
+              <h2 id="profile-posts-title">Заявки участника</h2>
+            </div>
+            {!sections.posts.loading && !sections.posts.error && (
+              <span className="profile-section-count">{totalPosts}</span>
+            )}
+          </div>
+          {sections.posts.loading ? (
+            <div className="profile-post-list" aria-label="Загрузка заявок">
+              {[0, 1, 2].map((index) => <div className="profile-skeleton-post" key={index} />)}
+            </div>
+          ) : sections.posts.error ? (
+            <SectionError onRetry={() => void handleRetrySection('posts')} />
+          ) : posts.length === 0 ? (
+            <div className="profile-empty">Публичных заявок пока нет.</div>
+          ) : (
+            <>
+              <div className="profile-post-list">
+                {posts.map((post) => (
+                  <Link className="profile-post-card" to={`/posts/${post.id}`} key={post.id}>
+                    {post.imageUrls?.[0] ? (
+                      <img src={post.imageUrls[0]} alt="" loading="lazy" />
+                    ) : (
+                      <span className="profile-post-placeholder"><HandHeart size={20} /></span>
+                    )}
+                    <span className="profile-post-copy">
+                      <span className="profile-post-category">{post.category}</span>
+                      <strong>{post.title}</strong>
+                      <span className="profile-post-description">{post.description}</span>
+                      <span className="profile-post-meta">
+                        <span className={`profile-status profile-status--${post.status.toLowerCase()}`}>
+                          {getStatusLabel(post.status)}
+                        </span>
+                        <span>{formatDate(post.createdAt)}</span>
+                      </span>
+                    </span>
+                    <ArrowUpRight className="profile-post-arrow" size={17} aria-hidden="true" />
                   </Link>
                 ))}
               </div>
-            )}
-          </div>
-        )}
+              {hasMorePosts && (
+                <button
+                  type="button"
+                  className="profile-more-button"
+                  onClick={() => void handleLoadMorePosts()}
+                  disabled={loadingMorePosts}
+                >
+                  {loadingMorePosts ? 'Загружаем…' : 'Показать ещё заявки'}
+                </button>
+              )}
+            </>
+          )}
+        </section>
 
-        {activeTab === 'achievements' && (
-          <div style={styles.content}>
-            {achievements.length === 0 ? (
-              <div style={styles.emptyState}>
-                <Trophy size={64} color={theme.colors.accent} style={styles.emptyIcon as React.CSSProperties} />
-                <div>Пока нет достижений</div>
-                <div style={styles.emptyHint}>Помогайте людям, чтобы получить первые достижения!</div>
+        <div className="profile-side-sections">
+          <section className="profile-section" aria-labelledby="profile-achievements-title">
+            <div className="profile-section-heading">
+              <div>
+                <span className="profile-eyebrow">Путь помощи</span>
+                <h2 id="profile-achievements-title">Достижения</h2>
               </div>
+              <Trophy size={18} className="profile-section-mark" />
+            </div>
+            {sections.achievements.loading ? (
+              <div className="profile-loading-inline"><span className="profile-spinner" /> Загружаем…</div>
+            ) : sections.achievements.error ? (
+              <SectionError onRetry={() => void handleRetrySection('achievements')} />
+            ) : achievements.length === 0 ? (
+              <div className="profile-empty profile-empty--compact">Достижений пока нет.</div>
             ) : (
-              <div style={styles.achievementsGrid}>
-                {achievements.map(achievement => {
-                  const AchievementIcon = ACHIEVEMENT_ICONS[achievement.type] || Trophy;
-                  return (
-                  <div 
-                    key={achievement.type} 
-                    style={{
-                      ...styles.achievementCard,
-                      borderColor: getRarityColor(achievement.rarity),
-                    }}
-                  >
-                    <div style={{ ...styles.achievementIcon, color: getRarityColor(achievement.rarity) }}>
-                      <AchievementIcon size={40} />
-                    </div>
-                    <div style={styles.achievementName}>{achievement.name}</div>
-                    <div style={styles.achievementDesc}>{achievement.description}</div>
-                    <div style={{
-                      ...styles.achievementRarity,
-                      color: getRarityColor(achievement.rarity),
-                    }}>
-                      {achievement.rarity}
-                    </div>
-                    <div style={styles.achievementDate}>
-                      {achievement.earnedAt && formatDate(achievement.earnedAt)}
-                    </div>
-                  </div>
-                  );
-                })}
+              <div className="profile-achievement-list">
+                {achievements.map((achievement) => (
+                  <article className="profile-achievement" key={achievement.id ?? achievement.type}>
+                    <span className="profile-achievement-emoji" aria-hidden="true">
+                      {achievement.emoji || '✦'}
+                    </span>
+                    <span>
+                      <strong>{achievement.name}</strong>
+                      <small>{achievement.description}</small>
+                      {achievement.earnedAt && (
+                        <small className="profile-earned-date">
+                          Получено {formatDate(achievement.earnedAt)}
+                        </small>
+                      )}
+                    </span>
+                  </article>
+                ))}
               </div>
             )}
+          </section>
+
+          <section className="profile-section" aria-labelledby="profile-activity-title">
+            <div className="profile-section-heading">
+              <div>
+                <span className="profile-eyebrow">Недавнее</span>
+                <h2 id="profile-activity-title">Активность</h2>
+              </div>
+              <Clock3 size={18} className="profile-section-mark" />
+            </div>
+            {sections.activities.loading ? (
+              <div className="profile-loading-inline"><span className="profile-spinner" /> Загружаем…</div>
+            ) : sections.activities.error ? (
+              <SectionError onRetry={() => void handleRetrySection('activities')} />
+            ) : publicActivities.length === 0 ? (
+              <div className="profile-empty profile-empty--compact">Публичной активности пока нет.</div>
+            ) : (
+              <ol className="profile-activity-list">
+                {publicActivities.slice(0, 8).map((activity, index) => (
+                  <li className="profile-activity" key={`${activity.type}-${activity.timestamp}-${index}`}>
+                    <span className="profile-activity-icon" aria-hidden="true">
+                      {activity.emoji || '•'}
+                    </span>
+                    <span className="profile-activity-copy">
+                      <strong>{activity.title}</strong>
+                      {activity.description && <small>{activity.description}</small>}
+                      <time dateTime={activity.timestamp}>{formatDate(activity.timestamp)}</time>
+                    </span>
+                    {activity.relatedPostId && (
+                      <Link
+                        to={`/posts/${activity.relatedPostId}`}
+                        className="profile-activity-link"
+                        aria-label={`Открыть заявку ${activity.relatedPostTitle || ''}`}
+                      >
+                        <ArrowUpRight size={15} />
+                      </Link>
+                    )}
+                  </li>
+                ))}
+              </ol>
+            )}
+          </section>
+        </div>
+      </div>
+
+      <section className="profile-section profile-reviews" aria-labelledby="profile-reviews-title">
+        <div className="profile-section-heading">
+          <div>
+            <span className="profile-eyebrow">Обратная связь</span>
+            <h2 id="profile-reviews-title">Отзывы</h2>
+          </div>
+          {!sections.reviews.loading && !sections.reviews.error && (
+            <span className="profile-section-count">{reviews.length}</span>
+          )}
+        </div>
+        {sections.reviews.loading ? (
+          <div className="profile-loading-inline"><span className="profile-spinner" /> Загружаем…</div>
+        ) : sections.reviews.error ? (
+          <SectionError onRetry={() => void handleRetrySection('reviews')} />
+        ) : reviews.length === 0 ? (
+          <div className="profile-empty">Отзывов пока нет.</div>
+        ) : (
+          <div className="profile-review-grid">
+            {reviews.map((review) => (
+              <article className="profile-review" key={review.id}>
+                <div className="profile-review-top">
+                  <Link to={`/profile/${review.fromUserId}`} className="profile-review-author">
+                    <Avatar name={review.fromUserName} size="small" />
+                    <strong>{review.fromUserName}</strong>
+                  </Link>
+                  {typeof review.rating === 'number' && (
+                    <span className="profile-review-rating">
+                      <Star size={14} fill="currentColor" />
+                      {review.rating}
+                    </span>
+                  )}
+                </div>
+                {review.comment?.trim() ? (
+                  <p>{review.comment.trim()}</p>
+                ) : (
+                  <p className="profile-review-no-comment">Текст отзыва не оставлен.</p>
+                )}
+                <time dateTime={review.createdAt}>{formatDate(review.createdAt)}</time>
+              </article>
+            ))}
           </div>
         )}
-      </Card>
-    </div>
+      </section>
+    </main>
   );
 };
 
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    maxWidth: 800,
-    margin: '0 auto',
-    padding: '24px',
-  },
-  notFound: {
-    textAlign: 'center',
-    padding: '40px',
-    color: theme.colors.textMuted,
-    fontSize: '16px',
-  },
-  backLink: {
-    color: theme.colors.accentLight,
-    textDecoration: 'none',
-    fontSize: '14px',
-    display: 'inline-block',
-    marginBottom: '16px',
-  },
-  mainCard: {
-    padding: '0',
-    overflow: 'hidden',
-  },
-  header: {
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: '24px',
-    padding: '32px',
-    background: 'linear-gradient(180deg, rgba(34, 211, 238, 0.08) 0%, transparent 100%)',
-    borderBottom: `1px solid ${theme.colors.border}`,
-  },
-  avatarLarge: {
-    width: '96px',
-    height: '96px',
-    borderRadius: '50%',
-    background: 'linear-gradient(135deg, #22d3ee 0%, #0891b2 100%)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: '28px',
-    fontWeight: 700,
-    color: '#042f3a',
-    flexShrink: 0,
-    boxShadow: '0 4px 20px rgba(34, 211, 238, 0.3)',
-    position: 'relative',
-    overflow: 'hidden',
-    cursor: 'pointer',
-  },
-  avatarImage: {
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover',
-  },
-  avatarOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    background: 'rgba(0,0,0,0.6)',
-    color: '#fff',
-    fontSize: '20px',
-    padding: '4px',
-    textAlign: 'center',
-  },
-  headerInfo: {
-    flex: 1,
-  },
-  name: {
-    color: theme.colors.text,
-    fontSize: '26px',
-    fontWeight: 700,
-    margin: '0 0 8px 0',
-  },
-  adminBadge: {
-    display: 'inline-block',
-    background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-    borderRadius: '4px',
-    padding: '4px 10px',
-    fontSize: '12px',
-    fontWeight: 600,
-    color: '#fff',
-    marginBottom: '12px',
-  },
-  vipBadge: {
-    display: 'inline-block',
-    background: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 50%, #fbbf24 100%)',
-    borderRadius: '4px',
-    padding: '4px 10px',
-    fontSize: '12px',
-    fontWeight: 600,
-    color: '#1f2937',
-    marginBottom: '12px',
-    marginLeft: '8px',
-    boxShadow: '0 0 10px rgba(251, 191, 36, 0.5)',
-  },
-  metaRow: {
-    display: 'flex',
-    gap: '24px',
-    flexWrap: 'wrap',
-  },
-  metaItem: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-  },
-  metaIcon: {
-    color: theme.colors.accent,
-    fontSize: '14px',
-  },
-  metaValue: {
-    color: theme.colors.text,
-    fontSize: '15px',
-    fontWeight: 600,
-  },
-  metaLabel: {
-    color: theme.colors.textMuted,
-    fontSize: '14px',
-  },
-  headerActions: {
-    display: 'flex',
-    gap: '8px',
-  },
-  statsRow: {
-    display: 'flex',
-    borderBottom: `1px solid ${theme.colors.border}`,
-  },
-  statBox: {
-    flex: 1,
-    padding: '20px',
-    textAlign: 'center',
-    borderRight: `1px solid ${theme.colors.border}`,
-  },
-  statValue: {
-    color: theme.colors.text,
-    fontSize: '28px',
-    fontWeight: 700,
-  },
-  statLabel: {
-    color: theme.colors.textMuted,
-    fontSize: '13px',
-    marginTop: '4px',
-    fontWeight: 500,
-  },
-  balanceRow: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: '16px',
-    padding: '12px',
-    background: 'rgba(0,0,0,0.2)',
-    borderRadius: theme.borderRadius.md,
-    gap: '8px',
-  },
-  balanceLabel: {
-    color: theme.colors.textMuted,
-    fontSize: '14px',
-  },
-  balanceValue: {
-    fontSize: '16px',
-    fontWeight: 600,
-  },
-  tabs: {
-    display: 'flex',
-    borderBottom: `1px solid ${theme.colors.border}`,
-  },
-  tab: {
-    flex: 1,
-    padding: '16px',
-    background: 'transparent',
-    border: 'none',
-    borderBottom: '2px solid transparent',
-    color: theme.colors.textMuted,
-    fontSize: '15px',
-    fontWeight: 500,
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-  },
-  tabActive: {
-    flex: 1,
-    padding: '16px',
-    background: 'transparent',
-    border: 'none',
-    borderBottom: '2px solid theme.colors.accent',
-    color: theme.colors.accent,
-    fontSize: '15px',
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
-  content: {
-    padding: '24px 32px',
-  },
-  editForm: {
-    maxWidth: 400,
-  },
-  formRow: {
-    marginBottom: '20px',
-  },
-  formLabel: {
-    display: 'block',
-    color: theme.colors.textSecondary,
-    marginBottom: '8px',
-    fontSize: '14px',
-    fontWeight: 500,
-  },
-  input: {
-    width: '100%',
-    padding: '12px 16px',
-    fontSize: '15px',
-    background: 'rgba(255,255,255,0.06)',
-    border: `1px solid ${theme.colors.border}`,
-    borderRadius: theme.borderRadius.md,
-    color: theme.colors.text,
-    outline: 'none',
-    transition: 'all 0.2s ease',
-    boxSizing: 'border-box',
-  },
-  formActions: {
-    display: 'flex',
-    gap: '12px',
-    marginTop: '24px',
-  },
-  infoList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '16px',
-  },
-  infoRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingBottom: '16px',
-    borderBottom: `1px solid ${theme.colors.border}`,
-  },
-  infoLabel: {
-    color: theme.colors.textMuted,
-    fontSize: '14px',
-  },
-  infoValue: {
-    color: theme.colors.text,
-    fontSize: '15px',
-    fontWeight: 500,
-  },
-  emptyState: {
-    textAlign: 'center',
-    padding: '40px',
-    color: theme.colors.textMuted,
-    fontSize: '15px',
-  },
-  postsList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '12px',
-  },
-  postItem: {
-    display: 'block',
-    padding: '16px',
-    background: 'rgba(255,255,255,0.04)',
-    borderRadius: theme.borderRadius.md,
-    border: `1px solid ${theme.colors.border}`,
-    textDecoration: 'none',
-    transition: 'all 0.2s ease',
-  },
-  postStatus: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    marginBottom: '8px',
-  },
-  statusDot: {
-    width: '8px',
-    height: '8px',
-    borderRadius: '50%',
-  },
-  statusText: {
-    color: theme.colors.textMuted,
-    fontSize: '12px',
-    fontWeight: 500,
-    textTransform: 'uppercase',
-  },
-  postTitle: {
-    color: theme.colors.text,
-    fontSize: '16px',
-    fontWeight: 600,
-    marginBottom: '6px',
-  },
-  postMeta: {
-    display: 'flex',
-    gap: '8px',
-    color: theme.colors.textMuted,
-    fontSize: '13px',
-  },
-  achievementsGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
-    gap: '16px',
-  },
-  achievementCard: {
-    padding: '20px',
-    background: 'rgba(255,255,255,0.04)',
-    borderRadius: theme.borderRadius.md,
-    border: '2px solid',
-    textAlign: 'center',
-    transition: 'all 0.3s ease',
-    cursor: 'default',
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  achievementIcon: {
-    marginBottom: '8px',
-    display: 'block',
-  },
-  achievementName: {
-    color: theme.colors.text,
-    fontSize: '16px',
-    fontWeight: 600,
-    marginBottom: '4px',
-  },
-  achievementDesc: {
-    color: theme.colors.textMuted,
-    fontSize: '13px',
-    marginBottom: '8px',
-    lineHeight: 1.4,
-  },
-  achievementRarity: {
-    fontSize: '11px',
-    fontWeight: 700,
-    textTransform: 'uppercase',
-    marginBottom: '8px',
-    letterSpacing: '0.5px',
-  },
-  achievementDate: {
-    color: theme.colors.textMuted,
-    fontSize: '11px',
-  },
-  emptyIcon: {
-    marginBottom: '16px',
-    opacity: 0.8,
-  },
-  emptyHint: {
-    color: theme.colors.textMuted,
-    fontSize: '14px',
-    marginTop: '8px',
-  },
-};
+const SectionError = ({ onRetry }: { onRetry: () => void }) => (
+  <div className="profile-section-error" role="status">
+    <span>Не удалось загрузить этот раздел.</span>
+    <button type="button" onClick={onRetry}>Повторить</button>
+  </div>
+);
+
+export default ProfilePage;

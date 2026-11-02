@@ -162,6 +162,19 @@
   background: rgba(200, 245, 106, 0.08);
 }
 
+.navbar-dropdown-item--admin {
+  color: #c8f56a;
+}
+
+.navbar-dropdown-item--admin svg {
+  color: #c8f56a;
+}
+
+.navbar-dropdown-item--admin:hover {
+  color: #e4ffa6;
+  background: rgba(200, 245, 106, 0.13);
+}
+
 .navbar-dropdown-item--wallet {
   margin-top: 6px;
   padding-top: 12px;
@@ -253,6 +266,27 @@
   font-weight: 700;
   color: #10230f;
   background: #c8f56a;
+}
+
+.navbar-notifications {
+  position: relative;
+  display: inline-grid;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: #b7c5b8;
+  text-decoration: none;
+  transition: color 0.18s ease, background-color 0.18s ease, border-color 0.18s ease;
+}
+
+.navbar-notifications:hover,
+.navbar-notifications.is-active {
+  border-color: rgba(200, 245, 106, 0.2);
+  background: rgba(200, 245, 106, 0.08);
+  color: #c8f56a;
 }
 
 /* Buttons ---------------------------------------------------------- */
@@ -355,6 +389,19 @@
 .navbar-mobile-link--active {
   color: #c8f56a;
   background: rgba(200, 245, 106, 0.1);
+}
+
+.navbar-mobile-link--admin {
+  color: #c8f56a;
+}
+
+.navbar-mobile-link--admin svg {
+  color: #c8f56a;
+}
+
+.navbar-mobile-link--admin:hover {
+  color: #e4ffa6;
+  background: rgba(200, 245, 106, 0.13);
 }
 
 .navbar-mobile-actions {

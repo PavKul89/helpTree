@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import type { User } from '../types';
 import { authApi } from '../api/authApi';
-import { walletApi } from '../api/walletApi';
+import { notifyWalletUpdated, walletApi } from '../api/walletApi';
 
 interface AuthContextType {
   user: User | null;
@@ -26,7 +26,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       authApi.getCurrentUser()
         .then((userData) => {
           setUser(userData);
-          walletApi.claimDailyBonus(userData.id).catch(() => {});
+          walletApi
+            .claimDailyBonus(userData.id)
+            .then((bonus) => notifyWalletUpdated(bonus.balance))
+            .catch(() => {});
         })
         .catch(() => {
           localStorage.removeItem('accessToken');
@@ -42,7 +45,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     localStorage.setItem('accessToken', newToken);
     setToken(newToken);
     setUser(newUser);
-    walletApi.claimDailyBonus(newUser.id).catch(() => {});
+    walletApi
+      .claimDailyBonus(newUser.id)
+      .then((bonus) => notifyWalletUpdated(bonus.balance))
+      .catch(() => {});
   };
 
   const logout = () => {

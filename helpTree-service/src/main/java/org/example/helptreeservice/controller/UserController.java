@@ -265,12 +265,13 @@ public class UserController {
         if (!authService.canManageUser(id)) {
             throw new ForbiddenException("Вы можете получить бонус только для своего аккаунта");
         }
-        walletService.addDailyLoginBonus(id);
+        boolean claimed = walletService.addDailyLoginBonus(id);
         WalletDto wallet = walletService.getWallet(id);
         return ResponseEntity.ok(Map.of(
             "success", true,
+            "claimed", claimed,
             "balance", wallet.getBalance(),
-            "message", "+1 HC за ежедневный вход!"
+            "message", claimed ? "+1 HC за ежедневный вход!" : "Ежедневный бонус уже получен"
         ));
     }
 

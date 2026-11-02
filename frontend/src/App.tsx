@@ -18,9 +18,18 @@ import { HelpGraphPage } from './pages/HelpGraphPage';
 import { AchievementsPage } from './pages/AchievementsPage';
 import { ActivityPage } from './pages/ActivityPage';
 import { WalletPage } from './pages/WalletPage';
+import { NotificationCenterPage } from './pages/NotificationCenterPage';
+import { SettingsPage } from './pages/SettingsPage';
 import { Navbar } from './components/Navbar';
 import { Layout } from './components/Layout';
 import { ToastProvider } from './components/Toast';
+import { AdminRoute } from './components/admin/AdminRoute';
+import { AdminLayout } from './components/admin/AdminLayout';
+import { AdminDashboardPage } from './pages/admin/AdminDashboardPage';
+import { AdminUsersPage } from './pages/admin/AdminUsersPage';
+import { AdminUserDetailPage } from './pages/admin/AdminUserDetailPage';
+import { AdminRequestsPage } from './pages/admin/AdminRequestsPage';
+import { AdminReviewsPage } from './pages/admin/AdminReviewsPage';
 
 // Leaflet and the map page are loaded only when /map is opened.
 const MapPage = lazy(() => import('./pages/MapPage'));
@@ -97,6 +106,22 @@ const AppLayout = () => {
               </ProtectedRoute>
             } />
             <Route path="/profile/:userId" element={<ProfilePage key={window.location.pathname} />} />
+            <Route
+              path="/settings"
+              element={
+                <ProtectedRoute>
+                  <SettingsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/notifications"
+              element={
+                <ProtectedRoute>
+                  <NotificationCenterPage />
+                </ProtectedRoute>
+              }
+            />
             <Route 
               path="/wallet" 
               element={
@@ -131,15 +156,40 @@ const AppLayout = () => {
 function AppContent() {
   const location = useLocation();
   const isAuthPage = location.pathname === '/login' || location.pathname === '/register';
-  
-  return isAuthPage ? (
-    <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/register" element={<RegisterPage />} />
-    </Routes>
-  ) : (
-    <AppLayout />
-  );
+  const isAdminPage = location.pathname === '/admin' || location.pathname.startsWith('/admin/');
+
+  if (isAuthPage) {
+    return (
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+      </Routes>
+    );
+  }
+
+  if (isAdminPage) {
+    return (
+      <Routes>
+        <Route
+          path="/admin"
+          element={
+            <AdminRoute>
+              <AdminLayout />
+            </AdminRoute>
+          }
+        >
+          <Route index element={<AdminDashboardPage />} />
+          <Route path="users" element={<AdminUsersPage />} />
+          <Route path="users/:userId" element={<AdminUserDetailPage />} />
+          <Route path="requests" element={<AdminRequestsPage />} />
+          <Route path="reviews" element={<AdminReviewsPage />} />
+          <Route path="*" element={<Navigate to="/admin" replace />} />
+        </Route>
+      </Routes>
+    );
+  }
+
+  return <AppLayout />;
 }
 
 function App() {

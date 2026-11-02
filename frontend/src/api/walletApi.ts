@@ -1,6 +1,6 @@
-import axios from 'axios';
+import api from './axios';
 
-const API_URL = 'http://localhost:8080';
+export const WALLET_UPDATED_EVENT = 'helptree:wallet-updated';
 
 export interface WalletDto {
   userId: number;
@@ -19,67 +19,60 @@ export interface CoinTransactionDto {
   createdAt: string;
 }
 
+/** Spring Data Page. The wallet history endpoint returns exactly this shape. */
 export interface PageResponse<T> {
   content: T[];
   totalElements: number;
   totalPages: number;
   number: number;
   size: number;
+  numberOfElements: number;
+  first: boolean;
+  last: boolean;
+  empty: boolean;
 }
 
-const createApi = () => {
-  const instance = axios.create({
-    baseURL: API_URL,
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  });
+export interface DailyBonusResponse {
+  success: boolean;
+  balance: number;
+  message: string;
+}
 
-  instance.interceptors.request.use((config) => {
-    const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  });
-
-  return instance;
+/**
+ * Lets the navbar (and any other balance indicator) refresh after a
+ * server-confirmed wallet change without issuing another request.
+ */
+export const notifyWalletUpdated = (balance?: number): void => {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(
+    new CustomEvent<{ balance?: number }>(WALLET_UPDATED_EVENT, {
+      detail: { balance },
+    })
+  );
 };
 
-const api = createApi();
-
 export const walletApi = {
-  getWallet: async (userId: number): Promise<WalletDto> => {
-    const response = await api.get<WalletDto>(`/api/users/${userId}/wallet`);
+  getWallet: async (userId: number, signal?: AbortSignal): Promise<WalletDto> => {
+    const response = await api.get<WalletDto>(`/api/users/${userId}/wallet`, { signal });
     return response.data;
   },
 
   getTransactions: async (
     userId: number,
     page: number = 0,
-    size: number = 20
+    size: number = 20,
+    signal?: AbortSignal
   ): Promise<PageResponse<CoinTransactionDto>> => {
     const response = await api.get<PageResponse<CoinTransactionDto>>(
       `/api/users/${userId}/wallet/transactions`,
-      { params: { page, size } }
+      { params: { page, size }, signal }
     );
     return response.data;
   },
 
-  claimDailyBonus: async (userId: number): Promise<{ success: boolean; balance: number; message: string }> => {
-    const response = await api.post<{ success: boolean; balance: number; message: string }>(
+  claimDailyBonus: async (userId: number): Promise<DailyBonusResponse> => {
+    const response = await api.post<DailyBonusResponse>(
       `/api/users/${userId}/wallet/daily-bonus`
-    );
-    return response.data;
-  },
-
-  spend: async (userId: number, type: string, description: string): Promise<{ success: boolean; newBalance: number }> => {
-    const prices: Record<string, number> = { 'VIP': 50, 'BOOST': 5, 'UNBLOCK': 100 };
-    const price = prices[type] || 0;
-    const response = await api.post<{ success: boolean; newBalance: number }>(
-      `/api/users/${userId}/wallet/spend`,
-      null,
-      { params: { amount: price, type, description } }
     );
     return response.data;
   },

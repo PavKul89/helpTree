@@ -41,7 +41,6 @@ export const authApi = {
   },
 
   getUserById: async (id: number): Promise<UserPublic> => {
-    console.log('Fetching user:', `/api/users/${id}/public`);
     const response = await api.get<UserPublic>(`/api/users/${id}/public`);
     return response.data;
   },
@@ -54,6 +53,10 @@ export const authApi = {
   updateProfile: async (id: number, data: { name?: string; email?: string; phone?: string; city?: string; birthDate?: string | null; latitude?: number; longitude?: number }): Promise<User> => {
     const response = await api.put<User>(`/api/users/${id}`, data);
     return response.data;
+  },
+
+  deleteAccount: async (id: number): Promise<void> => {
+    await api.delete(`/api/users/${id}`);
   },
 
   uploadAvatar: async (userId: number, file: File): Promise<string> => {

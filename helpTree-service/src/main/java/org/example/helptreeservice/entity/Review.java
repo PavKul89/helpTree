@@ -9,7 +9,8 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "reviews", indexes = {
     @Index(name = "idx_reviews_help_id", columnList = "help_id"),
-    @Index(name = "idx_reviews_to_user_id", columnList = "to_user_id")
+    @Index(name = "idx_reviews_to_user_id", columnList = "to_user_id"),
+    @Index(name = "idx_reviews_deleted", columnList = "deleted")
 })
 @Data
 @NoArgsConstructor
@@ -40,4 +41,10 @@ public class Review {
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
+
+    @Column(name = "deleted", nullable = false)
+    private Boolean deleted = false;
+
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
 }

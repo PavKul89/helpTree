@@ -46,7 +46,6 @@ import { hasCoordinates } from '../utils/coordinates';
 import './MapPage.css';
 
 const LIST_BATCH = 12;
-const DEFAULT_CENTER: [number, number] = [53.9, 27.56];
 const DEFAULT_ZOOM = 6;
 
 type TileMode = 'dark' | 'light';
@@ -155,13 +154,9 @@ export const MapPage = () => {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [scrollTick, setScrollTick] = useState(0);
   const [visibleCount, setVisibleCount] = useState(LIST_BATCH);
-  const [mobileView, setMobileView] = useState<'list' | 'map'>('list');
+  const [mobileView, setMobileView] = useState<'list' | 'map'>('map');
 
   const [mapReady, setMapReady] = useState(false);
-  // On phones the map panel starts hidden, so Leaflet must not initialise
-  // inside a zero-sized container. Mount it once the canvas gets real size.
-  const [mapMounted, setMapMounted] = useState(false);
-  const [canvasNode, setCanvasNode] = useState<HTMLDivElement | null>(null);
   const [pendingRevealId, setPendingRevealId] = useState<number | null>(null);
   const [tilesLoading, setTilesLoading] = useState(true);
   const [tileError, setTileError] = useState(false);
@@ -335,24 +330,6 @@ export const MapPage = () => {
     observer.observe(node);
     return () => observer.disconnect();
   }, [mapReady]);
-
-  useEffect(() => {
-    if (!canvasNode || mapMounted) return undefined;
-
-    if (typeof ResizeObserver === 'undefined') {
-      setMapMounted(true);
-      return undefined;
-    }
-
-    const observer = new ResizeObserver((entries) => {
-      const box = entries[0]?.contentRect;
-      if (box && box.width > 0 && box.height > 0) {
-        setMapMounted(true);
-      }
-    });
-    observer.observe(canvasNode);
-    return () => observer.disconnect();
-  }, [canvasNode, mapMounted]);
 
   useEffect(
     () => () => {
@@ -998,12 +975,10 @@ export const MapPage = () => {
                   className="map-canvas"
                   role="region"
                   aria-label="Карта открытых заявок"
-                  ref={setCanvasNode}
                 >
-                  {mapMounted ? (
                   <MapContainer
                     ref={handleMapRef}
-                    center={DEFAULT_CENTER}
+                    center={[locatedPosts[0].latitude, locatedPosts[0].longitude]}
                     zoom={DEFAULT_ZOOM}
                     minZoom={4}
                     zoomControl={false}
@@ -1084,12 +1059,6 @@ export const MapPage = () => {
                       </>
                     )}
                   </MapContainer>
-                  ) : (
-                    <div className="map-canvas-placeholder">
-                      <span className="map-spinner" aria-hidden="true" />
-                      <span>Карта откроется вместе с вкладкой «Карта»</span>
-                    </div>
-                  )}
 
                   {tilesLoading && (
                     <div className="map-tile-loading" aria-hidden="true">

@@ -187,17 +187,23 @@ export function useWebSocketChat(options: UseWebSocketChatOptions) {
     setIsConnected(false);
   }, [clearSubscriptions]);
 
-  const sendMessage = useCallback((chatId: number, content: string) => {
+  const sendMessage = useCallback((chatId: number, content: string): boolean => {
     const client = clientRef.current;
     if (!client || !client.connected) {
       console.warn('WebSocket не подключён, сообщение не отправлено');
-      return;
+      return false;
     }
 
-    client.publish({
-      destination: `/app/chat/${chatId}/messages`,
-      body: JSON.stringify({ content }),
-    });
+    try {
+      client.publish({
+        destination: `/app/chat/${chatId}/messages`,
+        body: JSON.stringify({ content }),
+      });
+      return true;
+    } catch (error) {
+      console.error('Не удалось передать сообщение через WebSocket', error);
+      return false;
+    }
   }, []);
 
   useEffect(() => {

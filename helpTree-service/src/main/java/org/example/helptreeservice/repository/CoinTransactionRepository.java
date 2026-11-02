@@ -1,6 +1,7 @@
 package org.example.helptreeservice.repository;
 
 import org.example.helptreeservice.entity.CoinTransaction;
+import org.example.helptreeservice.enums.TransactionType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -8,14 +9,14 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-import java.util.List;
+import java.time.LocalDateTime;
 
 @Repository
 public interface CoinTransactionRepository extends JpaRepository<CoinTransaction, Long> {
     
     Page<CoinTransaction> findByUserIdOrderByCreatedAtDesc(Long userId, Pageable pageable);
-    
-    List<CoinTransaction> findTop10ByUserIdOrderByCreatedAtDesc(Long userId);
+
+    boolean existsByUserIdAndTypeAndCreatedAtAfter(Long userId, TransactionType type, LocalDateTime after);
     
     @Query("SELECT COALESCE(SUM(ct.amount), 0) FROM CoinTransaction ct WHERE ct.userId = :userId AND ct.type IN ('HELP_GIVEN', 'HELP_RECEIVED', 'REVIEW_BONUS', 'DAILY_LOGIN', 'ADMIN_BONUS', 'GIFT_RECEIVED', 'FIRST_HELP')")
     Long getTotalEarned(@Param("userId") Long userId);

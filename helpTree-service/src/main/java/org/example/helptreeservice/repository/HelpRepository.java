@@ -1,5 +1,6 @@
 package org.example.helptreeservice.repository;
 
+import jakarta.persistence.LockModeType;
 import org.example.helptreeservice.entity.Help;
 import org.example.helptreeservice.entity.Post;
 import org.example.helptreeservice.entity.User;
@@ -8,6 +9,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -17,6 +19,10 @@ import java.util.Optional;
 
 @Repository
 public interface HelpRepository extends JpaRepository<Help, Long> {
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT h FROM Help h WHERE h.id = :helpId")
+    Optional<Help> findByIdForUpdate(@Param("helpId") Long helpId);
 
     @Query("SELECT h FROM Help h JOIN FETCH h.post JOIN FETCH h.helper WHERE h.post = :post AND (h.deleted = false OR h.deleted IS NULL)")
     List<Help> findByPostWithHelper(@Param("post") Post post);

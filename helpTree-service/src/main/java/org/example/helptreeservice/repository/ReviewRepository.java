@@ -18,12 +18,12 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
 
     boolean existsByHelpAndFromUser(Help help, User fromUser);
 
-    @Query("SELECT r FROM Review r JOIN FETCH r.fromUser JOIN FETCH r.help WHERE r.help = :help")
+    @Query("SELECT r FROM Review r JOIN FETCH r.fromUser JOIN FETCH r.help WHERE r.help = :help AND (r.deleted = false OR r.deleted IS NULL)")
     List<Review> findByHelpWithDetails(@Param("help") Help help);
 
-    @Query("SELECT r FROM Review r JOIN FETCH r.fromUser WHERE r.toUser = :user")
+    @Query("SELECT r FROM Review r JOIN FETCH r.fromUser WHERE r.toUser = :user AND (r.deleted = false OR r.deleted IS NULL)")
     List<Review> findByToUserWithFromUser(@Param("user") User user);
 
-    @Query("SELECT AVG(r.rating) FROM Review r WHERE r.toUser = :user")
+    @Query("SELECT AVG(r.rating) FROM Review r WHERE r.toUser = :user AND (r.deleted = false OR r.deleted IS NULL)")
     Double calculateAverageRating(@Param("user") User user);
 }

@@ -19,6 +19,7 @@ export const postsApi = {
     params?: {
       page?: number;
       size?: number;
+      userId?: number;
       status?: string;
       title?: string;
       authorName?: string;

@@ -61,6 +61,8 @@ public class ReviewService {
             throw new BadRequestException("Нельзя оставить отзыв самому себе");
         }
 
+        // Учитываем и soft-deleted отзывы: иначе удаление позволяло бы
+        // создать отзыв заново и повторно получить +2 HC.
         if (reviewRepository.existsByHelpAndFromUser(help, fromUser)) {
             throw new BadRequestException("Вы уже оставляли отзыв на эту помощь");
         }
@@ -107,6 +109,10 @@ public class ReviewService {
         Review review = reviewRepository.findById(reviewId)
                 .orElseThrow(() -> new NotFoundException("Отзыв не найден"));
 
+        if (Boolean.TRUE.equals(review.getDeleted())) {
+            throw new NotFoundException("Отзыв не найден");
+        }
+
         if (!review.getFromUser().getId().equals(currentUserId)) {
             User currentUser = userRepository.findById(currentUserId)
                     .orElseThrow(() -> new NotFoundException("Пользователь не найден"));
@@ -115,7 +121,11 @@ public class ReviewService {
             }
         }
 
-        reviewRepository.delete(review);
-        log.info("Отзыв {} удалён", reviewId);
+        // Не удаляем строку физически: уникальный индекс (help_id, from_user_id)
+        // должен продолжать блокировать повторное создание отзыва и повторный +2 HC.
+        review.setDeleted(true);
+        review.setDeletedAt(LocalDateTime.now());
+        reviewRepository.save(review);
+        log.info("Отзыв {} помечен как удалённый", reviewId);
     }
 }

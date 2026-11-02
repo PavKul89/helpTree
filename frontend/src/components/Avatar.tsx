@@ -5,7 +5,7 @@ import { theme } from '../theme';
 interface AvatarProps {
   name: string;
   avatarUrl?: string;
-  size?: 'small' | 'medium' | 'large';
+  size?: 'small' | 'medium' | 'large' | 'xlarge';
   showName?: boolean;
   withRating?: number;
   clickable?: boolean;
@@ -16,6 +16,7 @@ const SIZES = {
   small: { container: 28, font: 11 },
   medium: { container: 40, font: 14 },
   large: { container: 64, font: 22 },
+  xlarge: { container: 104, font: 34 },
 };
 
 const COLORS = [

@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { chatApi } from '../api/chatApi';
 import { authApi } from '../api/authApi';
-import { walletApi } from '../api/walletApi';
+import { WALLET_UPDATED_EVENT, walletApi } from '../api/walletApi';
 import { useWebSocketChat } from '../hooks/useWebSocketChat';
 import {
   Map,
@@ -14,6 +14,7 @@ import {
   Star,
   Package,
   MessageCircle,
+  Bell,
   AlertTriangle,
   Ban,
   Plus,
@@ -22,6 +23,8 @@ import {
   Leaf,
   LogOut,
   Menu,
+  Settings2,
+  ShieldCheck,
   X,
 } from 'lucide-react';
 import type { Chat } from '../types';
@@ -94,6 +97,23 @@ export const Navbar: React.FC = () => {
       loadUserData();
       loadWallet();
     }
+  }, [user]);
+
+  useEffect(() => {
+    const handleWalletUpdated = (event: Event) => {
+      const balance = (event as CustomEvent<{ balance?: number }>).detail?.balance;
+      if (typeof balance === 'number' && Number.isFinite(balance)) {
+        setHelpCoins(balance);
+      } else if (user) {
+        walletApi
+          .getWallet(user.id)
+          .then((wallet) => setHelpCoins(wallet.balance))
+          .catch(console.error);
+      }
+    };
+
+    window.addEventListener(WALLET_UPDATED_EVENT, handleWalletUpdated);
+    return () => window.removeEventListener(WALLET_UPDATED_EVENT, handleWalletUpdated);
   }, [user]);
 
   const loadInitialChats = async () => {
@@ -268,6 +288,18 @@ export const Navbar: React.FC = () => {
                   <Link to="/profile" className="navbar-dropdown-item" onClick={closeDropdown}>
                     <User size={16} aria-hidden="true" /> Мой профиль
                   </Link>
+                  <Link to="/settings" className="navbar-dropdown-item" onClick={closeDropdown}>
+                    <Settings2 size={16} aria-hidden="true" /> Настройки
+                  </Link>
+                  {user.role === 'ADMIN' && (
+                    <Link
+                      to="/admin"
+                      className="navbar-dropdown-item navbar-dropdown-item--admin"
+                      onClick={closeDropdown}
+                    >
+                      <ShieldCheck size={16} aria-hidden="true" /> Админ-панель
+                    </Link>
+                  )}
                   <Link to="/favorites" className="navbar-dropdown-item" onClick={closeDropdown}>
                     <Star size={16} aria-hidden="true" /> Избранное
                   </Link>
@@ -290,6 +322,17 @@ export const Navbar: React.FC = () => {
                 </div>
               )}
             </div>
+          )}
+
+          {user && (
+            <Link
+              to="/notifications"
+              className={`navbar-notifications${isActive('/notifications') ? ' is-active' : ''}`}
+              aria-label="Центр уведомлений"
+              title="Уведомления"
+            >
+              <Bell size={18} aria-hidden="true" />
+            </Link>
           )}
 
           <div className="navbar-actions">
@@ -344,9 +387,24 @@ export const Navbar: React.FC = () => {
               <Link to="/activity" className="navbar-mobile-link" onClick={closeDropdown}>
                 <ClipboardList size={16} aria-hidden="true" /> Активность
               </Link>
+              <Link to="/notifications" className={`navbar-mobile-link ${isActive('/notifications') ? 'navbar-mobile-link--active' : ''}`} onClick={closeDropdown}>
+                <Bell size={16} aria-hidden="true" /> Уведомления
+              </Link>
               <Link to="/profile" className="navbar-mobile-link" onClick={closeDropdown}>
                 <User size={16} aria-hidden="true" /> Мой профиль
               </Link>
+              <Link to="/settings" className="navbar-mobile-link" onClick={closeDropdown}>
+                <Settings2 size={16} aria-hidden="true" /> Настройки
+              </Link>
+              {user.role === 'ADMIN' && (
+                <Link
+                  to="/admin"
+                  className="navbar-mobile-link navbar-mobile-link--admin"
+                  onClick={closeDropdown}
+                >
+                  <ShieldCheck size={16} aria-hidden="true" /> Админ-панель
+                </Link>
+              )}
               <Link to="/favorites" className="navbar-mobile-link" onClick={closeDropdown}>
                 <Star size={16} aria-hidden="true" /> Избранное
               </Link>

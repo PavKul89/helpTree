@@ -216,7 +216,9 @@ public class HelpService {
         log.info("Подтверждение получения помощи: helpId={}", helpId);
 
         try {
-            Help help = getHelpById(helpId);
+            // Блокируем строку помощи на время транзакции: второй конкурентный
+            // confirmHelp будет ждать коммита и увидит уже подтверждённый статус.
+            Help help = getHelpByIdForUpdate(helpId);
             log.debug("Текущее состояние помощи: status={}, helperId={}, receiverId={}",
                     help.getStatus(), help.getHelper().getId(), help.getReceiver().getId());
 
@@ -473,6 +475,20 @@ public class HelpService {
         }
 
         log.debug("Помощь с ID {} успешно найдена", id);
+        return help;
+    }
+
+    private Help getHelpByIdForUpdate(Long id) {
+        log.debug("Поиск помощи по ID с блокировкой: {}", id);
+
+        Help help = helpRepository.findByIdForUpdate(id)
+                .orElseThrow(() -> new NotFoundException("Помощь не найдена с id: " + id));
+
+        if (help.getDeleted() != null && help.getDeleted()) {
+            log.debug("Помощь с ID {} найдена, но помечена как удаленная", id);
+            throw new NotFoundException("Помощь не найдена с id: " + id);
+        }
+
         return help;
     }
 

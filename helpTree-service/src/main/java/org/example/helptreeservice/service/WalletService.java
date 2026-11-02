@@ -131,20 +131,24 @@ public class WalletService {
         log.info("Начислено {} монет за отзыв пользователю {}", economyConfig.getCoinsPerReview(), userId);
     }
 
-    public void addDailyLoginBonus(Long userId) {
+    public boolean addDailyLoginBonus(Long userId) {
         log.info("Проверка ежедневного бонуса для пользователя {}", userId);
-        
-        var recentTransactions = transactionRepository.findTop10ByUserIdOrderByCreatedAtDesc(userId);
-        boolean alreadyClaimed = recentTransactions.stream()
-                .anyMatch(t -> t.getType() == TransactionType.DAILY_LOGIN 
-                        && t.getCreatedAt().isAfter(LocalDateTime.now().minusHours(24)));
-        
+
+        LocalDateTime now = LocalDateTime.now();
+
+        // Блокируем строку пользователя, чтобы два одновременных запроса
+        // не смогли оба пройти проверку и начислить бонус дважды.
+        User user = userRepository.findByIdForUpdate(userId)
+                .orElseThrow(() -> new BadRequestException("Пользователь не найден"));
+
+        boolean alreadyClaimed = transactionRepository.existsByUserIdAndTypeAndCreatedAtAfter(
+                userId, TransactionType.DAILY_LOGIN, now.minusHours(24));
+
         if (alreadyClaimed) {
             log.info("Ежедневный бонус уже получен пользователем {}", userId);
-            return;
+            return false;
         }
-        
-        User user = getUserOrThrow(userId);
+
         Long currentCoins = user.getHelpCoins();
         if (currentCoins == null) {
             currentCoins = 0L;
@@ -161,6 +165,7 @@ public class WalletService {
         transactionRepository.save(transaction);
         
         log.info("Начислен ежедневный бонус {} монет пользователю {}", economyConfig.getCoinsPerDailyLogin(), userId);
+        return true;
     }
 
     public void spendCoins(Long userId, long amount, TransactionType type, String description) {
