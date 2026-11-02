@@ -58,7 +58,11 @@ public class PostController {
             @RequestParam(required = false) String city,
             @PageableDefault(page = 0, size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
     ) {
-        boolean excludeCancelled = userId != null && !authService.canManageUser(userId);
+        // Публичная лента не показывает отменённые посты: для выборки по автору решают его права,
+        // для общей ленты — только администратор видит все статусы.
+        boolean excludeCancelled = userId != null
+                ? !authService.canManageUser(userId)
+                : !authService.isAdmin();
         Page<PostDto> result = postService.getPosts(
                 userId, status, title, authorName, category, city, pageable, excludeCancelled);
         return ResponseEntity.ok(result);
