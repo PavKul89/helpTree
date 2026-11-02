@@ -37,10 +37,25 @@ spring:
     enabled: true
     baseline-on-migrate: true
 
+  # SMTP for account security emails. Delivery is controlled by app.mail.enabled.
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:25}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: ${MAIL_SMTP_AUTH:false}
+      mail.smtp.starttls.enable: ${MAIL_SMTP_STARTTLS:false}
+
 # ======================================================
 # ТРАССИРОВКА
 # ======================================================
 management:
+  health:
+    # SMTP is optional. Without this switch Spring Boot's MailHealthIndicator
+    # probes localhost:25 and marks the whole application DOWN when mail is disabled.
+    mail:
+      enabled: ${MAIL_ENABLED:false}
   tracing:
     enabled: true
     sampling:
@@ -94,6 +109,17 @@ logging:
 app:
   jwtSecret: ${JWT_SECRET:dev-only-secret-not-for-production-64chars-minimum-length!!}
   jwtExpirationMs: 86400000
+  auth:
+    password-reset-token-minutes: ${PASSWORD_RESET_TOKEN_MINUTES:30}
+    email-verification-token-hours: ${EMAIL_VERIFICATION_TOKEN_HOURS:24}
+    email-change-token-hours: ${EMAIL_CHANGE_TOKEN_HOURS:24}
+    session-touch-minutes: ${SESSION_TOUCH_MINUTES:1}
+    trust-forwarded-headers: ${TRUST_FORWARDED_HEADERS:false}
+    frontend-base-url: ${FRONTEND_BASE_URL:http://localhost:3000}
+  mail:
+    # Email flows stay disabled until SMTP is configured. Never log or return tokens.
+    enabled: ${MAIL_ENABLED:false}
+    from: ${MAIL_FROM:no-reply@helptree.local}
   cors:
     allowed-origins: ${CORS_ORIGINS:http://localhost:3000,http://localhost:3001,http://localhost:5173}
   admin:

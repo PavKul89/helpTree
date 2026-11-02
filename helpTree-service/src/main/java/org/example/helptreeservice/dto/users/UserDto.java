@@ -34,4 +34,5 @@ public class UserDto {
     private Long helpCoins;
     private LocalDateTime vipUntil;
     private String nicknameColor;
+    private Boolean emailVerified;
 }

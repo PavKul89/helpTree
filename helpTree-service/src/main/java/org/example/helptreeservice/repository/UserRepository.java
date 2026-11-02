@@ -2,6 +2,7 @@ package org.example.helptreeservice.repository;
 
 import jakarta.persistence.LockModeType;
 import org.example.helptreeservice.entity.User;
+import org.example.helptreeservice.enums.Role;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -17,7 +18,9 @@ import java.util.Optional;
 @Repository
 public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByEmail(String email);
+    Optional<User> findByEmailIgnoreCase(String email);
     boolean existsByEmail(String email);
+    boolean existsByEmailIgnoreCase(String email);
 
     Optional<User> findByIdAndDeletedFalse(Long id);
     boolean existsByIdAndDeletedFalse(Long id);
@@ -49,6 +52,13 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     @Query("SELECT COUNT(u) FROM User u WHERE u.deleted = false OR u.deleted IS NULL")
     long countActive();
+
+    @Query("SELECT COUNT(u) FROM User u WHERE u.role = :role AND (u.deleted = false OR u.deleted IS NULL)")
+    long countActiveByRole(@Param("role") Role role);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT u FROM User u WHERE u.role = :role AND (u.deleted = false OR u.deleted IS NULL) ORDER BY u.id")
+    List<User> findActiveByRoleForUpdate(@Param("role") Role role);
 
     @Modifying
     @Query("UPDATE User u SET u.blockedAt = NULL, u.blockedUntil = NULL, u.updatedAt = CURRENT_TIMESTAMP " +

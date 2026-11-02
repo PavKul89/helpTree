@@ -36,6 +36,8 @@ public class AdminInitializer implements CommandLineRunner {
             admin.setName("Admin");
             admin.setRole(Role.ADMIN);
             admin.setStatus(UserStatus.ACTIVE);
+            admin.setEmailVerified(true);
+            admin.setTokenVersion(0L);
             admin.setHelpedCount(0);
             admin.setDebtCount(0);
             admin.setRating(0.0);

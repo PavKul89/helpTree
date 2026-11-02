@@ -94,6 +94,12 @@ public class User {
     @Column(name = "last_login")
     private LocalDateTime lastLogin;
 
+    @Column(name = "token_version", nullable = false)
+    private Long tokenVersion = 0L;
+
+    @Column(name = "email_verified", nullable = false)
+    private Boolean emailVerified = false;
+
     @Column(name = "blocked_at")
     private LocalDateTime blockedAt;
 

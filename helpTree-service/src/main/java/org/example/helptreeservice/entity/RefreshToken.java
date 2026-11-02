@@ -1,19 +1,26 @@
 package org.example.helptreeservice.entity;
 
 import jakarta.persistence.*;
-import lombok.Data;
-import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 import java.time.LocalDateTime;
 
+/**
+ * Refresh token identified by its SHA-256 hash. A token is rotated on every
+ * successful refresh; presenting a revoked token is treated as replay.
+ */
 @Entity
-@Table(name = "refresh_tokens", indexes = {
-    @Index(name = "idx_refresh_token", columnList = "token"),
-    @Index(name = "idx_refresh_token_user_id", columnList = "user_id")
+@Table(name = "auth_refresh_tokens", indexes = {
+    @Index(name = "idx_auth_refresh_tokens_session_id", columnList = "session_id"),
+    @Index(name = "idx_auth_refresh_tokens_user_id", columnList = "user_id"),
+    @Index(name = "idx_auth_refresh_tokens_expires_at", columnList = "expires_at")
 })
-@Data
+@Getter
+@Setter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
@@ -23,10 +30,14 @@ public class RefreshToken {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true, length = 500)
-    private String token;
+    @Column(name = "token_hash", nullable = false, unique = true, length = 64)
+    private String tokenHash;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "session_id", nullable = false)
+    private AuthSession session;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
@@ -36,20 +47,27 @@ public class RefreshToken {
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
-    @Builder.Default
-    @Column(nullable = false)
-    private Boolean revoked = false;
+    @Column(name = "used_at")
+    private LocalDateTime usedAt;
+
+    @Column(name = "revoked_at")
+    private LocalDateTime revokedAt;
+
+    @Column(name = "revoked_reason", length = 50)
+    private String revokedReason;
 
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
+        if (createdAt == null) {
+            createdAt = LocalDateTime.now();
+        }
     }
 
-    public boolean isExpired() {
-        return LocalDateTime.now().isAfter(expiresAt);
+    public boolean isRevoked() {
+        return revokedAt != null || usedAt != null;
     }
 
-    public boolean isValid() {
-        return !revoked && !isExpired();
+    public boolean isExpired(LocalDateTime now) {
+        return expiresAt == null || !expiresAt.isAfter(now);
     }
 }

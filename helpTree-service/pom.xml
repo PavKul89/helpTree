@@ -117,6 +117,12 @@
             <artifactId>spring-boot-starter-security</artifactId>
         </dependency>
 
+        <!-- Email delivery for verification / password reset / email change -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+
         <!-- S3-compatible image storage (Silo) -->
         <dependency>
             <groupId>io.minio</groupId>

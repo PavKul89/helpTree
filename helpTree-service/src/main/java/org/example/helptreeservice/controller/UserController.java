@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.example.helptreeservice.config.PaginationConfig;
 import org.example.helptreeservice.dto.users.CreateUserRequest;
 import org.example.helptreeservice.dto.users.UpdateUserRequest;
+import org.example.helptreeservice.dto.users.UpdateRoleRequest;
 import org.example.helptreeservice.dto.users.UserDto;
 import org.example.helptreeservice.dto.users.UserPublicDto;
 import org.example.helptreeservice.dto.wallet.CoinTransactionDto;
@@ -133,6 +134,16 @@ public class UserController {
         log.info("Обновление рейтинга пользователя ID: {}, новый рейтинг: {}", id, rating);
         userService.updateUserRating(id, rating);
         return ResponseEntity.ok().build();
+    }
+
+    @PutMapping("/{id}/role")
+    public ResponseEntity<UserDto> changeUserRole(
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateRoleRequest request) {
+        if (!authService.isAdmin()) {
+            throw new ForbiddenException("Только администратор может изменять роли");
+        }
+        return ResponseEntity.ok(userService.changeRole(id, request.getRole()));
     }
 
     @DeleteMapping("/{id}")

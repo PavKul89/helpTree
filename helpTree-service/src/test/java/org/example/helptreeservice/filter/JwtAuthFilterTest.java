@@ -1,10 +1,13 @@
 package org.example.helptreeservice.filter;
 
+import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
-import jakarta.servlet.ServletException;
+import org.example.helptreeservice.exception.AccountBlockedException;
+import org.example.helptreeservice.exception.UnauthorizedException;
 import org.example.helptreeservice.security.JwtAuthFilter;
-import org.example.helptreeservice.util.TestJwtUtils;
-import org.junit.jupiter.api.BeforeEach;
+import org.example.helptreeservice.service.AuthSessionService;
+import org.example.helptreeservice.service.AuthSessionService.AuthenticatedUser;
+import org.example.helptreeservice.service.JwtService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -12,10 +15,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
-import org.springframework.test.util.ReflectionTestUtils;
 
-import java.io.IOException;
 import java.lang.reflect.Method;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -26,91 +28,118 @@ class JwtAuthFilterTest {
     @InjectMocks
     private JwtAuthFilter jwtAuthFilter;
 
-    private Method doFilterInternalMethod;
+    @Mock
+    private JwtService jwtService;
+
+    @Mock
+    private AuthSessionService authSessionService;
 
     @Mock
     private FilterChain filterChain;
 
-    private static final String SECRET = "testSecretKeyForFilterTesting123456";
+    private static final String TOKEN = "valid-access-token";
+    private static final Long USER_ID = 42L;
+    private static final String EMAIL = "user@test.com";
+    private static final String SESSION_ID = UUID.randomUUID().toString();
+    private static final long TOKEN_VERSION = 7L;
 
-    @BeforeEach
-    void setUp() throws Exception {
-        ReflectionTestUtils.setField(jwtAuthFilter, "jwtSecret", SECRET);
-        doFilterInternalMethod = JwtAuthFilter.class.getDeclaredMethod("doFilterInternal",
+    private void stubValidToken(String role, String email) {
+        Claims claims = mock(Claims.class);
+        when(jwtService.parseClaims(TOKEN)).thenReturn(claims);
+        when(claims.get(JwtService.CLAIM_USER_ID)).thenReturn(USER_ID);
+        when(claims.get(JwtService.CLAIM_ROLE, String.class)).thenReturn(role);
+        when(claims.get(JwtService.CLAIM_SESSION_ID, String.class)).thenReturn(SESSION_ID);
+        when(claims.get(JwtService.CLAIM_TOKEN_VERSION)).thenReturn(TOKEN_VERSION);
+        when(authSessionService.validateAccessToken(USER_ID, SESSION_ID, TOKEN_VERSION, role))
+                .thenReturn(new AuthenticatedUser(USER_ID, email, role,
+                        UUID.fromString(SESSION_ID), TOKEN_VERSION));
+    }
+
+    private MockHttpServletResponse invoke(MockHttpServletRequest request) throws Exception {
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        Method method = JwtAuthFilter.class.getDeclaredMethod("doFilterInternal",
                 jakarta.servlet.http.HttpServletRequest.class,
                 jakarta.servlet.http.HttpServletResponse.class,
                 FilterChain.class);
-        doFilterInternalMethod.setAccessible(true);
-    }
-
-    private String generateToken(Long userId, String email, String role) {
-        return TestJwtUtils.generateToken(userId, email, role, SECRET);
-    }
-
-    @Test
-    void isPublicPath_shouldReturnTrueForAuthPaths() throws Exception {
-        Method method = JwtAuthFilter.class.getDeclaredMethod("isPublicPath", String.class, String.class);
         method.setAccessible(true);
+        method.invoke(jwtAuthFilter, request, response, filterChain);
+        return response;
+    }
 
-        assertTrue((Boolean) method.invoke(jwtAuthFilter, "/api/auth/login", "POST"));
-        assertTrue((Boolean) method.invoke(jwtAuthFilter, "/api/auth/register", "POST"));
-        assertTrue((Boolean) method.invoke(jwtAuthFilter, "/api/auth/refresh", "POST"));
+    private boolean isPublic(String path, String method) throws Exception {
+        Method publicMethod = JwtAuthFilter.class.getDeclaredMethod("isPublicPath", String.class, String.class);
+        publicMethod.setAccessible(true);
+        return (Boolean) publicMethod.invoke(jwtAuthFilter, path, method);
     }
 
     @Test
-    void isPublicPath_shouldReturnTrueForGetPosts() throws Exception {
-        Method method = JwtAuthFilter.class.getDeclaredMethod("isPublicPath", String.class, String.class);
-        method.setAccessible(true);
+    void isPublicPath_shouldAllowOnlyExplicitAuthEndpoints() throws Exception {
+        assertTrue(isPublic("/api/auth/login", "POST"));
+        assertTrue(isPublic("/api/auth/register", "POST"));
+        assertTrue(isPublic("/api/auth/refresh", "POST"));
+        assertTrue(isPublic("/api/auth/password/reset/request", "POST"));
+        assertTrue(isPublic("/api/auth/password/reset/confirm", "POST"));
+        assertTrue(isPublic("/api/auth/email/verification/confirm", "POST"));
+        assertTrue(isPublic("/api/auth/email/change/confirm", "POST"));
 
-        assertTrue((Boolean) method.invoke(jwtAuthFilter, "/api/posts", "GET"));
-        assertTrue((Boolean) method.invoke(jwtAuthFilter, "/api/posts/1", "GET"));
-        assertTrue((Boolean) method.invoke(jwtAuthFilter, "/api/posts/123", "GET"));
+        assertFalse(isPublic("/api/auth/logout", "POST"));
+        assertFalse(isPublic("/api/auth/logout-all", "POST"));
+        assertFalse(isPublic("/api/auth/sessions", "GET"));
+        assertFalse(isPublic("/api/auth/password/change", "POST"));
+        assertFalse(isPublic("/api/auth/email/change", "POST"));
+        assertFalse(isPublic("/api/auth/anything-else", "GET"));
     }
 
     @Test
-    void isPublicPath_shouldReturnFalseForPutPosts() throws Exception {
-        Method method = JwtAuthFilter.class.getDeclaredMethod("isPublicPath", String.class, String.class);
-        method.setAccessible(true);
+    void isPublicPath_shouldAllowPublicReadEndpoints() throws Exception {
+        assertTrue(isPublic("/api/posts", "GET"));
+        assertTrue(isPublic("/api/posts/1", "GET"));
+        assertTrue(isPublic("/api/posts/user/7", "GET"));
+        assertTrue(isPublic("/api/posts/7/comments", "GET"));
+        assertTrue(isPublic("/api/posts/map", "GET"));
+        assertTrue(isPublic("/api/users/public", "GET"));
+        assertTrue(isPublic("/api/users/7/public", "GET"));
+        assertFalse(isPublic("/api/actuator", "GET"));
 
-        assertFalse((Boolean) method.invoke(jwtAuthFilter, "/api/posts/1", "PUT"));
-        assertFalse((Boolean) method.invoke(jwtAuthFilter, "/api/posts/1", "DELETE"));
-        assertFalse((Boolean) method.invoke(jwtAuthFilter, "/api/posts", "POST"));
+        assertFalse(isPublic("/api/posts", "POST"));
+        assertFalse(isPublic("/api/posts/1", "PUT"));
+        assertFalse(isPublic("/api/posts/1", "DELETE"));
+        assertFalse(isPublic("/api/posts/by-ids", "POST"));
     }
 
     @Test
-    void isPublicPath_shouldReturnTrueForPublicPostEndpoints() throws Exception {
-        Method method = JwtAuthFilter.class.getDeclaredMethod("isPublicPath", String.class, String.class);
-        method.setAccessible(true);
-
-        assertTrue((Boolean) method.invoke(jwtAuthFilter, "/api/posts/user/7", "GET"));
-        assertTrue((Boolean) method.invoke(jwtAuthFilter, "/api/posts/7/comments", "GET"));
-        assertTrue((Boolean) method.invoke(jwtAuthFilter, "/api/posts/map", "GET"));
-        assertTrue((Boolean) method.invoke(jwtAuthFilter, "/api/posts/by-ids", "POST"));
-        assertFalse((Boolean) method.invoke(jwtAuthFilter, "/api/posts/7/comments", "POST"));
-        assertFalse((Boolean) method.invoke(jwtAuthFilter, "/api/posts/user/7", "DELETE"));
+    void isPublicPath_shouldAllowInfrastructurePaths() throws Exception {
+        assertTrue(isPublic("/actuator/health", "GET"));
+        assertTrue(isPublic("/actuator/health/liveness", "GET"));
+        assertTrue(isPublic("/actuator/health/readiness", "GET"));
+        assertTrue(isPublic("/ws/chat", "GET"));
+        assertTrue(isPublic("/swagger-ui/index.html", "GET"));
+        assertFalse(isPublic("/actuator/env", "GET"));
+        assertFalse(isPublic("/actuator/health", "POST"));
     }
 
     @Test
-    void filter_shouldSetOwnerContextForValidTokenOnPublicPath() throws Exception {
-        String token = generateToken(42L, "owner@test.com", "USER");
+    void filter_shouldSetContextForValidTokenOnPublicPath() throws Exception {
+        stubValidToken("USER", EMAIL);
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/posts/user/42");
-        request.addHeader("Authorization", "Bearer " + token);
-        MockHttpServletResponse response = new MockHttpServletResponse();
+        request.addHeader("Authorization", "Bearer " + TOKEN);
 
-        doFilterInternalMethod.invoke(jwtAuthFilter, request, response, filterChain);
+        MockHttpServletResponse response = invoke(request);
 
         assertEquals("42", request.getAttribute("X-User-Id"));
         assertEquals("USER", request.getAttribute("X-User-Role"));
+        assertEquals(SESSION_ID, request.getAttribute("X-Session-Id"));
+        assertEquals(200, response.getStatus());
         verify(filterChain).doFilter(request, response);
     }
 
     @Test
     void filter_shouldIgnoreInvalidTokenOnPublicPath() throws Exception {
+        when(jwtService.parseClaims("bad-token")).thenThrow(new IllegalArgumentException("bad"));
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/posts/map");
-        request.addHeader("Authorization", "Bearer not-a-valid-token");
-        MockHttpServletResponse response = new MockHttpServletResponse();
+        request.addHeader("Authorization", "Bearer bad-token");
 
-        doFilterInternalMethod.invoke(jwtAuthFilter, request, response, filterChain);
+        MockHttpServletResponse response = invoke(request);
 
         assertNull(request.getAttribute("X-User-Id"));
         assertEquals(200, response.getStatus());
@@ -118,77 +147,79 @@ class JwtAuthFilterTest {
     }
 
     @Test
-    void filter_shouldRejectInvalidTokenOnProtectedPath() throws Exception {
-        MockHttpServletRequest request = new MockHttpServletRequest("PUT", "/api/posts/1");
-        request.addHeader("Authorization", "Bearer not-a-valid-token");
-        MockHttpServletResponse response = new MockHttpServletResponse();
+    void filter_shouldIgnoreRevokedSessionOnPublicPath() throws Exception {
+        Claims claims = mock(Claims.class);
+        when(jwtService.parseClaims(TOKEN)).thenReturn(claims);
+        when(claims.get(JwtService.CLAIM_USER_ID)).thenReturn(USER_ID);
+        when(claims.get(JwtService.CLAIM_ROLE, String.class)).thenReturn("USER");
+        when(claims.get(JwtService.CLAIM_SESSION_ID, String.class)).thenReturn(SESSION_ID);
+        when(claims.get(JwtService.CLAIM_TOKEN_VERSION)).thenReturn(TOKEN_VERSION);
+        when(authSessionService.validateAccessToken(USER_ID, SESSION_ID, TOKEN_VERSION, "USER"))
+                .thenThrow(new UnauthorizedException("revoked"));
 
-        doFilterInternalMethod.invoke(jwtAuthFilter, request, response, filterChain);
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/posts/1");
+        request.addHeader("Authorization", "Bearer " + TOKEN);
+
+        MockHttpServletResponse response = invoke(request);
+
+        assertNull(request.getAttribute("X-User-Id"));
+        verify(filterChain).doFilter(request, response);
+    }
+
+    @Test
+    void filter_shouldRejectInvalidTokenOnProtectedPath() throws Exception {
+        when(jwtService.parseClaims("bad-token")).thenThrow(new IllegalArgumentException("bad"));
+        MockHttpServletRequest request = new MockHttpServletRequest("PUT", "/api/posts/1");
+        request.addHeader("Authorization", "Bearer bad-token");
+
+        MockHttpServletResponse response = invoke(request);
 
         assertEquals(401, response.getStatus());
         verifyNoInteractions(filterChain);
-    }
-
-    @Test
-    void isPublicPath_shouldReturnTrueForActuator() throws Exception {
-        Method method = JwtAuthFilter.class.getDeclaredMethod("isPublicPath", String.class, String.class);
-        method.setAccessible(true);
-
-        assertTrue((Boolean) method.invoke(jwtAuthFilter, "/actuator/health", "GET"));
-    }
-
-    @Test
-    void isPublicPath_shouldReturnTrueForWebSocket() throws Exception {
-        Method method = JwtAuthFilter.class.getDeclaredMethod("isPublicPath", String.class, String.class);
-        method.setAccessible(true);
-
-        assertTrue((Boolean) method.invoke(jwtAuthFilter, "/ws/chat", "GET"));
     }
 
     @Test
     void filter_shouldRejectRequestWithoutToken() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest("PUT", "/api/posts/1");
-        MockHttpServletResponse response = new MockHttpServletResponse();
 
-        doFilterInternalMethod.invoke(jwtAuthFilter, request, response, filterChain);
+        MockHttpServletResponse response = invoke(request);
 
         assertEquals(401, response.getStatus());
         verifyNoInteractions(filterChain);
     }
 
     @Test
-    void filter_shouldPassForPublicPaths() throws Exception {
+    void filter_shouldPassPublicPathsWithoutToken() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/posts");
-        MockHttpServletResponse response = new MockHttpServletResponse();
 
-        doFilterInternalMethod.invoke(jwtAuthFilter, request, response, filterChain);
+        MockHttpServletResponse response = invoke(request);
 
         verify(filterChain).doFilter(request, response);
     }
 
     @Test
     void filter_shouldSetAttributesForValidToken() throws Exception {
-        String token = generateToken(42L, "user@test.com", "USER");
+        stubValidToken("USER", EMAIL);
         MockHttpServletRequest request = new MockHttpServletRequest("PUT", "/api/posts/1");
-        request.addHeader("Authorization", "Bearer " + token);
-        MockHttpServletResponse response = new MockHttpServletResponse();
+        request.addHeader("Authorization", "Bearer " + TOKEN);
 
-        doFilterInternalMethod.invoke(jwtAuthFilter, request, response, filterChain);
+        MockHttpServletResponse response = invoke(request);
 
         assertEquals("42", request.getAttribute("X-User-Id"));
         assertEquals("USER", request.getAttribute("X-User-Role"));
-        assertEquals("user@test.com", request.getAttribute("X-User-Email"));
+        assertEquals(EMAIL, request.getAttribute("X-User-Email"));
+        assertEquals(SESSION_ID, request.getAttribute("X-Session-Id"));
+        verify(authSessionService).validateAccessToken(USER_ID, SESSION_ID, TOKEN_VERSION, "USER");
         verify(filterChain).doFilter(request, response);
     }
 
     @Test
     void filter_shouldAllowAuthenticatedImageUpload() throws Exception {
-        String token = generateToken(42L, "user@test.com", "USER");
+        stubValidToken("USER", EMAIL);
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/images/multiple");
-        request.addHeader("Authorization", "Bearer " + token);
-        MockHttpServletResponse response = new MockHttpServletResponse();
+        request.addHeader("Authorization", "Bearer " + TOKEN);
 
-        doFilterInternalMethod.invoke(jwtAuthFilter, request, response, filterChain);
+        MockHttpServletResponse response = invoke(request);
 
         assertEquals("42", request.getAttribute("X-User-Id"));
         assertEquals(200, response.getStatus());
@@ -196,27 +227,65 @@ class JwtAuthFilterTest {
     }
 
     @Test
-    void filter_shouldRejectInternalPathsForNonAdmin() throws Exception {
-        String token = generateToken(1L, "user@test.com", "USER");
+    void filter_shouldUseDatabaseRoleForInternalPaths() throws Exception {
+        stubValidToken("USER", EMAIL);
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/internal/users");
-        request.addHeader("Authorization", "Bearer " + token);
-        MockHttpServletResponse response = new MockHttpServletResponse();
+        request.addHeader("Authorization", "Bearer " + TOKEN);
 
-        doFilterInternalMethod.invoke(jwtAuthFilter, request, response, filterChain);
+        MockHttpServletResponse response = invoke(request);
 
         assertEquals(403, response.getStatus());
         verifyNoInteractions(filterChain);
     }
 
     @Test
-    void filter_shouldAllowInternalPathsForAdmin() throws Exception {
-        String token = generateToken(1L, "admin@test.com", "ADMIN");
+    void filter_shouldAllowAdminOnInternalPaths() throws Exception {
+        stubValidToken("ADMIN", "admin@test.com");
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/internal/users");
-        request.addHeader("Authorization", "Bearer " + token);
-        MockHttpServletResponse response = new MockHttpServletResponse();
+        request.addHeader("Authorization", "Bearer " + TOKEN);
 
-        doFilterInternalMethod.invoke(jwtAuthFilter, request, response, filterChain);
+        MockHttpServletResponse response = invoke(request);
 
         verify(filterChain).doFilter(request, response);
+    }
+
+    @Test
+    void filter_shouldReturn403ForBlockedUser() throws Exception {
+        Claims claims = mock(Claims.class);
+        when(jwtService.parseClaims(TOKEN)).thenReturn(claims);
+        when(claims.get(JwtService.CLAIM_USER_ID)).thenReturn(USER_ID);
+        when(claims.get(JwtService.CLAIM_ROLE, String.class)).thenReturn("USER");
+        when(claims.get(JwtService.CLAIM_SESSION_ID, String.class)).thenReturn(SESSION_ID);
+        when(claims.get(JwtService.CLAIM_TOKEN_VERSION)).thenReturn(TOKEN_VERSION);
+        when(authSessionService.validateAccessToken(USER_ID, SESSION_ID, TOKEN_VERSION, "USER"))
+                .thenThrow(new AccountBlockedException("blocked"));
+
+        MockHttpServletRequest request = new MockHttpServletRequest("PUT", "/api/posts/1");
+        request.addHeader("Authorization", "Bearer " + TOKEN);
+
+        MockHttpServletResponse response = invoke(request);
+
+        assertEquals(403, response.getStatus());
+        verifyNoInteractions(filterChain);
+    }
+
+    @Test
+    void filter_shouldReturn401ForRevokedSessionOnProtectedPath() throws Exception {
+        Claims claims = mock(Claims.class);
+        when(jwtService.parseClaims(TOKEN)).thenReturn(claims);
+        when(claims.get(JwtService.CLAIM_USER_ID)).thenReturn(USER_ID);
+        when(claims.get(JwtService.CLAIM_ROLE, String.class)).thenReturn("USER");
+        when(claims.get(JwtService.CLAIM_SESSION_ID, String.class)).thenReturn(SESSION_ID);
+        when(claims.get(JwtService.CLAIM_TOKEN_VERSION)).thenReturn(TOKEN_VERSION);
+        when(authSessionService.validateAccessToken(USER_ID, SESSION_ID, TOKEN_VERSION, "USER"))
+                .thenThrow(new UnauthorizedException("revoked"));
+
+        MockHttpServletRequest request = new MockHttpServletRequest("PUT", "/api/posts/1");
+        request.addHeader("Authorization", "Bearer " + TOKEN);
+
+        MockHttpServletResponse response = invoke(request);
+
+        assertEquals(401, response.getStatus());
+        verifyNoInteractions(filterChain);
     }
 }

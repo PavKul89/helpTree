@@ -6,6 +6,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
+import java.util.UUID;
+
 @Slf4j
 @Service
 public class AuthorizationService {
@@ -35,6 +37,26 @@ public class AuthorizationService {
     public boolean isAdmin() {
         UserContext user = getCurrentUser();
         return user != null && "ADMIN".equals(user.getRole());
+    }
+
+    /**
+     * Returns the session id attached to the validated access token, or null when
+     * the request is unauthenticated.
+     */
+    public UUID getCurrentSessionId() {
+        ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+        if (attributes == null) {
+            return null;
+        }
+        Object value = attributes.getRequest().getAttribute("X-Session-Id");
+        if (value == null) {
+            return null;
+        }
+        try {
+            return UUID.fromString(value.toString());
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 
     public boolean isOwner(Long resourceOwnerId) {

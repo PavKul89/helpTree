@@ -10,6 +10,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -18,6 +19,7 @@ class JwtServiceTest {
     private JwtService jwtService;
 
     private static final String SECRET = "mySecretKeyForJwtTokenSigning1234567890";
+    private static final String SESSION_ID = UUID.randomUUID().toString();
     private static final long EXPIRATION_MS = 86400000L;
 
     @BeforeEach
@@ -29,7 +31,7 @@ class JwtServiceTest {
 
     @Test
     void generateToken_shouldReturnNonEmptyToken() {
-        String token = jwtService.generateToken(1L, "test@email.com", "USER");
+        String token = jwtService.generateToken(1L, "test@email.com", "USER", SESSION_ID, 0L);
 
         assertNotNull(token);
         assertFalse(token.isEmpty());
@@ -37,7 +39,7 @@ class JwtServiceTest {
 
     @Test
     void generateToken_shouldContainCorrectClaims() {
-        String token = jwtService.generateToken(42L, "pavel@test.com", "ADMIN");
+        String token = jwtService.generateToken(42L, "pavel@test.com", "ADMIN", SESSION_ID, 3L);
 
         SecretKey key = Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8));
         Claims claims = Jwts.parser()
@@ -53,7 +55,7 @@ class JwtServiceTest {
 
     @Test
     void extractEmail_shouldReturnCorrectEmail() {
-        String token = jwtService.generateToken(1L, "user@example.com", "USER");
+        String token = jwtService.generateToken(1L, "user@example.com", "USER", SESSION_ID, 0L);
 
         String email = jwtService.extractEmail(token);
 
@@ -62,14 +64,14 @@ class JwtServiceTest {
 
     @Test
     void isTokenValid_shouldReturnTrueForValidToken() {
-        String token = jwtService.generateToken(1L, "test@email.com", "USER");
+        String token = jwtService.generateToken(1L, "test@email.com", "USER", SESSION_ID, 0L);
 
         assertTrue(jwtService.isTokenValid(token));
     }
 
     @Test
     void isTokenValid_shouldReturnFalseForTamperedToken() {
-        String token = jwtService.generateToken(1L, "test@email.com", "USER");
+        String token = jwtService.generateToken(1L, "test@email.com", "USER", SESSION_ID, 0L);
         String tampered = token.substring(0, token.length() - 5) + "XXXXX";
 
         assertFalse(jwtService.isTokenValid(tampered));
@@ -85,3 +87,4 @@ class JwtServiceTest {
         assertEquals(EXPIRATION_MS, jwtService.getExpirationTime());
     }
 }
+

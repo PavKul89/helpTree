@@ -2,14 +2,16 @@ package org.example.helptreeservice.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.security.Keys;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
+import org.example.helptreeservice.exception.AccountBlockedException;
+import org.example.helptreeservice.exception.UnauthorizedException;
+import org.example.helptreeservice.service.AuthSessionService;
+import org.example.helptreeservice.service.JwtService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -19,44 +21,43 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * Authenticates requests with a signed access token and then revalidates it
+ * against the database: the user must exist, not be deleted or blocked, the
+ * session must still be active and the embedded role/tokenVersion must match the
+ * current user row. Old JWTs therefore stop working after a role change, block,
+ * deletion, password change or explicit session termination.
+ */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class JwtAuthFilter extends OncePerRequestFilter {
 
-    @Value("${app.jwtSecret}")
-    private String jwtSecret;
+    private final JwtService jwtService;
+    private final AuthSessionService authSessionService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    private static final Set<String> PUBLIC_PATHS = Set.of(
+    private static final Set<String> PUBLIC_AUTH_POST_PATHS = Set.of(
             "/api/auth/register",
             "/api/auth/login",
             "/api/auth/refresh",
-            "/api/reviews/help/",
-            "/api/reviews/user/",
-            "/api/ratings/",
-            "/api/posts/",
-            "/api/helps/graph",
-            "/api/helps/stats",
+            "/api/auth/password/reset/request",
+            "/api/auth/password/reset/confirm",
+            "/api/auth/email/verification/confirm",
+            "/api/auth/email/change/confirm"
+    );
+
+    private static final Set<String> PUBLIC_EXACT_PATHS = Set.of(
+            "/actuator/info",
+            "/actuator/prometheus",
+            "/swagger-ui.html",
             "/api/achievements",
-            "/api/activities",
-            "/actuator/health"
-    );
-
-    private static final Set<String> ADMIN_ONLY_PATHS = Set.of(
-            "/api/users"
-    );
-
-    private static final Set<String> USER_PATH_EXCEPTIONS = Set.of(
-            "/api/users/me",
-            "/api/users/telegram",
-            "/api/users/current",
-            "/api/reviews"
+            "/api/activities"
     );
 
     @Override
@@ -65,8 +66,15 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
         String path = request.getRequestURI();
         String method = request.getMethod();
-        boolean publicPath = isPublicPath(path, method);
 
+        // CORS preflight requests never carry credentials and are handled by the
+        // CORS filter before authentication.
+        if ("OPTIONS".equalsIgnoreCase(method)) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        boolean publicPath = isPublicPath(path, method);
         String authHeader = request.getHeader("Authorization");
         boolean hasBearerToken = authHeader != null && authHeader.startsWith("Bearer ");
 
@@ -82,54 +90,52 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         String token = authHeader.substring(7);
 
         try {
-            Claims claims = Jwts.parser()
-                    .verifyWith(Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8)))
-                    .build()
-                    .parseSignedClaims(token)
-                    .getPayload();
-
-            Long userId = claims.get("userId", Long.class);
-            String role = claims.get("role", String.class);
-            String email = claims.getSubject();
-
-            log.debug("JWT parsed: userId={}, role={}, email={}, claims={}", userId, role, email, claims);
+            Claims claims = jwtService.parseClaims(token);
+            Long userId = numberClaim(claims, JwtService.CLAIM_USER_ID);
+            String role = claims.get(JwtService.CLAIM_ROLE, String.class);
+            String sessionId = claims.get(JwtService.CLAIM_SESSION_ID, String.class);
+            Long tokenVersion = numberClaim(claims, JwtService.CLAIM_TOKEN_VERSION);
 
             if (userId == null) {
-                log.warn("JWT userId is null, all claims: {}", claims);
-                if (publicPath) {
-                    filterChain.doFilter(request, response);
-                    return;
-                }
-                sendError(response, HttpStatus.UNAUTHORIZED, "Требуется авторизация");
+                throw new UnauthorizedException("Невалидный токен");
+            }
+
+            AuthSessionService.AuthenticatedUser authenticatedUser =
+                    authSessionService.validateAccessToken(userId, sessionId, tokenVersion, role);
+
+            if (path.startsWith("/internal/") && !"ADMIN".equals(authenticatedUser.role())) {
+                sendError(response, HttpStatus.FORBIDDEN,
+                        "Только администратор имеет доступ к внутренним эндпоинтам");
                 return;
             }
 
-            if (path.startsWith("/internal/") && !"ADMIN".equals(role)) {
-                sendError(response, HttpStatus.FORBIDDEN, "Только администратор имеет доступ к внутренним эндпоинтам");
+            request.setAttribute("X-User-Id", authenticatedUser.userId().toString());
+            request.setAttribute("X-User-Role", authenticatedUser.role());
+            request.setAttribute("X-User-Email", authenticatedUser.email() != null ? authenticatedUser.email() : "");
+            request.setAttribute("X-Session-Id", authenticatedUser.sessionId().toString());
+
+            var authorities = List.of(new SimpleGrantedAuthority("ROLE_" + authenticatedUser.role()));
+            var authentication = new UsernamePasswordAuthenticationToken(
+                    authenticatedUser.userId(), null, authorities);
+            SecurityContextHolder.getContext().setAuthentication(authentication);
+
+        } catch (AccountBlockedException e) {
+            if (publicPath) {
+                log.debug("Blocked user on public path {}: {}", path, e.getMessage());
+                filterChain.doFilter(request, response);
                 return;
             }
-
-            if (isAdminOnlyPath(path, method) && !"ADMIN".equals(role)) {
-                sendError(response, HttpStatus.FORBIDDEN, "Только администратор имеет доступ");
-                return;
-            }
-
-            request.setAttribute("X-User-Id", userId.toString());
-            request.setAttribute("X-User-Role", role != null ? role : "USER");
-            request.setAttribute("X-User-Email", email != null ? email : "");
-
-            var authorities = List.of(new SimpleGrantedAuthority("ROLE_" + (role != null ? role : "USER")));
-            var auth = new UsernamePasswordAuthenticationToken(userId, null, authorities);
-            SecurityContextHolder.getContext().setAuthentication(auth);
-
+            sendError(response, HttpStatus.FORBIDDEN, e.getMessage());
+            return;
         } catch (Exception e) {
-            // Публичные GET-эндпоинты должны оставаться доступными без валидного токена,
-            // но при валидном токене получают контекст владельца/администратора.
+            // Public GET endpoints stay accessible without a valid token. A valid
+            // token would have populated the owner/admin context above.
             if (publicPath) {
                 log.debug("Ignoring invalid token on public path {}: {}", path, e.getMessage());
                 filterChain.doFilter(request, response);
                 return;
             }
+            log.debug("Rejected access token for {}: {}", path, e.getMessage());
             sendError(response, HttpStatus.UNAUTHORIZED, "Невалидный или истёкший токен");
             return;
         }
@@ -137,90 +143,61 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         filterChain.doFilter(request, response);
     }
 
+    private Long numberClaim(Claims claims, String name) {
+        Object value = claims.get(name);
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        if (value instanceof String text && !text.isBlank()) {
+            try {
+                return Long.parseLong(text);
+            } catch (NumberFormatException e) {
+                return null;
+            }
+        }
+        return null;
+    }
+
     private boolean isPublicPath(String path, String method) {
-        for (String publicPath : PUBLIC_PATHS) {
-            if (path.equals(publicPath)) {
+        if (path.startsWith("/actuator/health")
+                && ("GET".equals(method) || "HEAD".equals(method))) {
+            return true;
+        }
+        if (PUBLIC_EXACT_PATHS.contains(path)) {
+            return true;
+        }
+        if (PUBLIC_AUTH_POST_PATHS.contains(path) && "POST".equals(method)) {
+            return true;
+        }
+        if (path.startsWith("/swagger-ui/") || path.startsWith("/v3/api-docs/")) {
+            return true;
+        }
+        if (path.startsWith("/ws/") || path.startsWith("/api/images/")) {
+            return true;
+        }
+        if ("GET".equals(method)) {
+            if (path.startsWith("/api/posts/")) {
+                return true;
+            }
+            if (path.equals("/api/posts")) {
+                return true;
+            }
+            if (path.equals("/api/stats")
+                    || path.equals("/api/users/public")
+                    || path.equals("/api/helps/graph")
+                    || path.equals("/api/helps/stats")) {
+                return true;
+            }
+            if (path.matches("/api/users/\\d+/public")) {
+                return true;
+            }
+            if (path.startsWith("/api/reviews/") || path.startsWith("/api/ratings/")) {
                 return true;
             }
         }
-        if (path.startsWith("/api/auth/")) {
-            return true;
-        }
-        if (path.startsWith("/actuator/")) {
-            return true;
-        }
-        if (path.startsWith("/api/achievements")) {
-            return true;
-        }
-        if (path.startsWith("/api/activities")) {
-            return true;
-        }
-        if (path.startsWith("/ws/")) {
-            return true;
-        }
-        if ("GET".equals(method) && path.matches("/api/posts(/\\d+)?")) {
-            return true;
-        }
-        if ("GET".equals(method) && path.equals("/api/posts/map")) {
-            return true;
-        }
-        if ("GET".equals(method) && path.matches("/api/posts/user/\\d+")) {
-            return true;
-        }
-        if ("GET".equals(method) && path.matches("/api/posts/\\d+/comments")) {
-            return true;
-        }
-        if ("POST".equals(method) && path.equals("/api/posts/by-ids")) {
-            return true;
-        }
-        if ("GET".equals(method) && path.equals("/api/stats")) {
-            return true;
-        }
-        if ("GET".equals(method) && path.equals("/api/users/public")) {
-            return true;
-        }
-        if ("GET".equals(method) && path.matches("/api/users/\\d+/public")) {
-            return true;
-        }
-        if ("GET".equals(method) && path.matches("/api/reviews/help/\\d+")) {
-            return true;
-        }
-        if ("GET".equals(method) && path.matches("/api/reviews/user/\\d+")) {
-            return true;
-        }
-        if ("GET".equals(method) && path.matches("/api/ratings/.*")) {
-            return true;
-        }
-        return false;
-    }
-
-    private boolean isAdminOnlyPath(String path, String method) {
-        if (!"POST".equals(method) && !"DELETE".equals(method)) {
-            return false;
-        }
-
-        if ("/api/users".equals(path)) {
-            return true;
-        }
-
-        if (path.startsWith("/api/achievements")) {
-            return false;
-        }
-
-        for (String exception : USER_PATH_EXCEPTIONS) {
-            if (path.startsWith(exception)) {
-                return false;
-            }
-        }
-
-        if (path.matches("/api/users/\\d+")) {
-            return false;
-        }
-
-        if (path.matches("/api/users/\\d+/.*")) {
-            return false;
-        }
-
         return false;
     }
 

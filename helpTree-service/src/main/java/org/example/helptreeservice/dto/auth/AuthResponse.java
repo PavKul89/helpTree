@@ -16,6 +16,8 @@ public class AuthResponse {
     private String role;
     private Long expiresIn;
     private LocalDateTime previousLastLogin;
+    private String sessionId;
+    private Boolean emailVerified;
 
     public AuthResponse(String accessToken, String refreshToken, Long userId, String email, String role, Long expiresIn) {
         this.accessToken = accessToken;

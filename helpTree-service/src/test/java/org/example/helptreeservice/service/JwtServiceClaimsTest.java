@@ -9,6 +9,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -16,6 +17,7 @@ class JwtServiceClaimsTest {
 
     private JwtService jwtService;
     private static final String SECRET = "testSecretKeyForJwtClaimsTesting123456";
+    private static final String SESSION_ID = UUID.randomUUID().toString();
 
     @BeforeEach
     void setUp() {
@@ -26,7 +28,7 @@ class JwtServiceClaimsTest {
 
     @Test
     void generatedToken_shouldBeParseableAndContainUserId() {
-        String token = jwtService.generateToken(7L, "pavel@test.com", "USER");
+        String token = jwtService.generateToken(7L, "pavel@test.com", "USER", SESSION_ID, 0L);
 
         SecretKey key = Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8));
         var claims = Jwts.parser()
@@ -43,7 +45,7 @@ class JwtServiceClaimsTest {
 
     @Test
     void generateToken_withZeroUserId() {
-        String token = jwtService.generateToken(0L, "zero@test.com", "USER");
+        String token = jwtService.generateToken(0L, "zero@test.com", "USER", SESSION_ID, 0L);
 
         SecretKey key = Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8));
         var claims = Jwts.parser()
@@ -57,7 +59,7 @@ class JwtServiceClaimsTest {
 
     @Test
     void generateToken_withLargeUserId() {
-        String token = jwtService.generateToken(999999L, "big@test.com", "ADMIN");
+        String token = jwtService.generateToken(999999L, "big@test.com", "ADMIN", SESSION_ID, 2L);
 
         SecretKey key = Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8));
         var claims = Jwts.parser()
@@ -70,3 +72,4 @@ class JwtServiceClaimsTest {
         assertEquals("ADMIN", claims.get("role"));
     }
 }
+

@@ -8,6 +8,7 @@ import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.enums.Role;
 import org.example.helptreeservice.enums.UserStatus;
 import org.example.helptreeservice.exception.ConflictException;
+import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.NotFoundException;
 import org.example.helptreeservice.mapper.UserMapper;
 import org.example.helptreeservice.repository.PostRepository;
@@ -38,6 +39,7 @@ public class UserService {
     private final ImageService imageService;
     private final AchievementService achievementService;
     private final GeocodingService geocodingService;
+    private final AuthSessionService authSessionService;
 
     public UserDto createUser(CreateUserRequest request) {
         return createUserWithRole(request, Role.USER);
@@ -46,14 +48,15 @@ public class UserService {
     public UserDto createUserWithRole(CreateUserRequest request, Role role) {
         log.info("Создание пользователя {} с ролью {}", request.getEmail(), role);
 
-        if (userRepository.existsByEmail(request.getEmail())) {
-            log.warn("Попытка создания пользователя с уже существующим email: {}", request.getEmail());
+        String email = request.getEmail().trim().toLowerCase(java.util.Locale.ROOT);
+        if (userRepository.existsByEmailIgnoreCase(email)) {
+            log.warn("Попытка создания пользователя с уже существующим email: {}", email);
             throw new ConflictException("Пользователь с таким email уже существует");
         }
 
         User user = new User();
         user.setName(request.getName());
-        user.setEmail(request.getEmail());
+        user.setEmail(email);
         passwordService.validate(request.getPassword());
         user.setPassword(passwordService.encode(request.getPassword()));
         user.setPhone(request.getPhone());
@@ -70,6 +73,7 @@ public class UserService {
         user.setRating(3.0);
         user.setStatus(UserStatus.NEWBIE);
         user.setRole(role);
+        user.setEmailVerified(role == Role.ADMIN);
         user.setCreatedAt(LocalDateTime.now());
         user.setUpdatedAt(LocalDateTime.now());
 
@@ -170,16 +174,12 @@ public class UserService {
                 log.debug("Изменено имя пользователя на: {}", request.getName());
             }
 
-            if (request.getEmail() != null) {
-                if (!request.getEmail().equals(user.getEmail())) {
-                    if (userRepository.existsByEmail(request.getEmail())) {
-                        log.warn("Попытка обновления на уже существующий email: {}", request.getEmail());
-                        throw new ConflictException("Email уже используется");
-                    }
-                    user.setEmail(request.getEmail());
-                    changed = true;
-                    log.debug("Изменен email пользователя на: {}", request.getEmail());
-                }
+            if (request.getEmail() != null && !request.getEmail().equalsIgnoreCase(user.getEmail())) {
+                // Changing a login identity requires proof of the current password and
+                // control of the new mailbox, so it is only possible via the dedicated
+                // email-change flow.
+                throw new BadRequestException(
+                        "Email нельзя изменить через профиль. Используйте подтверждение нового адреса.");
             }
 
             if (request.getPhone() != null && !request.getPhone().equals(user.getPhone())) {
@@ -243,18 +243,36 @@ public class UserService {
     public void deleteUser(Long id) {
         log.info("Запрос на мягкое удаление пользователя с ID: {}", id);
         try {
-            User user = userRepository.findById(id)
+            User snapshot = userRepository.findById(id)
                     .orElseThrow(() -> new NotFoundException("Пользователь не найден с id: " + id));
 
-            if (user.getDeleted()) {
+            if (Boolean.TRUE.equals(snapshot.getDeleted())) {
                 log.warn("Попытка удалить уже удаленного пользователя с ID: {}", id);
                 throw new ConflictException("Пользователь уже был удалён");
+            }
+
+            User user;
+            if (snapshot.getRole() == Role.ADMIN) {
+                List<User> admins = userRepository.findActiveByRoleForUpdate(Role.ADMIN);
+                if (admins.size() <= 1) {
+                    throw new ConflictException("Нельзя удалить последнего администратора");
+                }
+                user = admins.stream()
+                        .filter(admin -> admin.getId().equals(id))
+                        .findFirst()
+                        .orElseThrow(() -> new ConflictException("Нельзя удалить последнего администратора"));
+            } else {
+                user = userRepository.findByIdForUpdate(id)
+                        .orElseThrow(() -> new NotFoundException("Пользователь не найден с id: " + id));
             }
 
             user.setDeleted(true);
             user.setDeletedAt(LocalDateTime.now());
             user.setUpdatedAt(LocalDateTime.now());
             userRepository.save(user);
+
+            // A deleted account must lose all active access and refresh tokens now.
+            authSessionService.revokeAllSessionsForUser(id, "ACCOUNT_DELETED");
 
             log.info("Пользователь с ID: {} успешно помечен как удаленный", id);
             log.debug("Детали удаленного пользователя: email={}, время удаления={}",
@@ -270,6 +288,50 @@ public class UserService {
             log.error("Ошибка при удалении пользователя с ID: {}", id, e);
             throw e;
         }
+    }
+
+    /**
+     * Changes a user's role. The last active administrator cannot be demoted, and
+     * every existing session is revoked so an old JWT cannot keep the old role.
+     */
+    @Transactional
+    public UserDto changeRole(Long id, Role newRole) {
+        if (newRole == null) {
+            throw new BadRequestException("Роль обязательна");
+        }
+
+        User snapshot = userRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Пользователь не найден с id: " + id));
+        if (Boolean.TRUE.equals(snapshot.getDeleted())) {
+            throw new NotFoundException("Пользователь не найден с id: " + id);
+        }
+
+        if (snapshot.getRole() == newRole) {
+            return userMapper.toDto(snapshot);
+        }
+
+        User user;
+        if (snapshot.getRole() == Role.ADMIN) {
+            List<User> admins = userRepository.findActiveByRoleForUpdate(Role.ADMIN);
+            if (admins.size() <= 1) {
+                throw new ConflictException("Нельзя понизить последнего администратора");
+            }
+            user = admins.stream()
+                    .filter(admin -> admin.getId().equals(id))
+                    .findFirst()
+                    .orElseThrow(() -> new ConflictException("Нельзя понизить последнего администратора"));
+        } else {
+            user = userRepository.findByIdForUpdate(id)
+                    .orElseThrow(() -> new NotFoundException("Пользователь не найден с id: " + id));
+        }
+
+        user.setRole(newRole);
+        user.setUpdatedAt(LocalDateTime.now());
+        userRepository.save(user);
+
+        authSessionService.revokeAllSessionsForUser(id, "ROLE_CHANGED");
+        log.info("Роль пользователя {} изменена на {}", id, newRole);
+        return userMapper.toDto(user);
     }
 
     public void restoreUser(Long id) {
@@ -530,6 +592,8 @@ public class UserService {
                 user.setBlockedAt(LocalDateTime.now());
                 user.setBlockedUntil(LocalDateTime.now().plusDays(7));
                 userRepository.save(user);
+                // Debt blocking must immediately invalidate already issued tokens.
+                authSessionService.revokeAllSessionsForUser(user.getId(), "ACCOUNT_BLOCKED");
                 log.info("Пользователь {} заблокирован за долг на 7 дней (debtCount: {}, blockedUntil: {})", 
                     user.getId(), user.getDebtCount(), user.getBlockedUntil());
             }
