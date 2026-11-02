@@ -1,44 +1,42 @@
 /**
- * Forest Premium palette.
- * Shared by the main page, navigation and footer so the whole shell
- * looks like one composition.
+ * CSS-variable-backed Forest Premium tokens for the shared application shell.
  */
 export const forest = {
   colors: {
-    bg: '#071B13',
-    bgSecondary: '#0B2419',
-    card: '#102D20',
-    surface: '#F5F4EA',
-    surfaceAlt: '#E9EFE2',
+    bg: 'var(--forest-bg)',
+    bgSecondary: 'var(--forest-bg-secondary)',
+    card: 'var(--forest-surface)',
+    surface: 'var(--forest-light-surface)',
+    surfaceAlt: 'var(--forest-light-surface-secondary)',
 
-    lime: '#C8F56A',
-    green: '#8CCB55',
+    lime: 'var(--forest-lime)',
+    green: 'var(--forest-green)',
 
-    text: '#F5F8F1',
-    textSecondary: '#B7C5B8',
-    textMuted: '#829688',
+    text: 'var(--forest-text)',
+    textSecondary: 'var(--forest-text-muted)',
+    textMuted: 'var(--forest-text-subtle)',
 
-    border: 'rgba(180, 225, 155, 0.20)',
-    borderStrong: 'rgba(200, 245, 106, 0.45)',
+    border: 'var(--forest-border)',
+    borderStrong: 'var(--forest-border-strong)',
 
-    error: '#FF7777',
+    error: 'var(--forest-error)',
 
-    textOnLight: '#0B2419',
+    textOnLight: 'var(--forest-bg-secondary)',
     textOnLightSecondary: '#4E6458',
     textOnLightMuted: '#6B7F70',
   },
   fonts: {
-    base: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+    base: 'var(--forest-font)',
   },
   radius: {
-    sm: '10px',
-    md: '14px',
-    lg: '20px',
-    xl: '28px',
+    sm: 'var(--forest-radius-sm)',
+    md: 'var(--forest-radius-md)',
+    lg: 'var(--forest-radius-lg)',
+    xl: 'var(--forest-radius-xl)',
   },
   shadows: {
-    card: '0 18px 40px rgba(0, 0, 0, 0.22)',
-    glow: '0 0 0 1px rgba(200, 245, 106, 0.18), 0 12px 32px rgba(0, 0, 0, 0.28)',
+    card: 'var(--forest-shadow-card)',
+    glow: 'var(--forest-shadow-glow)',
   },
 } as const;
 

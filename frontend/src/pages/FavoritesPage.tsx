@@ -4,7 +4,7 @@ import { postsApi } from '../api/postsApi';
 import { authApi } from '../api/authApi';
 import type { Post } from '../types';
 import { Card, Button, Spinner, EmptyState, Avatar, Modal } from '../components';
-import { StatusBadge, getStatusColor, getStatusLabel } from '../components/StatusBadge';
+import { getStatusColor, getStatusLabel } from '../components/StatusBadge';
 import { theme } from '../theme';
 import { getRelativeTime } from '../utils/dateUtils';
 
@@ -89,8 +89,8 @@ export const FavoritesPage = () => {
 
       <div style={styles.grid}>
         {posts.map((post) => (
-          <Link key={post.id} to={`/posts/${post.id}`} style={styles.cardLink}>
-            <Card hoverable style={styles.postCard}>
+          <article key={post.id} style={styles.cardLink}>
+            <Card style={styles.postCard}>
               <div style={styles.postHeader}>
                 <div style={styles.postHeaderLeft}>
                 <span style={{
@@ -100,20 +100,19 @@ export const FavoritesPage = () => {
                 <span style={styles.statusText}>{getStatusLabel(post.status)}</span>
                 <span style={styles.category}>{post.category}</span>
               </div>
-              <span 
+              <button
+                type="button"
                 onClick={(e) => toggleFavorite(post.id, e)}
-                style={{
-                  ...styles.favoriteBtn,
-                  color: '#FFD700',
-                  textShadow: '0 0 8px rgba(255, 215, 0, 0.8)',
-                  cursor: 'pointer',
-                }}
+                style={styles.favoriteBtn}
                 title="Убрать из избранного"
+                aria-label={`Убрать заявку «${post.title}» из избранного`}
               >
                 ★
-              </span>
+              </button>
               </div>
-              <h3 style={styles.postTitle}>{post.title}</h3>
+              <Link to={`/posts/${post.id}`} style={styles.postTitleLink}>
+                <h3 style={styles.postTitle}>{post.title}</h3>
+              </Link>
               <p style={styles.postDescription}>
                 {post.description.length > 100 
                   ? post.description.substring(0, 100) + '...' 
@@ -128,7 +127,7 @@ export const FavoritesPage = () => {
                 </span>
               </div>
             </Card>
-          </Link>
+          </article>
         ))}
       </div>
 
@@ -196,11 +195,12 @@ const styles: Record<string, React.CSSProperties> = {
   },
   grid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 320px), 1fr))',
     gap: '20px',
   },
   cardLink: {
-    textDecoration: 'none',
+    minWidth: 0,
+    height: '100%',
   },
   postCard: {
     height: '100%',
@@ -232,17 +232,27 @@ const styles: Record<string, React.CSSProperties> = {
   category: {
     color: theme.colors.accent,
     fontSize: '13px',
-    background: 'rgba(34, 211, 238, 0.15)',
+    background: 'rgba(200, 245, 106, 0.1)',
     padding: '4px 10px',
     borderRadius: '4px',
   },
   favoriteBtn: {
-    background: 'transparent',
-    border: 'none',
+    display: 'grid',
+    width: 40,
+    height: 40,
+    flex: '0 0 40px',
+    placeItems: 'center',
+    background: 'rgba(200, 245, 106, 0.08)',
+    border: '1px solid var(--forest-border)',
+    borderRadius: 'var(--forest-radius-sm)',
+    color: 'var(--forest-lime)',
     fontSize: '20px',
-    cursor: 'pointer',
-    padding: '4px',
-    transition: 'transform 0.2s',
+    padding: 0,
+    transition: 'transform 0.18s ease, background 0.18s ease',
+  },
+  postTitleLink: {
+    color: 'inherit',
+    textDecoration: 'none',
   },
   postTitle: {
     color: theme.colors.text,

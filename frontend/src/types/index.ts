@@ -198,6 +198,7 @@ export interface GraphEdge {
   fromUserName: string;
   toUserId: number;
   toUserName: string;
+  postId?: number;
   postTitle: string;
   status: string;
   confirmedAt: string;

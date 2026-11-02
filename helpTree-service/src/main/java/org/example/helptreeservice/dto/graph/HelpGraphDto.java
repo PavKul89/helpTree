@@ -41,6 +41,7 @@ public class HelpGraphDto {
         private String fromUserName;
         private Long toUserId;
         private String toUserName;
+        private Long postId;
         private String postTitle;
         private String status;
         private LocalDateTime confirmedAt;

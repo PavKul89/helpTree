@@ -25,6 +25,7 @@ import {
   Menu,
   Settings2,
   ShieldCheck,
+  Search,
   X,
 } from 'lucide-react';
 import type { Chat } from '../types';
@@ -51,7 +52,13 @@ export const Navbar: React.FC = () => {
   const [helpCoins, setHelpCoins] = useState<number>(0);
   const [isVip, setIsVip] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [searchInput, setSearchInput] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    setSearchInput(location.pathname === '/posts' ? params.get('q') ?? '' : '');
+  }, [location.pathname, location.search]);
 
   const handleChatUpdated = useCallback((updatedChat: Chat) => {
     setChats((prev) => {
@@ -198,6 +205,22 @@ export const Navbar: React.FC = () => {
     setMobileOpen(false);
   };
 
+  const submitSearch = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const params = location.pathname === '/posts'
+      ? new URLSearchParams(location.search)
+      : new URLSearchParams();
+    const query = searchInput.trim();
+
+    if (query) params.set('q', query);
+    else params.delete('q');
+    params.delete('page');
+
+    const search = params.toString();
+    navigate(search ? `/posts?${search}` : '/posts');
+    setMobileOpen(false);
+  };
+
   const isActive = (path: string): boolean => {
     if (path === '/') return location.pathname === '/';
     return location.pathname === path || location.pathname.startsWith(`${path}/`);
@@ -215,6 +238,9 @@ export const Navbar: React.FC = () => {
       </Link>
       <Link to="/achievements" className="navbar-dropdown-item" onClick={closeDropdown}>
         <Trophy size={16} aria-hidden="true" /> Достижения
+      </Link>
+      <Link to="/safety" className="navbar-dropdown-item" onClick={closeDropdown}>
+        <ShieldCheck size={16} aria-hidden="true" /> Безопасность
       </Link>
       {user && (
         <Link to="/activity" className="navbar-dropdown-item" onClick={closeDropdown}>
@@ -243,6 +269,20 @@ export const Navbar: React.FC = () => {
           <Link to="/posts" className={`navbar-link ${isActive('/posts') ? 'navbar-link--active' : ''}`}>
             Заявки
           </Link>
+          <form className="navbar-search" role="search" onSubmit={submitSearch}>
+            <label className="navbar-search-label" htmlFor="navbar-search-input">Поиск заявок</label>
+            <input
+              id="navbar-search-input"
+              type="search"
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+              placeholder="Поиск заявок"
+              autoComplete="off"
+            />
+            <button type="submit" aria-label="Найти заявки">
+              <Search size={17} aria-hidden="true" />
+            </button>
+          </form>
 
           <div className="navbar-dropdown-wrapper">
             <button
@@ -373,6 +413,20 @@ export const Navbar: React.FC = () => {
           <Link to="/posts" className={`navbar-mobile-link ${isActive('/posts') ? 'navbar-mobile-link--active' : ''}`} onClick={closeDropdown}>
             Заявки
           </Link>
+          <form className="navbar-search navbar-search--mobile" role="search" onSubmit={submitSearch}>
+            <label className="navbar-search-label" htmlFor="navbar-mobile-search-input">Поиск заявок</label>
+            <input
+              id="navbar-mobile-search-input"
+              type="search"
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+              placeholder="Поиск заявок"
+              autoComplete="off"
+            />
+            <button type="submit" aria-label="Найти заявки">
+              <Search size={17} aria-hidden="true" />
+            </button>
+          </form>
           <Link to="/map" className="navbar-mobile-link" onClick={closeDropdown}>
             <Map size={16} aria-hidden="true" /> Карта
           </Link>
@@ -381,6 +435,9 @@ export const Navbar: React.FC = () => {
           </Link>
           <Link to="/achievements" className="navbar-mobile-link" onClick={closeDropdown}>
             <Trophy size={16} aria-hidden="true" /> Достижения
+          </Link>
+          <Link to="/safety" className={`navbar-mobile-link ${isActive('/safety') ? 'navbar-mobile-link--active' : ''}`} onClick={closeDropdown}>
+            <ShieldCheck size={16} aria-hidden="true" /> Безопасность
           </Link>
           {user && (
             <>

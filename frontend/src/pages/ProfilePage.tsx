@@ -728,6 +728,67 @@ export const ProfilePage = () => {
         </div>
       </div>
 
+      {isOwnProfile && (
+        <section className="profile-section profile-analytics" aria-labelledby="profile-analytics-title">
+          <div className="profile-section-heading">
+            <div>
+              <span className="profile-eyebrow">Ваш вклад</span>
+              <h2 id="profile-analytics-title">Моя статистика</h2>
+              <p className="profile-analytics-description">
+                Данные за всё время из профиля и загруженных разделов.
+              </p>
+            </div>
+            <Link to="/activity" className="profile-analytics-link">
+              История активности <ArrowUpRight size={15} aria-hidden="true" />
+            </Link>
+          </div>
+          <div className="profile-analytics-grid">
+            <article className="profile-analytics-metric">
+              <HandHeart size={18} aria-hidden="true" />
+              <span>Помощь оказана</span>
+              <strong>{helpedCount === null ? '—' : helpedCount.toLocaleString('ru-RU')}</strong>
+              <small>Показатель из профиля</small>
+            </article>
+            <article className="profile-analytics-metric">
+              <FileText size={18} aria-hidden="true" />
+              <span>Создано заявок</span>
+              <strong>
+                {sections.posts.loading
+                  ? '…'
+                  : sections.posts.error
+                    ? '—'
+                    : totalPosts.toLocaleString('ru-RU')}
+              </strong>
+              <small>Всего по данным каталога</small>
+            </article>
+            <article className="profile-analytics-metric">
+              <Trophy size={18} aria-hidden="true" />
+              <span>Получено достижений</span>
+              <strong>
+                {sections.achievements.loading
+                  ? '…'
+                  : sections.achievements.error
+                    ? '—'
+                    : achievements.length.toLocaleString('ru-RU')}
+              </strong>
+              <small>Только уже полученные</small>
+            </article>
+            <article className="profile-analytics-metric">
+              <MessageCircle size={18} aria-hidden="true" />
+              <span>Получено отзывов</span>
+              <strong>
+                {sections.reviews.loading
+                  ? '…'
+                  : sections.reviews.error
+                    ? '—'
+                    : reviews.length.toLocaleString('ru-RU')}
+              </strong>
+              <small>По данным раздела отзывов</small>
+            </article>
+          </div>
+        </section>
+      )}
+
       <section className="profile-section profile-reviews" aria-labelledby="profile-reviews-title">
         <div className="profile-section-heading">
           <div>

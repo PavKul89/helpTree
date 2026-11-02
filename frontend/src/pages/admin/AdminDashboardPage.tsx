@@ -29,11 +29,12 @@ import {
 } from './adminUtils';
 
 interface DashboardData {
-  stats: AdminStats;
-  helpStats: AdminHelpStats;
-  statusCounts: Record<AdminPostStatus, number>;
-  users: AdminUser[];
+  stats: AdminStats | null;
+  helpStats: AdminHelpStats | null;
+  statusCounts: Record<AdminPostStatus, number> | null;
+  users: AdminUser[] | null;
   loadedAt: Date;
+  failures: string[];
 }
 
 export const AdminDashboardPage: React.FC = () => {
@@ -49,17 +50,39 @@ export const AdminDashboardPage: React.FC = () => {
       setLoading(true);
       setError(null);
       try {
-        const [stats, helpStats, statusCounts, users] = await Promise.all([
+        const results = await Promise.allSettled([
           adminApi.getStats(),
           adminApi.getHelpStats(),
           adminApi.getPostStatusCounts(),
           adminApi.getUsers(),
         ]);
+        if (cancelled) return;
+
+        const [statsResult, helpStatsResult, statusCountsResult, usersResult] = results;
+        const successful = results.filter((result) => result.status === 'fulfilled').length;
+        if (successful === 0) {
+          const firstFailure = results.find(
+            (result): result is PromiseRejectedResult => result.status === 'rejected'
+          );
+          throw firstFailure?.reason ?? new Error('Показатели недоступны.');
+        }
+
+        const failures = results
+          .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+          .map((result) => getApiErrorMessage(result.reason, 'Один из источников статистики недоступен.'));
         if (!cancelled) {
-          setData({ stats, helpStats, statusCounts, users, loadedAt: new Date() });
+          setData({
+            stats: statsResult.status === 'fulfilled' ? statsResult.value : null,
+            helpStats: helpStatsResult.status === 'fulfilled' ? helpStatsResult.value : null,
+            statusCounts: statusCountsResult.status === 'fulfilled' ? statusCountsResult.value : null,
+            users: usersResult.status === 'fulfilled' ? usersResult.value : null,
+            loadedAt: new Date(),
+            failures,
+          });
         }
       } catch (loadError) {
         if (!cancelled) {
+          setData(null);
           setError(getApiErrorMessage(loadError, 'Не удалось получить показатели сервиса.'));
         }
       } finally {
@@ -76,10 +99,12 @@ export const AdminDashboardPage: React.FC = () => {
   const derived = useMemo(() => {
     if (!data) return null;
 
-    const monthEntries = Object.entries(data.helpStats.byMonth);
+    const monthEntries = data.helpStats ? Object.entries(data.helpStats.byMonth) : [];
     const maxMonth = Math.max(0, ...monthEntries.map(([, value]) => value));
 
-    const categoryEntries = Object.entries(data.helpStats.byCategory).sort((a, b) => b[1] - a[1]);
+    const categoryEntries = data.helpStats
+      ? Object.entries(data.helpStats.byCategory).sort((a, b) => b[1] - a[1])
+      : [];
     const maxCategory = Math.max(0, ...categoryEntries.map(([, value]) => value));
 
     const statusCounts: Record<string, number> = {
@@ -91,7 +116,7 @@ export const AdminDashboardPage: React.FC = () => {
     let admins = 0;
     let blocked = 0;
 
-    data.users.forEach((user) => {
+    data.users?.forEach((user) => {
       statusCounts[user.status] = (statusCounts[user.status] ?? 0) + 1;
       if (user.role === 'ADMIN') admins += 1;
       if (isUserBlocked(user)) blocked += 1;
@@ -105,7 +130,7 @@ export const AdminDashboardPage: React.FC = () => {
       statusCounts,
       admins,
       blocked,
-      totalUsers: data.users.length,
+      totalUsers: data.users?.length ?? null,
     };
   }, [data]);
 
@@ -134,30 +159,32 @@ export const AdminDashboardPage: React.FC = () => {
 
   const kpis = [
     {
-      label: 'Активные пользователи',
-      value: formatNumber(data.stats.totalUsers),
-      hint: 'GET /api/stats · totalUsers',
+      label: 'Пользователи',
+      value: formatNumber(data.stats?.totalUsers),
+      hint: 'Неудалённые профили · GET /api/stats',
       icon: Users,
     },
     {
-      label: 'Подтверждённые помощи',
-      value: formatNumber(data.stats.totalHelps),
-      hint: 'GET /api/stats · totalHelps',
+      label: 'Записи о помощи',
+      value: formatNumber(data.stats?.totalHelps),
+      hint: 'Все неудалённые записи, независимо от статуса',
       icon: Handshake,
     },
     {
       label: 'Открытые заявки',
-      value: formatNumber(data.stats.activePosts),
+      value: formatNumber(data.stats?.activePosts),
       hint: 'GET /api/stats · activePosts',
       icon: ClipboardList,
     },
     {
       label: 'Администраторы',
-      value: formatNumber(derived.admins),
+      value: data.users ? formatNumber(derived.admins) : '—',
       hint: 'Роль ADMIN в GET /api/users',
       icon: ShieldCheck,
     },
   ];
+  const postStatusCounts = data.statusCounts;
+  const totalListedUsers = derived.totalUsers ?? 0;
 
   return (
     <div className="admin-stack">
@@ -173,6 +200,11 @@ export const AdminDashboardPage: React.FC = () => {
           {data.loadedAt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
         </span>
       </div>
+      {data.failures.length > 0 && (
+        <p className="admin-inline-alert" role="status">
+          Часть статистики временно недоступна; остальные показатели загружены.
+        </p>
+      )}
 
       <section className="admin-section" aria-labelledby="admin-kpi-title">
         <div className="admin-section-head">
@@ -213,7 +245,7 @@ export const AdminDashboardPage: React.FC = () => {
         <div className="admin-section-head">
           <div>
             <span className="admin-eyebrow">Заявки</span>
-            <h2 id="admin-post-status-title">Публикации по статусам</h2>
+            <h2 id="admin-post-status-title">Заявки по статусам</h2>
             <p className="admin-section-description">
               Количество получено через <code>totalElements</code> списка заявок; удалённые
               публикации backend в список не включает.
@@ -222,17 +254,17 @@ export const AdminDashboardPage: React.FC = () => {
         </div>
 
         <div className="admin-status-grid">
-          {POST_STATUS_ORDER.map((status) => (
+          {postStatusCounts ? POST_STATUS_ORDER.map((status) => (
             <Link
               key={status}
               to={`/admin/requests?status=${status}`}
               className={`admin-status-card admin-status-card--${status.toLowerCase()}`}
             >
               <span>{POST_STATUS_LABELS[status]}</span>
-              <strong>{formatNumber(data.statusCounts[status])}</strong>
+              <strong>{formatNumber(postStatusCounts[status])}</strong>
               <small>Открыть список →</small>
             </Link>
-          ))}
+          )) : <p className="admin-muted" role="status">Распределение статусов недоступно.</p>}
         </div>
       </section>
 
@@ -248,7 +280,9 @@ export const AdminDashboardPage: React.FC = () => {
             </div>
           </div>
 
-          {derived.monthEntries.length === 0 ? (
+          {!data.helpStats ? (
+            <p className="admin-muted" role="status">Сводка по помощи недоступна.</p>
+          ) : derived.monthEntries.length === 0 ? (
             <p className="admin-muted">Сервер не вернул временной ряд.</p>
           ) : (
             <ul className="admin-bars" aria-label="Подтверждённые помощи по месяцам">
@@ -277,7 +311,9 @@ export const AdminDashboardPage: React.FC = () => {
             </div>
           </div>
 
-          {derived.categoryEntries.length === 0 ? (
+          {!data.helpStats ? (
+            <p className="admin-muted" role="status">Сводка по категориям недоступна.</p>
+          ) : derived.categoryEntries.length === 0 ? (
             <p className="admin-muted">Подтверждённых помощей по категориям пока нет.</p>
           ) : (
             <ul className="admin-bars admin-bars--category" aria-label="Помощи по категориям">
@@ -312,7 +348,9 @@ export const AdminDashboardPage: React.FC = () => {
             <Trophy size={20} className="admin-section-mark" aria-hidden="true" />
           </div>
 
-          {data.helpStats.topHelpers.length === 0 ? (
+          {!data.helpStats ? (
+            <p className="admin-muted" role="status">Сводка по помощникам недоступна.</p>
+          ) : data.helpStats.topHelpers.length === 0 ? (
             <p className="admin-muted">Пока нет подтверждённых помощей.</p>
           ) : (
             <ol className="admin-top-list">
@@ -344,11 +382,11 @@ export const AdminDashboardPage: React.FC = () => {
             </div>
           </div>
 
-          <ul className="admin-distribution">
+          {data.users ? <ul className="admin-distribution">
             {Object.entries(USER_STATUS_LABELS).map(([status, label]) => {
               const count = derived.statusCounts[status] ?? 0;
               const percent =
-                derived.totalUsers > 0 ? Math.round((count / derived.totalUsers) * 100) : 0;
+                totalListedUsers > 0 ? Math.round((count / totalListedUsers) * 100) : 0;
               return (
                 <li key={status}>
                   <span className="admin-distribution-label">{label}</span>
@@ -364,18 +402,18 @@ export const AdminDashboardPage: React.FC = () => {
                 </li>
               );
             })}
-          </ul>
+          </ul> : <p className="admin-muted" role="status">Распределение пользователей недоступно.</p>}
 
-          <div className="admin-mini-stats">
+          {data.users && <div className="admin-mini-stats">
             <span>
               <Users size={15} aria-hidden="true" />
-              Всего активных: <strong>{formatNumber(derived.totalUsers)}</strong>
+              Всего в списке: <strong>{formatNumber(derived.totalUsers)}</strong>
             </span>
             <span>
               <Ban size={15} aria-hidden="true" />
               Заблокированы: <strong>{formatNumber(derived.blocked)}</strong>
             </span>
-          </div>
+          </div>}
         </section>
       </div>
     </div>

@@ -1,1001 +1,555 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { TreeDeciduous, BarChart3 } from 'lucide-react';
-import { helpApi, HelpStats } from '../api/helpApi';
+import {
+  BarChart3,
+  CalendarDays,
+  ChevronRight,
+  CircleHelp,
+  Minus,
+  Plus,
+  RotateCcw,
+  Search,
+  TreeDeciduous,
+  Users,
+  X,
+  ZoomIn,
+} from 'lucide-react';
+import { helpApi, type HelpStats } from '../api/helpApi';
 import { authApi } from '../api/authApi';
-import { Spinner, Avatar } from '../components';
-import { theme } from '../theme';
-import { getRelativeTime } from '../utils/dateUtils';
+import type { GraphEdge, GraphNode, HelpGraph, User } from '../types';
+import { Avatar } from '../components/Avatar';
+import { Button } from '../components/Button';
+import './HelpGraphPage.css';
 
-interface TreeNode {
-  id: number;
-  name: string;
-  avatarUrl?: string;
-  helpedCount: number;
-  children: TreeNode[];
+interface PositionedNode extends GraphNode {
+  x: number;
+  y: number;
   depth: number;
-  postTitle?: string;
-  helpDate?: string;
 }
 
-interface EdgeData {
-  postTitle?: string;
-  helpDate?: string;
-}
+const NODE_GAP_X = 190;
+const NODE_GAP_Y = 150;
+const VIEW_WIDTH = 1100;
 
-const DEPTH_COLORS = [
-  '#065f46',
-  '#0e7490',
-  '#7c3aed',
-  '#db2777',
-  '#dc2626',
-];
+const getNodeLayout = (nodes: GraphNode[], edges: GraphEdge[], rootId?: number): {
+  nodes: PositionedNode[];
+  width: number;
+  height: number;
+} => {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const outgoing = new Map<number, number[]>();
+  edges.forEach((edge) => {
+    const children = outgoing.get(edge.fromUserId) ?? [];
+    children.push(edge.toUserId);
+    outgoing.set(edge.fromUserId, children);
+  });
 
-const DEPTH_BORDER = [
-  '#34d399',
-  '#22d3ee',
-  '#a78bfa',
-  '#f472b6',
-  '#f87171',
-];
+  const depthById = new Map<number, number>();
+  const queue: number[] = [];
+  if (rootId && nodeById.has(rootId)) {
+    depthById.set(rootId, 0);
+    queue.push(rootId);
+  }
+  for (let cursor = 0; cursor < queue.length; cursor += 1) {
+    const currentId = queue[cursor];
+    const nextDepth = (depthById.get(currentId) ?? 0) + 1;
+    (outgoing.get(currentId) ?? []).forEach((nextId) => {
+      if (nodeById.has(nextId) && !depthById.has(nextId)) {
+        depthById.set(nextId, nextDepth);
+        queue.push(nextId);
+      }
+    });
+  }
+
+  const maxDepth = Math.max(0, ...Array.from(depthById.values()));
+  nodes.forEach((node) => {
+    if (!depthById.has(node.id)) depthById.set(node.id, maxDepth + 1);
+  });
+  const layers = new Map<number, GraphNode[]>();
+  nodes.forEach((node) => {
+    const depth = depthById.get(node.id) ?? 0;
+    const layer = layers.get(depth) ?? [];
+    layer.push(node);
+    layers.set(depth, layer);
+  });
+
+  const maxNodesInLayer = Math.max(1, ...Array.from(layers.values(), (layer) => layer.length));
+  const width = Math.max(VIEW_WIDTH, maxNodesInLayer * NODE_GAP_X + 140);
+  const height = Math.max(620, (Math.max(0, ...Array.from(layers.keys())) + 1) * NODE_GAP_Y + 120);
+  const positioned: PositionedNode[] = [];
+
+  layers.forEach((layer, depth) => {
+    const spacing = width / (layer.length + 1);
+    layer.forEach((node, index) => {
+      positioned.push({
+        ...node,
+        x: spacing * (index + 1),
+        y: 80 + depth * NODE_GAP_Y,
+        depth,
+      });
+    });
+  });
+  return { nodes: positioned, width, height };
+};
+
+const formatDate = (date: string): string => {
+  const parsed = new Date(date);
+  return Number.isNaN(parsed.getTime()) ? '' : parsed.toLocaleDateString('ru-RU', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+};
 
 export const HelpGraphPage = () => {
-  const [graph, setGraph] = useState<any>(null);
+  const [graph, setGraph] = useState<HelpGraph | null>(null);
   const [stats, setStats] = useState<HelpStats | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [statsError, setStatsError] = useState(false);
   const [showStats, setShowStats] = useState(false);
-  const [selectedNode, setSelectedNode] = useState<any>(null);
-  const [hoveredNode, setHoveredNode] = useState<any>(null);
-  const [currentUser, setCurrentUser] = useState<any>(null);
-  const [highlightedPath, setHighlightedPath] = useState<{id: number, name: string}[]>([]);
-  const [animatedNodes, setAnimatedNodes] = useState<Set<number>>(new Set());
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [query, setQuery] = useState('');
+  const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null);
+  const [selectedEdgeIndex, setSelectedEdgeIndex] = useState<number | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const [translation, setTranslation] = useState({ x: 0, y: 0 });
+  const [dragging, setDragging] = useState(false);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const dragStart = useRef<{ x: number; y: number; originX: number; originY: number } | null>(null);
+  const pointerMoved = useRef(false);
 
-  useEffect(() => {
-    authApi.getCurrentUser()
-      .then(user => {
-        setCurrentUser(user);
-        return helpApi.getHelpGraph(user.id);
-      })
-      .then(setGraph)
-      .catch(console.error)
-      .finally(() => setLoading(false));
-    
-    helpApi.getHelpStats()
-      .then(setStats)
-      .catch(console.error);
-  }, []);
-
-  useEffect(() => {
-    if (graph && currentUser?.id) {
-      const treeLocal = buildTree();
-      if (treeLocal) {
-        const ids = new Set<number>();
-        const collectIds = (node: TreeNode) => {
-          ids.add(node.id);
-          node.children.forEach(collectIds);
-        };
-        collectIds(treeLocal);
-        
-        setAnimatedNodes(new Set());
-        
-        let delay = 0;
-        ids.forEach(id => {
-          setTimeout(() => {
-            setAnimatedNodes(prev => {
-              const newSet = new Set(prev);
-              newSet.add(id);
-              return newSet;
-            });
-          }, delay);
-          delay += 60;
-        });
-      }
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    setError(false);
+    try {
+      const user = await authApi.getCurrentUser();
+      setCurrentUser(user);
+      const graphData = await helpApi.getHelpGraph(user.id);
+      setGraph(graphData);
+    } catch {
+      setError(true);
+    } finally {
+      setLoading(false);
     }
-  }, [graph, currentUser?.id]);
 
-  const getSubtreeCount = useCallback((node: TreeNode): number => {
-    let count = 0;
-    const traverse = (n: TreeNode) => {
-      count += n.children.length;
-      n.children.forEach(traverse);
-    };
-    traverse(node);
-    return count;
+    try {
+      setStats(await helpApi.getHelpStats());
+      setStatsError(false);
+    } catch {
+      setStatsError(true);
+    }
   }, []);
 
-  const getPathToNode = useCallback((nodeId: number, root: TreeNode): {id: number, name: string}[] => {
-    const path: {id: number, name: string}[] = [];
-    const find = (n: TreeNode): boolean => {
-      path.push({ id: n.id, name: n.name });
-      if (n.id === nodeId) return true;
-      for (const child of n.children) {
-        if (find(child)) return true;
-      }
-      path.pop();
-      return false;
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
+
+  const layout = useMemo(
+    () => getNodeLayout(graph?.nodes ?? [], graph?.edges ?? [], currentUser?.id),
+    [graph, currentUser?.id]
+  );
+  const positionedNodesById = useMemo(
+    () => new Map(layout.nodes.map((node) => [node.id, node])),
+    [layout.nodes]
+  );
+  const selectedNode = layout.nodes.find((node) => node.id === selectedNodeId) ?? null;
+  const selectedEdge = selectedEdgeIndex === null ? null : graph?.edges[selectedEdgeIndex] ?? null;
+  const searchResults = useMemo(() => {
+    const normalized = query.trim().toLocaleLowerCase('ru-RU');
+    if (!normalized) return [];
+    return layout.nodes
+      .filter((node) => node.name.toLocaleLowerCase('ru-RU').includes(normalized))
+      .slice(0, 8);
+  }, [layout.nodes, query]);
+  const neighborIds = useMemo(() => {
+    const related = new Set<number>();
+    if (selectedNodeId === null) return related;
+    related.add(selectedNodeId);
+    (graph?.edges ?? []).forEach((edge) => {
+      if (edge.fromUserId === selectedNodeId) related.add(edge.toUserId);
+      if (edge.toUserId === selectedNodeId) related.add(edge.fromUserId);
+    });
+    return related;
+  }, [graph?.edges, selectedNodeId]);
+
+  const clearSelection = () => {
+    setSelectedNodeId(null);
+    setSelectedEdgeIndex(null);
+  };
+
+  const focusNode = (node: PositionedNode) => {
+    setSelectedNodeId(node.id);
+    setSelectedEdgeIndex(null);
+    setQuery('');
+    setZoom((current) => Math.max(current, 1));
+    setTranslation({
+      x: layout.width / 2 - node.x * Math.max(1, zoom),
+      y: layout.height / 2 - node.y * Math.max(1, zoom),
+    });
+  };
+
+  const resetView = () => {
+    setZoom(1);
+    setTranslation({ x: 0, y: 0 });
+    clearSelection();
+  };
+
+  const handlePointerDown = (event: React.PointerEvent<SVGSVGElement>) => {
+    pointerMoved.current = false;
+    if ((event.target as Element).closest('.help-graph-node, .help-graph-edge')) return;
+    dragStart.current = {
+      x: event.clientX,
+      y: event.clientY,
+      originX: translation.x,
+      originY: translation.y,
     };
-    find(root);
-    return path;
-  }, []);
+    setDragging(true);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
 
-  if (loading) return <Spinner message="Загрузка графа помощи..." />;
+  const handlePointerMove = (event: React.PointerEvent<SVGSVGElement>) => {
+    if (!dragStart.current || !svgRef.current) return;
+    const bounds = svgRef.current.getBoundingClientRect();
+    const scaleX = layout.width / Math.max(1, bounds.width);
+    const scaleY = layout.height / Math.max(1, bounds.height);
+    const dx = event.clientX - dragStart.current.x;
+    const dy = event.clientY - dragStart.current.y;
+    if (Math.abs(dx) + Math.abs(dy) > 3) pointerMoved.current = true;
+    setTranslation({
+      x: dragStart.current.originX + dx * scaleX,
+      y: dragStart.current.originY + dy * scaleY,
+    });
+  };
 
-  if (!graph || graph.nodes.length === 0) {
+  const handlePointerUp = () => {
+    dragStart.current = null;
+    setDragging(false);
+  };
+
+  const zoomBy = (amount: number) => {
+    setZoom((current) => Math.min(2.4, Math.max(0.45, current + amount)));
+  };
+
+  if (loading) {
     return (
-      <div style={styles.container}>
-        <Link to="/" style={styles.backLink}>← На главную</Link>
-        <h1 className="page-title" style={styles.title}>Граф помощи</h1>
-        <div style={styles.emptyState}>
-          <TreeDeciduous size={64} color={theme.colors.accent} style={styles.emptyIcon as React.CSSProperties} />
-          <h2>Пока нет связей помощи</h2>
-          <p>Когда пользователи будут помогать друг другу, цепочки появятся здесь.</p>
-          <Link to="/">
-            <button style={styles.btn}>К постам</button>
-          </Link>
+      <main className="help-graph-page">
+        <div className="help-graph-loading" role="status" aria-label="Загружается граф взаимопомощи">
+          <div className="help-graph-loading-heading"><span /><i /><i /></div>
+          <div className="help-graph-loading-canvas"><span /><span /><span /><span /><span /></div>
         </div>
-      </div>
+      </main>
     );
   }
 
-  const buildTree = (): TreeNode | null => {
-    if (!graph.nodes.length || !graph.edges.length) return null;
-
-    const nodeMap = new Map<number, any>();
-    graph.nodes.forEach((n: any) => nodeMap.set(n.id, { ...n, children: [] }));
-
-    const edgesByFrom = new Map<number, any[]>();
-    graph.edges.forEach((e: any) => {
-      const list = edgesByFrom.get(e.fromUserId) || [];
-      list.push(e);
-      edgesByFrom.set(e.fromUserId, list);
-    });
-
-    const rootId = currentUser?.id;
-    if (!rootId || !nodeMap.has(rootId)) return null;
-
-    const edgeDataMap = new Map<string, EdgeData>();
-    graph.edges.forEach((e: any) => {
-      edgeDataMap.set(`${e.fromUserId}-${e.toUserId}`, {
-        postTitle: e.postTitle,
-        helpDate: e.confirmedAt,
-      });
-    });
-
-    const buildChildren = (parentId: number, depth: number, visited: Set<number>): TreeNode[] => {
-      const edges = edgesByFrom.get(parentId) || [];
-      return edges.map(edge => {
-        if (visited.has(edge.toUserId)) return null;
-        const child = nodeMap.get(edge.toUserId);
-        if (!child) return null;
-        
-        const childVisited = new Set(visited);
-        childVisited.add(edge.toUserId);
-        
-        const edgeData = edgeDataMap.get(`${parentId}-${edge.toUserId}`);
-        
-        return {
-          id: child.id,
-          name: child.name,
-          avatarUrl: child.avatarUrl,
-          helpedCount: child.helpedCount,
-          depth,
-          postTitle: edgeData?.postTitle,
-          helpDate: edgeData?.helpDate,
-          children: buildChildren(child.id, depth + 1, childVisited),
-        };
-      }).filter(Boolean) as TreeNode[];
-    };
-
-    const root = nodeMap.get(rootId);
-    if (!root) return null;
-
-    return {
-      id: root.id,
-      name: root.name,
-      avatarUrl: root.avatarUrl,
-      helpedCount: root.helpedCount,
-      depth: 0,
-      children: buildChildren(rootId, 1, new Set([rootId])),
-    };
-  };
-
-  const getLayout = (node: TreeNode, x: number, y: number, level: number, positions: Map<number, {x: number, y: number, node: TreeNode}>) => {
-    positions.set(node.id, { x, y, node });
-    
-    if (node.children.length === 0) return;
-    
-    const childCount = node.children.length;
-    const radius = 200 + level * 50;
-    const angleSpread = Math.min(Math.PI * 0.9, Math.PI * 0.5 + childCount * 0.15);
-    const angleStep = childCount > 1 ? angleSpread / (childCount - 1) : 0;
-    const startAngle = Math.PI / 2 - angleSpread / 2;
-    
-    node.children.forEach((child, i) => {
-      const angle = startAngle + i * angleStep;
-      const childX = x + radius * Math.cos(angle);
-      const childY = y + radius * Math.sin(angle);
-      getLayout(child, childX, childY, level + 1, positions);
-    });
-  };
-
-  const renderTree = (node: TreeNode | null) => {
-    if (!node) return null;
-
-    const positions = new Map<number, {x: number, y: number, node: TreeNode}>();
-    getLayout(node, 400, 120, 0, positions);
-    
-    const posArray = Array.from(positions.values());
-    const minX = posArray.reduce((min, p) => Math.min(min, p.x), Infinity);
-    const maxX = posArray.reduce((max, p) => Math.max(max, p.x), -Infinity);
-    const minY = posArray.reduce((min, p) => Math.min(min, p.y), Infinity);
-    const maxY = posArray.reduce((max, p) => Math.max(max, p.y), -Infinity);
-    const svgWidth = Math.max(800, maxX - minX + 200);
-    const svgHeight = Math.max(500, maxY - minY + 150);
-    const offsetX = -minX + 100;
-    const offsetY = -minY + 80;
-
-    const getPos = (id: number) => {
-      const p = positions.get(id);
-      return p ? { x: p.x + offsetX, y: p.y + offsetY, node: p.node } : null;
-    };
-
-    const getColor = (depth: number) => DEPTH_COLORS[Math.min(depth, DEPTH_COLORS.length - 1)];
-    const getBorder = (depth: number) => DEPTH_BORDER[Math.min(depth, DEPTH_BORDER.length - 1)];
-
-    const renderEdges = () => {
-      const edges: React.ReactElement[] = [];
-      const renderedEdgeKeys = new Set<string>();
-      
-      const traverse = (n: TreeNode) => {
-        const from = getPos(n.id);
-        if (!from) return;
-        
-        n.children.forEach(child => {
-          const edgeKey = `${n.id}-${child.id}`;
-          if (renderedEdgeKeys.has(edgeKey)) return;
-          renderedEdgeKeys.add(edgeKey);
-          
-          const to = getPos(child.id);
-          if (!to) return;
-          
-          const isPath = highlightedPath.some(p => p.id === n.id) && highlightedPath.some(p => p.id === child.id);
-          const isDimmed = highlightedPath.length > 0 && !isPath;
-          const isHovered = hoveredNode?.id === child.id;
-          const nodeColor = DEPTH_COLORS[Math.min(child.depth, DEPTH_COLORS.length - 1)];
-          const strokeColor = isPath ? '#fbbf24' : isHovered ? '#fff' : nodeColor;
-          const strokeWidth = isPath ? 3 : isHovered ? 2.5 : 2;
-          
-          const midX = (from.x + to.x) / 2;
-          const midY = (from.y + to.y) / 2;
-          
-          edges.push(
-            <g 
-              key={`edge-${n.id}-${child.id}`} 
-              style={{ 
-                transition: 'opacity 0.3s ease',
-                opacity: isDimmed ? 0.15 : 1 
-              }}
-            >
-              <path
-                d={`M ${from.x} ${from.y + 24} Q ${from.x} ${midY} ${to.x} ${to.y - 24}`}
-                stroke={strokeColor}
-                strokeWidth={strokeWidth}
-                fill="none"
-                strokeLinecap="round"
-                className={isPath ? 'graph-edge-highlighted' : 'graph-edge'}
-              />
-              {!isPath && (
-                <path
-                  d={`M ${from.x} ${from.y + 24} Q ${from.x} ${midY} ${to.x} ${to.y - 24}`}
-                  stroke={nodeColor}
-                  strokeWidth={2}
-                  fill="none"
-                  strokeLinecap="round"
-                  strokeDasharray="6 94"
-                  style={{
-                    animation: 'flowRight 1.5s linear infinite',
-                    opacity: 0.7,
-                  }}
-                />
-              )}
-              <polygon
-                points={`${to.x},${to.y - 24} ${to.x - 5},${to.y - 34} ${to.x + 5},${to.y - 34}`}
-                fill={strokeColor}
-                className={isPath ? 'graph-edge-highlighted' : ''}
-                style={!isPath ? { filter: `drop-shadow(0 0 6px ${nodeColor})`, animation: 'pulseGlow 2s ease-in-out infinite' } : {}}
-              />
-              {(isHovered || isPath) && child.postTitle && (
-                <g>
-                  <rect
-                    x={midX - 60}
-                    y={midY - 8}
-                    width={120}
-                    height={36}
-                    rx={6}
-                    fill="rgba(0,0,0,0.85)"
-                    stroke="rgba(34, 211, 238, 0.5)"
-                    strokeWidth={1}
-                  />
-                  <text
-                    x={midX}
-                    y={midY + 4}
-                    textAnchor="middle"
-                    fill="#fff"
-                    fontSize={10}
-                    fontWeight={500}
-                  >
-                    {child.postTitle.length > 20 ? child.postTitle.substring(0, 20) + '...' : child.postTitle}
-                  </text>
-                  {child.helpDate && (
-                    <text
-                      x={midX}
-                      y={midY + 16}
-                      textAnchor="middle"
-                      fill="rgba(255,255,255,0.6)"
-                      fontSize={9}
-                    >
-                      {new Date(child.helpDate).toLocaleDateString('ru-RU')}
-                    </text>
-                  )}
-                </g>
-              )}
-            </g>
-          );
-          traverse(child);
-        });
-      };
-      
-      traverse(node);
-      return edges;
-    };
-
-    const renderNodes = () => {
-      const nodes: React.ReactElement[] = [];
-      const renderedIds = new Set<number>();
-      
-      const traverse = (n: TreeNode) => {
-        if (renderedIds.has(n.id)) return;
-        renderedIds.add(n.id);
-        
-        const pos = getPos(n.id);
-        if (!pos) return;
-        
-        const isSelected = selectedNode?.id === n.id;
-        const isHovered = hoveredNode?.id === n.id;
-        const isAnimated = animatedNodes.has(n.id);
-        const subtreeCount = getSubtreeCount(n);
-        const color = getColor(n.depth);
-        const border = getBorder(n.depth);
-        const isDimmed = highlightedPath.length > 0 && !highlightedPath.some(p => p.id === n.id);
-
-        nodes.push(
-          <g 
-            key={`node-${n.id}`}
-            className="graph-node"
-            style={{ 
-              cursor: 'pointer',
-              transition: 'opacity 0.3s ease',
-              opacity: isDimmed ? 0.2 : (isAnimated ? 1 : 0),
-            }}
-            onClick={(e) => {
-              e.stopPropagation();
-              const newPath = selectedNode?.id === n.id ? [] : getPathToNode(n.id, node);
-              setHighlightedPath(newPath);
-              setSelectedNode(isSelected ? null : n);
-            }}
-            onMouseEnter={() => setHoveredNode(n)}
-            onMouseLeave={() => setHoveredNode(null)}
-          >
-            <circle
-              cx={pos.x}
-              cy={pos.y}
-              r={isSelected ? 36 : isHovered ? 30 : 24}
-              fill={isSelected ? '#fbbf24' : color}
-              stroke={isSelected ? '#fff' : isHovered ? '#fff' : border}
-              strokeWidth={isSelected || isHovered ? 4 : 3}
-              style={{ 
-                transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-                filter: isHovered ? 'drop-shadow(0 0 8px rgba(34, 211, 238, 0.6))' : 
-                       isAnimated && !isSelected ? 'drop-shadow(0 0 4px rgba(34, 211, 238, 0.4))' : 'none',
-              }}
-            />
-            <text
-              x={pos.x}
-              y={pos.y + 5}
-              textAnchor="middle"
-              fill="#fff"
-              fontSize="13"
-              fontWeight="bold"
-              style={{ pointerEvents: 'none' }}
-            >
-              {n.name.charAt(0).toUpperCase()}
-            </text>
-            {n.depth === 0 && (
-              <text
-                x={pos.x}
-                y={pos.y - 32}
-                textAnchor="middle"
-                fill="#fbbf24"
-                fontSize="11"
-                fontWeight="600"
-                style={{ pointerEvents: 'none' }}
-              >
-                Вы
-              </text>
-            )}
-            {subtreeCount > 0 && !isSelected && (
-              <text
-                x={pos.x}
-                y={pos.y + 44}
-                textAnchor="middle"
-                fill="rgba(255,255,255,0.6)"
-                fontSize="10"
-                style={{ pointerEvents: 'none' }}
-              >
-                +{subtreeCount}
-              </text>
-            )}
-          </g>
-        );
-        
-        n.children.forEach(child => traverse(child));
-      };
-      
-      traverse(node);
-      return nodes;
-    };
-
+  if (error || !graph) {
     return (
-      <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} style={styles.svg}>
-        <defs>
-          <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
-            <feMerge>
-              <feMergeNode in="coloredBlur"/>
-              <feMergeNode in="SourceGraphic"/>
-            </feMerge>
-          </filter>
-          <linearGradient id="edgeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="rgba(34, 211, 238, 0.5)" />
-            <stop offset="100%" stopColor="rgba(34, 211, 238, 0.2)" />
-          </linearGradient>
-        </defs>
-        {renderEdges()}
-        {renderNodes()}
-      </svg>
+      <main className="help-graph-page">
+        <header className="help-graph-header">
+          <div><span className="help-graph-eyebrow">Сообщество HelpTree</span><h1>Граф взаимопомощи</h1></div>
+        </header>
+        <section className="help-graph-state" role="alert">
+          <span><TreeDeciduous size={24} aria-hidden="true" /></span>
+          <h2>Не удалось загрузить граф</h2>
+          <p>Проверьте соединение и попробуйте ещё раз.</p>
+          <Button onClick={() => void loadData()}>Повторить загрузку</Button>
+        </section>
+      </main>
     );
-  };
+  }
 
   return (
-    <div style={styles.container} onClick={() => { setSelectedNode(null); setHighlightedPath([]); }}>
-      <div style={styles.header}>
-        <Link to="/" style={styles.backLink}>← На главную</Link>
-        <h1 className="page-title" style={styles.title}>Граф помощи</h1>
-      </div>
-      
-      <div style={styles.stats}>
-        <div style={styles.statBox}>
-          <div style={styles.statValue}>{graph.totalUsers}</div>
-          <div style={styles.statLabel}>В цепочке</div>
+    <main className="help-graph-page">
+      <header className="help-graph-header">
+        <div className="help-graph-heading">
+          <span className="help-graph-eyebrow">Сообщество HelpTree</span>
+          <h1>Граф взаимопомощи</h1>
+          <p>Исследуйте реальные связи, созданные подтверждёнными актами помощи.</p>
         </div>
-        <div style={styles.statBox}>
-          <div style={styles.statValue}>{graph.totalHelps}</div>
-          <div style={styles.statLabel}>Актов помощи</div>
+        <div className="help-graph-header-actions">
+          <button
+            type="button"
+            className={`help-graph-stats-toggle${showStats ? ' is-active' : ''}`}
+            onClick={() => setShowStats((visible) => !visible)}
+            aria-expanded={showStats}
+          >
+            <BarChart3 size={16} aria-hidden="true" /> Статистика
+          </button>
         </div>
-        <button 
-          style={showStats ? {...styles.statsToggle, ...styles.statsToggleActive} : styles.statsToggle}
-          onClick={() => setShowStats(!showStats)}
-        >
-          <BarChart3 size={16} style={{ marginRight: 6 }} />
-          Статистика
-        </button>
-      </div>
+      </header>
 
-      {showStats && stats && (
-        <div style={styles.statsPanel}>
-          <div style={styles.statsSection}>
-            <h3 style={styles.statsTitle}>По месяцам</h3>
-            <div style={styles.chartContainer}>
-              {Object.entries(stats.byMonth).map(([month, count]) => (
-                <div key={month} style={styles.chartBar}>
-                  <div style={{...styles.bar, height: `${Math.max(5, (count / (stats.totalHelps || 1)) * 100)}%`}} />
-                  <span style={styles.barLabel}>{month}</span>
-                  <span style={styles.barValue}>{count}</span>
-                </div>
-              ))}
+      <section className="help-graph-metrics" aria-label="Показатели графа">
+        <div><span className="help-graph-metric-icon"><Users size={17} /></span><strong>{graph.totalUsers.toLocaleString('ru-RU')}</strong><span>участников</span></div>
+        <div><span className="help-graph-metric-icon"><TreeDeciduous size={17} /></span><strong>{graph.totalHelps.toLocaleString('ru-RU')}</strong><span>подтверждённых актов помощи</span></div>
+        <span className="help-graph-scope-note">Граф строится от вашего участия</span>
+      </section>
+
+      {showStats && (
+        <section className="help-graph-stats-panel" aria-label="Общая статистика помощи">
+          {statsError ? (
+            <div className="help-graph-stats-error">
+              <span>Не удалось загрузить общую статистику.</span>
+              <button type="button" onClick={() => void helpApi.getHelpStats().then(setStats).then(() => setStatsError(false)).catch(() => setStatsError(true))}>Повторить</button>
             </div>
-          </div>
-          
-          <div style={styles.statsSection}>
-            <h3 style={styles.statsTitle}>По категориям</h3>
-            <div style={styles.categoryList}>
-              {Object.entries(stats.byCategory).sort((a, b) => b[1] - a[1]).map(([category, count]) => (
-                <div key={category} style={styles.categoryItem}>
-                  <span style={styles.categoryName}>{category}</span>
-                  <span style={styles.categoryCount}>{count}</span>
+          ) : stats ? (
+            <>
+              <div className="help-graph-stats-column">
+                <h2>Помощь по месяцам</h2>
+                <div className="help-graph-month-bars">
+                  {Object.entries(stats.byMonth).map(([month, count]) => (
+                    <div className="help-graph-month-bar" key={month} title={`${month}: ${count}`}>
+                      <span style={{ height: `${Math.max(3, (count / Math.max(1, ...Object.values(stats.byMonth))) * 100)}%` }} />
+                      <small>{month.slice(0, 2)}</small>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </div>
-
-          <div style={styles.statsSection}>
-            <h3 style={styles.statsTitle}>Топ помогающих</h3>
-            <div style={styles.topList}>
-              {stats.topHelpers.slice(0, 5).map((helper, idx) => (
-                <div key={helper.userId} style={styles.topItem}>
-                  <span style={styles.topRank}>#{idx + 1}</span>
-                  <span style={styles.topName}>{helper.name}</span>
-                  <span style={styles.topCount}>★ {helper.helpCount}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div style={styles.graphContainer} ref={containerRef}>
-        {renderTree(graph ? buildTree() : null)}
-        
-        {hoveredNode && !selectedNode && (
-          <div style={styles.tooltip}>
-            <div style={styles.tooltipName}>{hoveredNode.name}</div>
-            <div style={styles.tooltipStat}>★ Помог: {hoveredNode.helpedCount}</div>
-            {getSubtreeCount(hoveredNode) > 0 && (
-              <div style={styles.tooltipSubtree}>Через него: {getSubtreeCount(hoveredNode)} чел.</div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {selectedNode && (
-        <div style={styles.nodeInfo} onClick={(e) => e.stopPropagation()}>
-          <div style={styles.nodeHeader}>
-            <Avatar name={selectedNode.name} avatarUrl={selectedNode.avatarUrl} size="large" />
-            <div>
-              <h3 style={styles.nodeName}>{selectedNode.name}</h3>
-              <div style={styles.nodeStats}>
-                <span style={styles.nodeStat}>★ Помог: {selectedNode.helpedCount}</span>
-                {getSubtreeCount(selectedNode) > 0 && (
-                  <span style={styles.nodeStatGreen}>→ Через него: {getSubtreeCount(selectedNode)}</span>
-                )}
               </div>
-            </div>
-            <button 
-              style={styles.closeBtn}
-              onClick={() => { setSelectedNode(null); setHighlightedPath([]); }}
-            >
-              ✕
-            </button>
-          </div>
-          
-          {selectedNode.depth > 0 && selectedNode.postTitle && (
-            <div style={styles.helpInfo}>
-              <div style={styles.helpInfoLabel}>Помог с:</div>
-              <div style={styles.helpInfoValue}>{selectedNode.postTitle}</div>
-              {selectedNode.helpDate && (
-                <div style={styles.helpInfoDate}>
-                  {getRelativeTime(selectedNode.helpDate)}
-                </div>
-              )}
-            </div>
-          )}
-
-          {highlightedPath.length > 1 && (
-            <div style={styles.pathInfo}>
-              <div style={styles.pathLabel}>Цепочка:</div>
-              <div style={styles.pathList}>
-                {highlightedPath.map((pathItem, idx) => (
-                  <React.Fragment key={`path-${pathItem.id}-${idx}`}>
-                    <span style={idx === highlightedPath.length - 1 ? styles.pathItemActive : styles.pathItem}>
-                      {pathItem.name}
-                    </span>
-                    {idx < highlightedPath.length - 1 && <span style={styles.pathArrow}>→</span>}
-                  </React.Fragment>
+              <div className="help-graph-stats-column">
+                <h2>Категории</h2>
+                {Object.entries(stats.byCategory).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([category, count]) => (
+                  <div className="help-graph-category-row" key={category}><span>{category}</span><strong>{count}</strong></div>
                 ))}
               </div>
-            </div>
-          )}
-
-          <div style={styles.nodeActions}>
-            <Link to={`/profile/${selectedNode.id}`} style={styles.profileLink}>
-              Перейти в профиль →
-            </Link>
-          </div>
-        </div>
+              <div className="help-graph-stats-column">
+                <h2>Активные помощники</h2>
+                {stats.topHelpers.slice(0, 5).map((helper, index) => (
+                  <Link className="help-graph-helper-row" to={`/profile/${helper.userId}`} key={helper.userId}>
+                    <span>{index + 1}</span><strong>{helper.name}</strong><small>{helper.helpCount} помощи</small>
+                  </Link>
+                ))}
+              </div>
+            </>
+          ) : <p>Загружаем статистику…</p>}
+        </section>
       )}
 
-      <div style={styles.legend}>
-        <h3 style={styles.legendTitle}>Уровни:</h3>
-        <div style={styles.legendItems}>
-          {DEPTH_COLORS.map((color, i) => (
-            <div key={`legend-${i}`} style={styles.legendItem}>
-              <div style={{ ...styles.legendDot, background: color, border: `2px solid ${DEPTH_BORDER[i]}` }} />
-              <span style={styles.legendText}>{i === 0 ? 'Вы' : `Уровень ${i}`}</span>
+      {graph.nodes.length === 0 || graph.edges.length === 0 ? (
+        <section className="help-graph-state">
+          <span><TreeDeciduous size={24} aria-hidden="true" /></span>
+          <h2>{graph.nodes.length === 0 ? 'В вашей цепочке пока нет участников' : 'Пока нет связей помощи'}</h2>
+          <p>Граф отражает помощь, подтверждённую участниками. Здесь появятся участники и связи, когда будут доступны подтверждённые акты помощи.</p>
+          <Link className="help-graph-link-button" to="/posts">Перейти к заявкам <ChevronRight size={16} /></Link>
+        </section>
+      ) : (
+        <section className={`help-graph-workspace${selectedNode || selectedEdge ? ' has-selection' : ''}`}>
+          <div className="help-graph-main">
+            <div className="help-graph-toolbar">
+              <div className="help-graph-search">
+                <Search size={16} aria-hidden="true" />
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Найти участника"
+                  aria-label="Поиск участника в графе"
+                />
+                {query && <button type="button" onClick={() => setQuery('')} aria-label="Очистить поиск"><X size={15} /></button>}
+                {query && (
+                  <div className="help-graph-search-results">
+                    {searchResults.length ? searchResults.map((node) => (
+                      <button type="button" key={node.id} onClick={() => focusNode(node)}>
+                        <Avatar name={node.name} avatarUrl={node.avatarUrl} size="small" />
+                        <span>{node.name}</span>
+                        <ChevronRight size={14} />
+                      </button>
+                    )) : <span className="help-graph-no-results">Участники не найдены</span>}
+                  </div>
+                )}
+              </div>
+              <div className="help-graph-zoom-controls" role="group" aria-label="Управление масштабом графа">
+                <button type="button" onClick={() => zoomBy(0.15)} aria-label="Увеличить граф" title="Увеличить"><Plus size={16} /></button>
+                <span>{Math.round(zoom * 100)}%</span>
+                <button type="button" onClick={() => zoomBy(-0.15)} aria-label="Уменьшить граф" title="Уменьшить"><Minus size={16} /></button>
+                <button type="button" onClick={resetView} aria-label="Сбросить вид графа" title="Сбросить вид"><RotateCcw size={15} /></button>
+              </div>
             </div>
-          ))}
-        </div>
-        <p style={styles.legendHint}>+N — сколько получили помощь через этого человека</p>
-      </div>
-    </div>
-  );
-};
 
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    maxWidth: 1000,
-    margin: '0 auto',
-    padding: '20px',
-    minHeight: '100vh',
-    background: 'linear-gradient(180deg, rgba(2, 44, 34, 0.3) 0%, rgba(6, 78, 59, 0.2) 100%)',
-  },
-  header: {
-    marginBottom: '16px',
-  },
-  backLink: {
-    color: theme.colors.accentLight,
-    textDecoration: 'none',
-    fontSize: '14px',
-    display: 'inline-block',
-    marginBottom: '8px',
-  },
-  title: {
-    color: theme.colors.text,
-    fontSize: '28px',
-    fontWeight: 700,
-    margin: 0,
-  },
-  stats: {
-    display: 'flex',
-    gap: '16px',
-    marginBottom: '16px',
-  },
-  statBox: {
-    background: 'linear-gradient(135deg, #065f46 0%, #0e7490 100%)',
-    padding: '12px 20px',
-    borderRadius: '12px',
-    textAlign: 'center',
-    border: '1px solid rgba(34, 211, 238, 0.3)',
-  },
-  statValue: {
-    color: '#fff',
-    fontSize: '24px',
-    fontWeight: 700,
-  },
-  statLabel: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: '12px',
-    marginTop: '2px',
-  },
-  graphContainer: {
-    background: 'linear-gradient(180deg, rgba(2, 44, 34, 0.5) 0%, rgba(6, 78, 59, 0.4) 100%)',
-    borderRadius: '20px',
-    padding: '20px',
-    border: '1px solid rgba(34, 211, 238, 0.2)',
-    marginBottom: '16px',
-    position: 'relative',
-    minHeight: '450px',
-    overflow: 'auto',
-  },
-  svg: {
-    display: 'block',
-    width: '100%',
-    minWidth: '700px',
-    height: 'auto',
-  },
-  tooltip: {
-    position: 'absolute',
-    top: '16px',
-    right: '16px',
-    background: 'rgba(0,0,0,0.85)',
-    padding: '14px 18px',
-    borderRadius: '12px',
-    border: '1px solid rgba(34, 211, 238, 0.5)',
-    zIndex: 100,
-    backdropFilter: 'blur(8px)',
-  },
-  tooltipName: {
-    color: '#fff',
-    fontSize: '16px',
-    fontWeight: 600,
-    marginBottom: '6px',
-  },
-  tooltipStat: {
-    color: '#fbbf24',
-    fontSize: '13px',
-  },
-  tooltipSubtree: {
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: '12px',
-    marginTop: '4px',
-  },
-  emptyState: {
-    textAlign: 'center',
-    padding: '60px 20px',
-    color: theme.colors.text,
-  },
-  emptyIcon: {
-    marginBottom: '16px',
-  },
-  btn: {
-    marginTop: '20px',
-    padding: '12px 24px',
-    background: 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)',
-    border: 'none',
-    borderRadius: '8px',
-    color: '#fff',
-    fontSize: '16px',
-    cursor: 'pointer',
-  },
-  nodeInfo: {
-    background: 'linear-gradient(135deg, #065f46 0%, #0e7490 100%)',
-    borderRadius: '16px',
-    padding: '20px',
-    border: '1px solid rgba(34, 211, 238, 0.3)',
-    marginBottom: '16px',
-    position: 'relative',
-  },
-  nodeHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '16px',
-  },
-  closeBtn: {
-    position: 'absolute',
-    top: '12px',
-    right: '12px',
-    background: 'rgba(255,255,255,0.1)',
-    border: 'none',
-    borderRadius: '50%',
-    width: '28px',
-    height: '28px',
-    color: 'rgba(255,255,255,0.7)',
-    cursor: 'pointer',
-    fontSize: '14px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  nodeName: {
-    color: '#fff',
-    fontSize: '20px',
-    margin: '0 0 6px 0',
-    fontWeight: 600,
-  },
-  nodeStats: {
-    display: 'flex',
-    gap: '16px',
-    flexWrap: 'wrap',
-  },
-  nodeStat: {
-    color: '#fbbf24',
-    fontSize: '14px',
-  },
-  nodeStatGreen: {
-    color: '#34d399',
-    fontSize: '14px',
-  },
-  helpInfo: {
-    marginTop: '14px',
-    padding: '12px',
-    background: 'rgba(0,0,0,0.2)',
-    borderRadius: '10px',
-  },
-  helpInfoLabel: {
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: '12px',
-    marginBottom: '4px',
-  },
-  helpInfoValue: {
-    color: '#fff',
-    fontSize: '14px',
-    fontWeight: 500,
-  },
-  helpInfoDate: {
-    color: 'rgba(255,255,255,0.5)',
-    fontSize: '12px',
-    marginTop: '4px',
-  },
-  pathInfo: {
-    marginTop: '14px',
-    padding: '12px',
-    background: 'rgba(251, 191, 36, 0.1)',
-    borderRadius: '10px',
-    border: '1px solid rgba(251, 191, 36, 0.3)',
-  },
-  pathLabel: {
-    color: '#fbbf24',
-    fontSize: '12px',
-    marginBottom: '8px',
-  },
-  pathList: {
-    display: 'flex',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: '6px',
-  },
-  pathItem: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: '13px',
-    padding: '4px 8px',
-    background: 'rgba(0,0,0,0.2)',
-    borderRadius: '4px',
-  },
-  pathItemActive: {
-    color: '#fff',
-    fontSize: '13px',
-    fontWeight: 600,
-    padding: '4px 8px',
-    background: 'rgba(251, 191, 36, 0.3)',
-    borderRadius: '4px',
-  },
-  pathArrow: {
-    color: '#fbbf24',
-    fontSize: '14px',
-  },
-  nodeActions: {
-    marginTop: '14px',
-  },
-  profileLink: {
-    display: 'inline-block',
-    padding: '10px 20px',
-    background: 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)',
-    borderRadius: '8px',
-    color: '#fff',
-    textDecoration: 'none',
-    fontSize: '14px',
-    fontWeight: 500,
-  },
-  legend: {
-    background: 'rgba(0,0,0,0.2)',
-    padding: '16px',
-    borderRadius: '12px',
-  },
-  legendTitle: {
-    color: theme.colors.text,
-    fontSize: '14px',
-    margin: '0 0 12px 0',
-  },
-  legendItems: {
-    display: 'flex',
-    gap: '14px',
-    flexWrap: 'wrap',
-  },
-  legendItem: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-  },
-  legendDot: {
-    width: '14px',
-    height: '14px',
-    borderRadius: '50%',
-  },
-  legendText: {
-    color: theme.colors.textMuted,
-    fontSize: '12px',
-  },
-  legendHint: {
-    color: theme.colors.textMuted,
-    fontSize: '11px',
-    marginTop: '10px',
-  },
-  statsToggle: {
-    padding: '10px 16px',
-    background: 'rgba(255,255,255,0.1)',
-    border: '1px solid rgba(34, 211, 238, 0.3)',
-    borderRadius: '8px',
-    color: theme.colors.text,
-    cursor: 'pointer',
-    fontSize: '14px',
-    fontWeight: 500,
-  },
-  statsToggleActive: {
-    background: 'rgba(34, 211, 238, 0.2)',
-    borderColor: '#22d3ee',
-  },
-  statsPanel: {
-    background: 'rgba(0,0,0,0.3)',
-    borderRadius: '16px',
-    padding: '20px',
-    marginBottom: '16px',
-    border: '1px solid rgba(34, 211, 238, 0.2)',
-  },
-  statsSection: {
-    marginBottom: '24px',
-  },
-  statsTitle: {
-    color: theme.colors.text,
-    fontSize: '16px',
-    margin: '0 0 12px 0',
-    fontWeight: 600,
-  },
-  chartContainer: {
-    display: 'flex',
-    alignItems: 'flex-end',
-    gap: '4px',
-    height: '120px',
-    padding: '10px 0',
-  },
-  chartBar: {
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    height: '100%',
-    position: 'relative',
-  },
-  bar: {
-    width: '100%',
-    background: 'linear-gradient(180deg, #22d3ee 0%, #0891b2 100%)',
-    borderRadius: '4px 4px 0 0',
-    marginTop: 'auto',
-    minHeight: '4px',
-    transition: 'height 0.3s ease',
-  },
-  barLabel: {
-    color: 'rgba(255,255,255,0.5)',
-    fontSize: '9px',
-    marginTop: '4px',
-  },
-  barValue: {
-    color: '#22d3ee',
-    fontSize: '10px',
-    fontWeight: 600,
-    position: 'absolute',
-    top: 0,
-  },
-  categoryList: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: '8px',
-  },
-  categoryItem: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    background: 'rgba(255,255,255,0.05)',
-    padding: '8px 12px',
-    borderRadius: '8px',
-    border: '1px solid rgba(34, 211, 238, 0.2)',
-  },
-  categoryName: {
-    color: theme.colors.text,
-    fontSize: '13px',
-  },
-  categoryCount: {
-    color: '#22d3ee',
-    fontSize: '13px',
-    fontWeight: 600,
-  },
-  topList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-  },
-  topItem: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-    padding: '10px 14px',
-    background: 'rgba(255,255,255,0.05)',
-    borderRadius: '10px',
-    border: '1px solid rgba(251, 191, 36, 0.3)',
-  },
-  topRank: {
-    color: '#fbbf24',
-    fontWeight: 700,
-    fontSize: '14px',
-    width: '24px',
-  },
-  topName: {
-    color: theme.colors.text,
-    fontSize: '14px',
-    flex: 1,
-  },
-  topCount: {
-    color: '#fbbf24',
-    fontSize: '14px',
-    fontWeight: 600,
-  },
+            <div className="help-graph-canvas">
+              <svg
+                ref={svgRef}
+                viewBox={`0 0 ${layout.width} ${layout.height}`}
+                role="img"
+                aria-label={`Граф взаимопомощи: ${graph.totalUsers} участников и ${graph.totalHelps} подтверждённых актов`}
+                className={dragging ? 'is-dragging' : ''}
+                onPointerDown={handlePointerDown}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUp}
+                onPointerCancel={handlePointerUp}
+                onClick={() => {
+                  if (!pointerMoved.current) clearSelection();
+                  pointerMoved.current = false;
+                }}
+              >
+                <defs>
+                  <pattern id="help-graph-dots" width="32" height="32" patternUnits="userSpaceOnUse">
+                    <circle cx="1" cy="1" r="1" fill="rgba(200,245,106,0.12)" />
+                  </pattern>
+                  <filter id="help-graph-selected-glow" x="-80%" y="-80%" width="260%" height="260%">
+                    <feGaussianBlur stdDeviation="7" result="blur" />
+                    <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+                  </filter>
+                </defs>
+                <rect width={layout.width} height={layout.height} fill="url(#help-graph-dots)" />
+                <g transform={`translate(${translation.x} ${translation.y}) scale(${zoom})`}>
+                  {graph.edges.map((edge, edgeIndex) => {
+                    const from = positionedNodesById.get(edge.fromUserId);
+                    const to = positionedNodesById.get(edge.toUserId);
+                    if (!from || !to) return null;
+                    const highlighted = selectedNodeId === from.id || selectedNodeId === to.id || selectedEdgeIndex === edgeIndex;
+                    const dimmed = selectedNodeId !== null && !highlighted;
+                    const midY = (from.y + to.y) / 2;
+                    return (
+                      <g
+                        key={`${edge.fromUserId}-${edge.toUserId}-${edge.postTitle}-${edge.confirmedAt}-${edgeIndex}`}
+                        className="help-graph-edge"
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`${edge.fromUserName} помог участнику ${edge.toUserName}. ${edge.postTitle}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setSelectedNodeId(null);
+                          setSelectedEdgeIndex(edgeIndex);
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            setSelectedNodeId(null);
+                            setSelectedEdgeIndex(edgeIndex);
+                          }
+                        }}
+                      >
+                        <path
+                          d={`M ${from.x} ${from.y + 32} C ${from.x} ${midY}, ${to.x} ${midY}, ${to.x} ${to.y - 32}`}
+                          className={highlighted ? 'is-highlighted' : ''}
+                          style={{ opacity: dimmed ? 0.12 : highlighted ? 1 : 0.52 }}
+                        />
+                        <path
+                          d={`M ${from.x} ${from.y + 32} C ${from.x} ${midY}, ${to.x} ${midY}, ${to.x} ${to.y - 32}`}
+                          className="help-graph-edge-hit"
+                        />
+                        <title>{edge.postTitle || 'Подтверждённая помощь'}{edge.confirmedAt ? ` · ${formatDate(edge.confirmedAt)}` : ''}</title>
+                      </g>
+                    );
+                  })}
+                  {layout.nodes.map((node) => {
+                    const selected = node.id === selectedNodeId;
+                    const related = neighborIds.has(node.id);
+                    const dimmed = selectedNodeId !== null && !related;
+                    const isRoot = node.id === currentUser?.id;
+                    const radius = isRoot ? 30 : 24;
+                    return (
+                      <g
+                        key={node.id}
+                        className={`help-graph-node${selected ? ' is-selected' : ''}`}
+                        transform={`translate(${node.x} ${node.y})`}
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`${node.name}, помог ${node.helpedCount ?? 0} раз`}
+                        aria-pressed={selected}
+                        style={{ opacity: dimmed ? 0.2 : 1 }}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          if (pointerMoved.current) return;
+                          setSelectedNodeId(selected ? null : node.id);
+                          setSelectedEdgeIndex(null);
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            setSelectedNodeId(selected ? null : node.id);
+                            setSelectedEdgeIndex(null);
+                          }
+                        }}
+                      >
+                        <circle className="help-graph-node-halo" r={radius + 8} />
+                        <circle className="help-graph-node-circle" r={radius} filter={selected ? 'url(#help-graph-selected-glow)' : undefined} />
+                        {node.avatarUrl ? (
+                          <>
+                            <clipPath id={`help-graph-avatar-${node.id}`}><circle r={radius - 2} /></clipPath>
+                            <image
+                              href={node.avatarUrl}
+                              x={-(radius - 2)}
+                              y={-(radius - 2)}
+                              width={(radius - 2) * 2}
+                              height={(radius - 2) * 2}
+                              preserveAspectRatio="xMidYMid slice"
+                              clipPath={`url(#help-graph-avatar-${node.id})`}
+                            />
+                          </>
+                        ) : (
+                          <text className="help-graph-node-initial" textAnchor="middle" dy="5">
+                            {node.name.charAt(0).toLocaleUpperCase('ru-RU')}
+                          </text>
+                        )}
+                        {isRoot && <text className="help-graph-node-you" textAnchor="middle" y={-radius - 13}>ВЫ</text>}
+                        <text className="help-graph-node-label" textAnchor="middle" y={radius + 22}>
+                          {node.name.length > 19 ? `${node.name.slice(0, 18)}…` : node.name}
+                        </text>
+                        <title>{node.name} · рейтинг {Number.isFinite(node.rating) ? node.rating.toFixed(1) : '—'} · помог {node.helpedCount ?? 0}</title>
+                      </g>
+                    );
+                  })}
+                </g>
+              </svg>
+              <div className="help-graph-canvas-hint"><ZoomIn size={14} aria-hidden="true" /> Перетаскивайте для перемещения · используйте кнопки масштаба</div>
+            </div>
+          </div>
+
+          {(selectedNode || selectedEdge) && (
+            <aside className="help-graph-details" aria-label="Информация о выбранном элементе">
+              <div className="help-graph-details-heading">
+                <span>{selectedNode ? 'Участник' : 'Связь помощи'}</span>
+                <button type="button" onClick={clearSelection} aria-label="Закрыть панель"><X size={17} /></button>
+              </div>
+              {selectedNode && (
+                <div className="help-graph-person">
+                  <Avatar name={selectedNode.name} avatarUrl={selectedNode.avatarUrl} size="large" />
+                  <h2>{selectedNode.name}</h2>
+                  {selectedNode.id === currentUser?.id && <span className="help-graph-you-badge">Это вы</span>}
+                  <div className="help-graph-person-metrics">
+                    <div><strong>{selectedNode.helpedCount ?? 0}</strong><span>помощей</span></div>
+                    <div><strong>{selectedNode.rating ? selectedNode.rating.toFixed(1) : '—'}</strong><span>рейтинг</span></div>
+                  </div>
+                  <Link to={`/profile/${selectedNode.id}`} className="help-graph-profile-link">Открыть профиль <ChevronRight size={15} /></Link>
+                </div>
+              )}
+              {selectedEdge && (
+                <div className="help-graph-connection">
+                  <div className="help-graph-connection-person"><Avatar name={selectedEdge.fromUserName} size="small" /><strong>{selectedEdge.fromUserName}</strong></div>
+                  <div className="help-graph-connection-line"><span />Передал помощь<span /></div>
+                  <div className="help-graph-connection-person"><Avatar name={selectedEdge.toUserName} size="small" /><strong>{selectedEdge.toUserName}</strong></div>
+                  <div className="help-graph-edge-info">
+                    <span className="help-graph-confirmed-tag">Подтверждённая помощь</span>
+                    {selectedEdge.postTitle && <p>{selectedEdge.postTitle}</p>}
+                    {selectedEdge.confirmedAt && <span className="help-graph-date"><CalendarDays size={14} />{formatDate(selectedEdge.confirmedAt)}</span>}
+                    {selectedEdge.postId && <Link className="help-graph-post-link" to={`/posts/${selectedEdge.postId}`}>Открыть заявку <ChevronRight size={14} /></Link>}
+                  </div>
+                </div>
+              )}
+              <div className="help-graph-related">
+                <h3>Связи</h3>
+                {graph.edges.map((edge, edgeIndex) => ({ edge, edgeIndex })).filter(({ edge, edgeIndex }) => selectedNode
+                  ? edge.fromUserId === selectedNode.id || edge.toUserId === selectedNode.id
+                  : edgeIndex === selectedEdgeIndex
+                ).map(({ edge, edgeIndex }) => (
+                  <button type="button" key={`${edge.fromUserId}-${edge.toUserId}-${edge.postTitle}-${edge.confirmedAt}-${edgeIndex}`} onClick={() => { setSelectedNodeId(null); setSelectedEdgeIndex(edgeIndex); }}>
+                    <span>{edge.fromUserName} <ChevronRight size={12} /> {edge.toUserName}</span>
+                    <small>{edge.postTitle || 'Помощь'}</small>
+                  </button>
+                ))}
+                {selectedNode && !graph.edges.some((edge) => edge.fromUserId === selectedNode.id || edge.toUserId === selectedNode.id) && (
+                  <p className="help-graph-no-links"><CircleHelp size={15} /> Связи для выбранного участника не найдены.</p>
+                )}
+              </div>
+            </aside>
+          )}
+        </section>
+      )}
+
+      <footer className="help-graph-legend">
+        <span><i className="help-graph-legend-current" /> Вы</span>
+        <span><i className="help-graph-legend-person" /> Участники</span>
+        <span><i className="help-graph-legend-edge" /> Подтверждённые акты помощи</span>
+      </footer>
+    </main>
+  );
 };

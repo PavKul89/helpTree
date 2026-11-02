@@ -501,8 +501,8 @@ export const PostsPage = () => {
             ref={searchInputRef}
             type="search"
             value={searchInput}
-            placeholder="Поиск по названию или описанию заявки..."
-            aria-label="Поиск по названию или описанию заявки"
+            placeholder="По названию, описанию или автору заявки..."
+            aria-label="Поиск по названию, описанию или автору заявки"
             autoComplete="off"
             onChange={(event) => setSearchInput(event.target.value)}
           />

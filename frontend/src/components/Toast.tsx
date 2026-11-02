@@ -37,9 +37,13 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   return (
     <ToastContext.Provider value={{ showToast }}>
       {children}
-      <div style={styles.container}>
+      <div style={styles.container} aria-live="polite" aria-atomic="false">
         {toasts.map(toast => (
-          <div key={toast.id} style={{ ...styles.toast, ...styles[toast.type] }}>
+          <div
+            key={toast.id}
+            style={{ ...styles.toast, ...styles[toast.type] }}
+            role={toast.type === 'error' ? 'alert' : 'status'}
+          >
             <span style={styles.icon}>
               {toast.type === 'success' ? '✓' : toast.type === 'error' ? '✕' : 'ℹ'}
             </span>
@@ -56,6 +60,7 @@ const styles: Record<string, React.CSSProperties> = {
     position: 'fixed',
     bottom: '24px',
     right: '24px',
+    width: 'min(400px, calc(100vw - 32px))',
     display: 'flex',
     flexDirection: 'column',
     gap: '12px',
@@ -63,8 +68,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
   toast: {
     padding: '14px 20px',
-    borderRadius: '12px',
-    color: '#fff',
+    borderRadius: 'var(--forest-radius-md)',
+    color: 'var(--forest-text)',
     fontSize: '14px',
     fontWeight: 500,
     display: 'flex',
@@ -73,19 +78,19 @@ const styles: Record<string, React.CSSProperties> = {
     animation: 'slideIn 0.3s ease',
     boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
     whiteSpace: 'pre-wrap',
-    maxWidth: '400px',
+    width: '100%',
   },
   success: {
-    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-    border: '1px solid rgba(16, 185, 129, 0.5)',
+    background: 'linear-gradient(135deg, var(--forest-surface-raised) 0%, var(--forest-surface) 100%)',
+    border: '1px solid var(--forest-green)',
   },
   error: {
-    background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
-    border: '1px solid rgba(239, 68, 68, 0.5)',
+    background: 'linear-gradient(135deg, var(--forest-surface-raised) 0%, var(--forest-surface) 100%)',
+    border: '1px solid var(--forest-error)',
   },
   info: {
-    background: 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)',
-    border: '1px solid rgba(6, 182, 212, 0.5)',
+    background: 'linear-gradient(135deg, var(--forest-surface-raised) 0%, var(--forest-surface) 100%)',
+    border: '1px solid var(--forest-border-strong)',
   },
   icon: {
     fontSize: '16px',

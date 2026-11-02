@@ -677,6 +677,75 @@
   color: var(--profile-lime);
 }
 
+.profile-analytics {
+  margin-top: 20px;
+}
+
+.profile-analytics-description {
+  margin: 7px 0 0;
+  color: var(--profile-subtle);
+  font-size: 11px;
+}
+
+.profile-analytics-link {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  gap: 6px;
+  color: var(--profile-lime);
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.profile-analytics-link:hover {
+  color: var(--profile-text);
+}
+
+.profile-analytics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
+  gap: 12px;
+}
+
+.profile-analytics-metric {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: center;
+  column-gap: 9px;
+  padding: 15px;
+  border: 1px solid rgba(180, 225, 155, 0.13);
+  border-radius: 14px;
+  background: rgba(7, 27, 19, 0.33);
+}
+
+.profile-analytics-metric > svg {
+  grid-row: 1 / span 3;
+  color: var(--profile-lime);
+}
+
+.profile-analytics-metric > span {
+  overflow: hidden;
+  color: var(--profile-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-analytics-metric strong {
+  margin-top: 4px;
+  color: var(--profile-text);
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.profile-analytics-metric small {
+  margin-top: 3px;
+  color: var(--profile-subtle);
+  font-size: 9px;
+}
+
 .profile-reviews {
   margin-top: 20px;
 }
@@ -899,6 +968,11 @@
 @media (max-width: 640px) {
   .public-profile {
     padding: 20px 14px 36px;
+  }
+
+  .profile-analytics .profile-section-heading {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .profile-hero {

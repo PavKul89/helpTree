@@ -592,6 +592,7 @@ public class HelpService {
                         .fromUserName(fromName)
                         .toUserId(toId)
                         .toUserName(toName)
+                        .postId(postId)
                         .postTitle(postTitle)
                         .status(status)
                         .confirmedAt(confirmedAt)
@@ -730,6 +731,7 @@ public class HelpService {
             String fromName = row[1] != null ? row[1].toString() : "";
             Long toId = ((Number) row[2]).longValue();
             String toName = row[3] != null ? row[3].toString() : "";
+            Long postId = ((Number) row[4]).longValue();
             String postTitle = row[5] != null ? row[5].toString() : "";
             String status = row[6] != null ? row[6].toString() : "";
             LocalDateTime confirmedAt = row[7] instanceof LocalDateTime ? (LocalDateTime) row[7] : null;
@@ -740,6 +742,7 @@ public class HelpService {
                     .fromUserName(fromName)
                     .toUserId(toId)
                     .toUserName(toName)
+                    .postId(postId)
                     .postTitle(postTitle)
                     .status(status)
                     .confirmedAt(confirmedAt)

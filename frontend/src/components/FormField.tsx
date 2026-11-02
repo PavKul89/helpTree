@@ -24,30 +24,33 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   error?: boolean;
 }
 
-export const Input: React.FC<InputProps> = ({ error, style, ...props }) => (
+export const Input: React.FC<InputProps> = ({ error, style, onFocus, onBlur, ...props }) => (
   <input
     style={{
       width: '100%',
+      minHeight: 44,
       padding: '12px 16px',
       fontSize: '15px',
-      backgroundColor: 'rgba(255,255,255,0.08)',
-      border: `1.5px solid ${error ? theme.colors.error : 'rgba(255,255,255,0.2)'}`,
+      backgroundColor: 'var(--forest-bg-secondary)',
+      border: `1.5px solid ${error ? theme.colors.error : theme.colors.border}`,
       borderRadius: theme.borderRadius.md,
-      outline: 'none',
       color: theme.colors.text,
-      boxSizing: 'border-box' as const,
-      transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+      boxSizing: 'border-box',
+      transition: 'border-color 0.18s ease, box-shadow 0.18s ease',
       ...style,
     }}
-    onFocus={(e) => {
-      e.currentTarget.style.borderColor = error ? theme.colors.error : theme.colors.borderFocus;
-      e.currentTarget.style.boxShadow = `0 0 0 3px ${error ? 'rgba(239,68,68,0.25)' : 'rgba(56,189,248,0.2)'}`;
-      props.onFocus?.(e);
+    aria-invalid={error || undefined}
+    onFocus={(event) => {
+      event.currentTarget.style.borderColor = error ? theme.colors.error : theme.colors.borderFocus;
+      event.currentTarget.style.boxShadow = error
+        ? '0 0 0 3px rgba(255, 119, 119, 0.2)'
+        : 'var(--forest-shadow-focus)';
+      onFocus?.(event);
     }}
-    onBlur={(e) => {
-      e.currentTarget.style.borderColor = error ? theme.colors.error : 'rgba(255,255,255,0.2)';
-      e.currentTarget.style.boxShadow = 'none';
-      props.onBlur?.(e);
+    onBlur={(event) => {
+      event.currentTarget.style.borderColor = error ? theme.colors.error : theme.colors.border;
+      event.currentTarget.style.boxShadow = 'none';
+      onBlur?.(event);
     }}
     {...props}
   />
@@ -57,31 +60,34 @@ interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement
   error?: boolean;
 }
 
-export const Textarea: React.FC<TextareaProps> = ({ error, style, ...props }) => (
+export const Textarea: React.FC<TextareaProps> = ({ error, style, onFocus, onBlur, ...props }) => (
   <textarea
     style={{
       width: '100%',
+      minHeight: 100,
       padding: '12px 16px',
       fontSize: '15px',
-      backgroundColor: 'rgba(255,255,255,0.08)',
-      border: `1.5px solid ${error ? theme.colors.error : 'rgba(255,255,255,0.2)'}`,
+      backgroundColor: 'var(--forest-bg-secondary)',
+      border: `1.5px solid ${error ? theme.colors.error : theme.colors.border}`,
       borderRadius: theme.borderRadius.md,
-      outline: 'none',
       color: theme.colors.text,
       boxSizing: 'border-box' as const,
       resize: 'vertical' as const,
-      transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+      transition: 'border-color 0.18s ease, box-shadow 0.18s ease',
       ...style,
     }}
-    onFocus={(e) => {
-      e.currentTarget.style.borderColor = error ? theme.colors.error : theme.colors.borderFocus;
-      e.currentTarget.style.boxShadow = `0 0 0 3px ${error ? 'rgba(239,68,68,0.25)' : 'rgba(56,189,248,0.2)'}`;
-      props.onFocus?.(e);
+    aria-invalid={error || undefined}
+    onFocus={(event) => {
+      event.currentTarget.style.borderColor = error ? theme.colors.error : theme.colors.borderFocus;
+      event.currentTarget.style.boxShadow = error
+        ? '0 0 0 3px rgba(255, 119, 119, 0.2)'
+        : 'var(--forest-shadow-focus)';
+      onFocus?.(event);
     }}
-    onBlur={(e) => {
-      e.currentTarget.style.borderColor = error ? theme.colors.error : 'rgba(255,255,255,0.2)';
-      e.currentTarget.style.boxShadow = 'none';
-      props.onBlur?.(e);
+    onBlur={(event) => {
+      event.currentTarget.style.borderColor = error ? theme.colors.error : theme.colors.border;
+      event.currentTarget.style.boxShadow = 'none';
+      onBlur?.(event);
     }}
     {...props}
   />
@@ -91,12 +97,12 @@ const labelStyle: React.CSSProperties = {
   display: 'block',
   fontSize: '14px',
   fontWeight: 600,
-  color: 'rgba(255,255,255,0.85)',
+  color: 'var(--forest-text-secondary)',
   marginBottom: '8px',
 };
 
 const errorStyle: React.CSSProperties = {
-  color: theme.colors.errorLight,
+  color: theme.colors.error,
   fontSize: '13px',
   marginTop: '6px',
   fontWeight: 500,

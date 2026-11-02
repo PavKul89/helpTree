@@ -83,8 +83,8 @@ const getVariantStyles = (variant: string, isHovered: boolean): React.CSSPropert
     case 'outline':
       return isHovered ? {
         background: 'rgba(200, 245, 106, 0.1)',
-        borderColor: '#C8F56A',
-        color: '#C8F56A',
+        borderColor: 'var(--forest-lime)',
+        color: 'var(--forest-lime)',
       } : {
         background: 'transparent',
         border: `1px solid ${theme.colors.border}`,
@@ -112,7 +112,6 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
     border: 'none',
-    outline: 'none',
     position: 'relative',
     overflow: 'hidden',
     color: '#10230f',

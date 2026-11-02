@@ -19,6 +19,7 @@ import { AchievementsPage } from './pages/AchievementsPage';
 import { ActivityPage } from './pages/ActivityPage';
 import { WalletPage } from './pages/WalletPage';
 import { NotificationCenterPage } from './pages/NotificationCenterPage';
+import { SafetyPage } from './pages/SafetyPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { Navbar } from './components/Navbar';
 import { Layout } from './components/Layout';
@@ -94,6 +95,7 @@ const AppLayout = () => {
               </ProtectedRoute>
             } />
             <Route path="/achievements" element={<AchievementsPage />} />
+            <Route path="/safety" element={<SafetyPage />} />
             <Route path="/activity" element={
               <ProtectedRoute>
                 <ActivityPage />

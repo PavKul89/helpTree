@@ -1,65 +1,148 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { FileText, HandHeart, Zap } from 'lucide-react';
+import {
+  ArrowUpRight,
+  CalendarDays,
+  FileText,
+  HandHeart,
+  Plus,
+  RefreshCw,
+  Trash2,
+  TreeDeciduous,
+  Zap,
+} from 'lucide-react';
 import { postsApi } from '../api/postsApi';
 import { helpApi } from '../api/helpApi';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/Toast';
-import { StatusBadge, getStatusColor, getStatusLabel } from '../components/StatusBadge';
-import { Tabs } from '../components/Tabs';
-import { Card, Button, Spinner, Modal } from '../components';
-import { formatDate } from '../utils/dateUtils';
-import { theme } from '../theme';
-import { getRelativeTime } from '../utils/dateUtils';
-import type { Post, Help } from '../types';
+import { Modal } from '../components/Modal';
+import { formatDate, getRelativeTime } from '../utils/dateUtils';
+import { getStatusColor, getStatusLabel } from '../utils/statusHelpers';
+import type { Help, Post } from '../types';
+import './MyOrdersPage.css';
+
+type OrdersTab = 'posts' | 'helps';
+
+interface StatItem {
+  label: string;
+  value: number;
+  Icon: typeof FileText;
+}
+
+const isHelpPage = (value: unknown): value is { content: Help[] } =>
+  typeof value === 'object' &&
+  value !== null &&
+  'content' in value &&
+  Array.isArray(value.content);
+
+const getBoostTimeRemaining = (post: Post): string => {
+  if (!post.boostedUntil) return '';
+  const diff = new Date(post.boostedUntil).getTime() - Date.now();
+  if (diff <= 0) return '';
+  const hours = Math.floor(diff / (1000 * 60 * 60));
+  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+  return hours > 0 ? `${hours} ч ${minutes} мин` : `${minutes} мин`;
+};
+
+const isBoosted = (post: Post): boolean =>
+  Boolean(post.boostedUntil && new Date(post.boostedUntil).getTime() > Date.now());
+
+const StatusPill = ({ status, type = 'post' }: { status: string; type?: 'post' | 'help' }) => {
+  const color = getStatusColor(status, type);
+  return (
+    <span
+      className="my-orders-status"
+      style={{ color, borderColor: `${color}66`, backgroundColor: `${color}1A` }}
+    >
+      <span className="my-orders-status-dot" style={{ backgroundColor: color }} aria-hidden="true" />
+      {getStatusLabel(status, type)}
+    </span>
+  );
+};
+
+const LoadingState = () => (
+  <div className="my-orders-loading" role="status" aria-label="Загружаем ваши данные">
+    <div className="my-orders-stats-skeleton" aria-hidden="true">
+      {[0, 1, 2, 3, 4].map((item) => <span key={item} />)}
+    </div>
+    <div className="my-orders-skeleton-list" aria-hidden="true">
+      {[0, 1, 2].map((item) => (
+        <div className="my-orders-skeleton-card" key={item}>
+          <span />
+          <span />
+          <span />
+        </div>
+      ))}
+    </div>
+    <span className="my-orders-loading-label">Загружаем ваши публикации и отклики…</span>
+  </div>
+);
 
 export const MyOrdersPage = () => {
   const { user } = useAuth();
+  const { showToast } = useToast();
   const [myPosts, setMyPosts] = useState<Post[]>([]);
   const [myHelps, setMyHelps] = useState<Help[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'posts' | 'helps'>('posts');
+  const [loadError, setLoadError] = useState(false);
+  const [activeTab, setActiveTab] = useState<OrdersTab>('posts');
   const [deletePostId, setDeletePostId] = useState<number | null>(null);
+  const [deletingPostId, setDeletingPostId] = useState<number | null>(null);
   const [boostingPostId, setBoostingPostId] = useState<number | null>(null);
-  const { showToast } = useToast();
 
-  useEffect(() => {
-    if (user) {
-      loadData();
-    }
-  }, [user]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (!user) return;
+    setLoading(true);
+    setLoadError(false);
     try {
-      const posts = await postsApi.getByUser(user.id);
-      setMyPosts(Array.isArray(posts) ? posts : []);
-
-      const helps = await helpApi.getHelpsByHelper(user.id);
-      if (Array.isArray(helps)) {
-        setMyHelps(helps);
-      } else if (helps && Array.isArray((helps as any).content)) {
-        setMyHelps((helps as any).content);
+      const [postsResponse, helpsResponse] = await Promise.all([
+        postsApi.getByUser(user.id),
+        helpApi.getHelpsByHelper(user.id),
+      ]);
+      const helpsPayload: unknown = helpsResponse;
+      setMyPosts(Array.isArray(postsResponse) ? postsResponse : []);
+      if (Array.isArray(helpsPayload)) {
+        setMyHelps(helpsPayload as Help[]);
+      } else if (isHelpPage(helpsPayload)) {
+        setMyHelps(helpsPayload.content);
       } else {
         setMyHelps([]);
       }
-    } catch (err) {
-      console.error(err);
-      setMyPosts([]);
-      setMyHelps([]);
+    } catch {
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
+
+  const helpsList = myHelps;
+  const completedHelps = helpsList.filter((help) => help.status === 'COMPLETED').length;
+  const stats: StatItem[] = [
+    { label: 'Всего постов', value: myPosts.length, Icon: FileText },
+    { label: 'Открытых', value: myPosts.filter((post) => post.status === 'OPEN').length, Icon: TreeDeciduous },
+    { label: 'В работе', value: myPosts.filter((post) => post.status === 'IN_PROGRESS').length, Icon: RefreshCw },
+    { label: 'Завершено', value: myPosts.filter((post) => post.status === 'COMPLETED').length, Icon: HandHeart },
+    { label: 'Помог', value: completedHelps, Icon: HandHeart },
+  ];
 
   const handleDeletePost = async () => {
-    if (!deletePostId) return;
+    if (deletePostId === null || deletingPostId !== null) return;
+    const postId = deletePostId;
+    setDeletingPostId(postId);
     try {
-      await postsApi.delete(deletePostId);
+      await postsApi.delete(postId);
+      setMyPosts((posts) => posts.filter((post) => post.id !== postId));
       setDeletePostId(null);
-      loadData();
-    } catch (err) {
-      console.error(err);
+      showToast('Пост удалён', 'success');
+    } catch {
+      setDeletePostId(postId);
+      showToast('Не удалось удалить пост. Попробуйте ещё раз.', 'error');
+    } finally {
+      setDeletingPostId(null);
     }
   };
 
@@ -68,402 +151,218 @@ export const MyOrdersPage = () => {
     try {
       const result = await postsApi.boost(postId);
       showToast(result.message, 'success');
-      loadData();
-    } catch (err: any) {
-      console.error(err);
-      const message = err.response?.data?.message || 'Не удалось поднять пост';
-      showToast(message, 'error');
+      setMyPosts((posts) => posts.map((post) => post.id === postId ? result.post : post));
+    } catch (error: unknown) {
+      const responseMessage =
+        typeof error === 'object' && error !== null && 'response' in error
+          ? (error as { response?: { data?: { message?: string } } }).response?.data?.message
+          : undefined;
+      showToast(responseMessage || 'Не удалось поднять пост. Попробуйте ещё раз.', 'error');
     } finally {
       setBoostingPostId(null);
     }
   };
 
-  const isBoosted = (post: Post) => {
-    if (!post.boostedUntil) return false;
-    return new Date(post.boostedUntil) > new Date();
-  };
-
-  const getBoostTimeRemaining = (post: Post) => {
-    if (!post.boostedUntil) return '';
-    const end = new Date(post.boostedUntil);
-    const now = new Date();
-    const diff = end.getTime() - now.getTime();
-    if (diff <= 0) return '';
-    const hours = Math.floor(diff / (1000 * 60 * 60));
-    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-    if (hours > 0) return `${hours}ч ${minutes}мин`;
-    return `${minutes}мин`;
-  };
-
-  if (loading) return <Spinner message="Загрузка заказов..." />;
-
-  const helpsList = Array.isArray(myHelps) ? myHelps : [];
-
-  const openPosts = myPosts.filter(p => p.status === 'OPEN').length;
-  const inProgressPosts = myPosts.filter(p => p.status === 'IN_PROGRESS').length;
-  const completedPosts = myPosts.filter(p => p.status === 'COMPLETED').length;
-  const completedHelps = helpsList.filter(h => h.status === 'COMPLETED').length;
-
   return (
-    <div style={styles.container}>
-      <Link to="/" style={styles.backLink}>← На главную</Link>
-      
-      <Card style={styles.mainCard}>
-        <div style={styles.header}>
-          <h1 className="page-title" style={styles.title}>Мои заказы</h1>
-          <Link to="/posts/new">
-            <Button>Создать пост</Button>
-          </Link>
+    <main className="my-orders-page">
+      <nav className="my-orders-breadcrumb" aria-label="Навигационная цепочка">
+        <Link to="/">Главная</Link>
+        <span aria-hidden="true">/</span>
+        <span aria-current="page">Мои заказы</span>
+      </nav>
+
+      <header className="my-orders-header">
+        <div className="my-orders-heading">
+          <span className="my-orders-eyebrow">Личный кабинет</span>
+          <h1>Мои заказы</h1>
+          <p>Ваши публикации и отклики на просьбы о помощи — в одном месте.</p>
         </div>
+        <Link className="my-orders-create" to="/posts/new">
+          <Plus size={18} aria-hidden="true" />
+          Создать пост
+        </Link>
+      </header>
 
-        <div style={styles.statsRow}>
-          <div style={styles.statBox}>
-            <div style={styles.statValue}>{myPosts.length}</div>
-            <div style={styles.statLabel}>Всего постов</div>
-          </div>
-          <div style={styles.statBox}>
-            <div style={{ ...styles.statValue, color: '#22c55e' }}>{openPosts}</div>
-            <div style={styles.statLabel}>Открытых</div>
-          </div>
-          <div style={styles.statBox}>
-            <div style={{ ...styles.statValue, color: '#38bdf8' }}>{inProgressPosts}</div>
-            <div style={styles.statLabel}>В работе</div>
-          </div>
-          <div style={styles.statBox}>
-            <div style={{ ...styles.statValue, color: '#f59e0b' }}>{completedPosts}</div>
-            <div style={styles.statLabel}>Завершено</div>
-          </div>
-          <div style={styles.statBox}>
-            <div style={{ ...styles.statValue, color: '#22d3ee' }}>{completedHelps}</div>
-            <div style={styles.statLabel}>Помог</div>
-          </div>
-        </div>
-
-        <Tabs
-          tabs={[
-            { key: 'posts', label: 'Мои посты', count: myPosts.length },
-            { key: 'helps', label: 'Мои отклики', count: helpsList.length },
-          ]}
-          activeTab={activeTab}
-          onChange={(key) => setActiveTab(key as 'posts' | 'helps')}
-        />
-
-        <div style={styles.content}>
-          {activeTab === 'posts' && (
-            myPosts.length === 0 ? (
-              <div style={styles.emptyState}>
-                <FileText size={48} color={theme.colors.accent} style={styles.emptyIcon as React.CSSProperties} />
-                <div style={styles.emptyTitle}>У вас пока нет постов</div>
-                <div style={styles.emptyDesc}>Создайте первый пост о помощи</div>
-                <Link to="/posts/new" style={{ marginTop: '16px', display: 'inline-block' }}>
-                  <Button>Создать пост</Button>
-                </Link>
-              </div>
-            ) : (
-              <div style={styles.list}>
-                {myPosts.map((post) => (
-                  <Link key={post.id} to={`/posts/${post.id}`} style={styles.listItem}>
-                    <div style={styles.itemMain}>
-                      <div style={styles.itemHeader}>
-                        <span style={{
-                          ...styles.statusDot,
-                          backgroundColor: getStatusColor(post.status)
-                        }} />
-                        <span style={styles.statusText}>{getStatusLabel(post.status)}</span>
-                        {isBoosted(post) && (
-                          <span style={styles.boostedBadge}>
-                            <Zap size={12} /> В топе {getBoostTimeRemaining(post)}
-                          </span>
-                        )}
-                      </div>
-                      <div style={styles.itemTitle}>{post.title}</div>
-                      <div style={styles.itemDesc}>
-                        {post.description.length > 120 
-                          ? post.description.slice(0, 120) + '...' 
-                          : post.description}
-                      </div>
-                    </div>
-                    <div style={styles.itemSide}>
-                      <span style={styles.itemCategory}>{post.category}</span>
-                      <span style={styles.itemDate}>{getRelativeTime(post.createdAt)}</span>
-                      {post.status === 'OPEN' && (
-                        <Button 
-                          onClick={(e) => { e.preventDefault(); handleBoostPost(post.id); }}
-                          style={styles.boostBtn}
-                          disabled={boostingPostId === post.id}
-                        >
-                          <Zap size={14} style={{ marginRight: 4 }} /> 
-                          {boostingPostId === post.id ? '...' : isBoosted(post) ? '+24ч' : 'В топ'}
-                        </Button>
-                      )}
-                      <Button 
-                        variant="danger" 
-                        onClick={(e) => { e.preventDefault(); confirmDeletePost(post.id); }}
-                        style={styles.deleteBtn}
-                      >
-                        Удалить
-                      </Button>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            )
+      {loading ? (
+        <LoadingState />
+      ) : (
+        <>
+          {loadError && (
+            <div className="my-orders-error" role="alert">
+              <span>Не удалось загрузить заказы. Проверьте соединение и попробуйте снова.</span>
+              <button type="button" onClick={() => void loadData()}>
+                <RefreshCw size={15} aria-hidden="true" /> Повторить
+              </button>
+            </div>
           )}
 
-          {activeTab === 'helps' && (
-            helpsList.length === 0 ? (
-              <div style={styles.emptyState}>
-                <HandHeart size={48} color={theme.colors.accent} style={styles.emptyIcon as React.CSSProperties} />
-                <div style={styles.emptyTitle}>У вас пока нет откликов</div>
-                <div style={styles.emptyDesc}>Откликнитесь на пост другого пользователя</div>
-                <Link to="/" style={{ marginTop: '16px', display: 'inline-block' }}>
-                  <Button>Найти посты</Button>
-                </Link>
-              </div>
-            ) : (
-              <div style={styles.list}>
-                {helpsList.map((help) => (
-                  <Link 
-                    key={help.id} 
-                    to={`/posts/${help.postId}`}
-                    style={styles.listItem}
-                  >
-                    <div style={styles.itemMain}>
-                      <div style={styles.itemHeader}>
-                        <span style={{
-                          ...styles.statusDot,
-                          backgroundColor: getStatusColor(help.status)
-                        }} />
-                        <span style={styles.statusText}>{getStatusLabel(help.status)}</span>
-                      </div>
-                      <div style={styles.itemTitle}>{help.postTitle}</div>
-                      <div style={styles.itemMeta}>
-                        Автор: <span style={styles.metaValue}>{help.receiverName}</span>
-                      </div>
-                    </div>
-                    <div style={styles.itemSide}>
-                      <span style={styles.itemDate}>{formatDate(help.acceptedAt)}</span>
-                    </div>
+          <section className="my-orders-stats" aria-label="Статистика моих заказов">
+            {stats.map(({ label, value, Icon }, index) => (
+              <article className={`my-orders-stat${index === 0 ? ' my-orders-stat--featured' : ''}`} key={label}>
+                <span className="my-orders-stat-icon" aria-hidden="true"><Icon size={17} /></span>
+                <strong>{loadError ? '—' : value.toLocaleString('ru-RU')}</strong>
+                <span>{label}</span>
+              </article>
+            ))}
+          </section>
+
+          <section className="my-orders-panel" aria-label="Публикации и отклики">
+            <div className="my-orders-tabs" role="tablist" aria-label="Тип заказов">
+              <button
+                type="button"
+                id="my-orders-tab-posts"
+                role="tab"
+                aria-selected={activeTab === 'posts'}
+                aria-controls="my-orders-results"
+                className={activeTab === 'posts' ? 'is-active' : ''}
+                onClick={() => setActiveTab('posts')}
+              >
+                Мои посты <span>{myPosts.length}</span>
+              </button>
+              <button
+                type="button"
+                id="my-orders-tab-helps"
+                role="tab"
+                aria-selected={activeTab === 'helps'}
+                aria-controls="my-orders-results"
+                className={activeTab === 'helps' ? 'is-active' : ''}
+                onClick={() => setActiveTab('helps')}
+              >
+                Мои отклики <span>{helpsList.length}</span>
+              </button>
+            </div>
+
+            <div
+              id="my-orders-results"
+              className="my-orders-content"
+              role="tabpanel"
+              aria-labelledby={`my-orders-tab-${activeTab}`}
+              tabIndex={0}
+            >
+              {loadError ? (
+                <div className="my-orders-state">
+                  <span className="my-orders-state-icon"><RefreshCw size={24} aria-hidden="true" /></span>
+                  <h2>Данные временно недоступны</h2>
+                  <p>Не удалось получить ваши публикации и отклики.</p>
+                  <button type="button" className="my-orders-secondary" onClick={() => void loadData()}>
+                    <RefreshCw size={16} aria-hidden="true" /> Повторить загрузку
+                  </button>
+                </div>
+              ) : activeTab === 'posts' ? (
+                myPosts.length === 0 ? (
+                  <div className="my-orders-state">
+                    <span className="my-orders-state-icon"><FileText size={25} aria-hidden="true" /></span>
+                    <h2>Пока нет публикаций</h2>
+                    <p>Создайте первый пост, чтобы рассказать сообществу, какая помощь вам нужна.</p>
+                    <Link className="my-orders-create my-orders-create--small" to="/posts/new">
+                      <Plus size={17} aria-hidden="true" /> Создать пост
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="my-orders-list">
+                    {myPosts.map((post) => (
+                      <article className="my-orders-card" key={post.id}>
+                        <div className="my-orders-card-main">
+                          <div className="my-orders-card-flags">
+                            <StatusPill status={post.status} />
+                            {isBoosted(post) && (
+                              <span className="my-orders-boosted">
+                                <Zap size={13} aria-hidden="true" />
+                                В топе{getBoostTimeRemaining(post) ? ` · ${getBoostTimeRemaining(post)}` : ''}
+                              </span>
+                            )}
+                          </div>
+                          <h2><Link to={`/posts/${post.id}`}>{post.title}</Link></h2>
+                          {post.description && <p className="my-orders-description">{post.description}</p>}
+                          <div className="my-orders-card-meta">
+                            {post.category && <span className="my-orders-category">{post.category}</span>}
+                            <time dateTime={post.createdAt}>
+                              <CalendarDays size={14} aria-hidden="true" />
+                              {getRelativeTime(post.createdAt)}
+                            </time>
+                          </div>
+                        </div>
+                        <div className="my-orders-card-actions" aria-label={`Действия для поста ${post.title}`}>
+                          <Link className="my-orders-action my-orders-action--quiet" to={`/posts/${post.id}/edit`}>
+                            Редактировать
+                          </Link>
+                          <Link className="my-orders-action my-orders-action--quiet" to={`/posts/${post.id}`}>
+                            Открыть <ArrowUpRight size={14} aria-hidden="true" />
+                          </Link>
+                          {post.status === 'OPEN' && (
+                            <button
+                              type="button"
+                              className="my-orders-action my-orders-action--boost"
+                              onClick={() => void handleBoostPost(post.id)}
+                              disabled={boostingPostId === post.id}
+                            >
+                              <Zap size={14} aria-hidden="true" />
+                              {boostingPostId === post.id ? 'Поднимаем…' : isBoosted(post) ? 'Продлить' : 'В топ'}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className="my-orders-action my-orders-action--danger"
+                            onClick={() => setDeletePostId(post.id)}
+                            disabled={deletingPostId === post.id}
+                          >
+                            <Trash2 size={14} aria-hidden="true" />
+                            {deletingPostId === post.id ? 'Удаляем…' : 'Удалить'}
+                          </button>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )
+              ) : helpsList.length === 0 ? (
+                <div className="my-orders-state">
+                  <span className="my-orders-state-icon"><HandHeart size={25} aria-hidden="true" /></span>
+                  <h2>Пока нет откликов</h2>
+                  <p>Найдите просьбу, на которую сможете откликнуться, и помогите участнику сообщества.</p>
+                  <Link className="my-orders-secondary" to="/posts">
+                    <TreeDeciduous size={16} aria-hidden="true" /> Перейти в каталог
                   </Link>
-                ))}
-              </div>
-            )
-          )}
-        </div>
-      </Card>
+                </div>
+              ) : (
+                <div className="my-orders-list">
+                  {helpsList.map((help) => (
+                    <article className="my-orders-card my-orders-card--help" key={help.id}>
+                      <div className="my-orders-card-main">
+                        <div className="my-orders-card-flags">
+                          <StatusPill status={help.status} type="help" />
+                          <span className="my-orders-help-label">Ваш отклик</span>
+                        </div>
+                        <h2><Link to={`/posts/${help.postId}`}>{help.postTitle}</Link></h2>
+                        <p className="my-orders-help-author">Автор заявки: <strong>{help.receiverName}</strong></p>
+                      </div>
+                      <div className="my-orders-card-actions my-orders-help-actions">
+                        <time dateTime={help.acceptedAt}>
+                          <CalendarDays size={14} aria-hidden="true" />
+                          {formatDate(help.acceptedAt)}
+                        </time>
+                        <Link className="my-orders-action my-orders-action--quiet" to={`/posts/${help.postId}`}>
+                          Открыть заявку <ArrowUpRight size={14} aria-hidden="true" />
+                        </Link>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+        </>
+      )}
 
       <Modal
-        isOpen={!!deletePostId}
+        isOpen={deletePostId !== null}
         onClose={() => setDeletePostId(null)}
         onConfirm={handleDeletePost}
-        title="Удаление поста"
-        message="Вы уверены, что хотите удалить этот пост? Это действие нельзя отменить."
+        title="Удалить публикацию?"
+        message="Пост будет удалён. Это действие нельзя отменить."
         confirmText="Удалить"
-        cancelText="Отмена"
+        cancelText="Оставить"
+        variant="danger"
       />
-    </div>
+    </main>
   );
-
-  function confirmDeletePost(postId: number) {
-    setDeletePostId(postId);
-  }
-};
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    maxWidth: 900,
-    margin: '0 auto',
-    padding: '24px',
-  },
-  backLink: {
-    color: theme.colors.accentLight,
-    textDecoration: 'none',
-    fontSize: '14px',
-    display: 'inline-block',
-    marginBottom: '16px',
-  },
-  mainCard: {
-    padding: '0',
-    overflow: 'hidden',
-  },
-  header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '24px 32px',
-    background: 'linear-gradient(180deg, rgba(34, 211, 238, 0.08) 0%, transparent 100%)',
-    borderBottom: `1px solid ${theme.colors.border}`,
-  },
-  title: {
-    color: theme.colors.text,
-    fontSize: '24px',
-    fontWeight: 700,
-    margin: 0,
-  },
-  statsRow: {
-    display: 'flex',
-    borderBottom: `1px solid ${theme.colors.border}`,
-  },
-  statBox: {
-    flex: 1,
-    padding: '20px',
-    textAlign: 'center',
-    borderRight: `1px solid ${theme.colors.border}`,
-  },
-  statValue: {
-    color: theme.colors.text,
-    fontSize: '28px',
-    fontWeight: 700,
-  },
-  statLabel: {
-    color: theme.colors.textMuted,
-    fontSize: '13px',
-    marginTop: '4px',
-  },
-  tabs: {
-    display: 'flex',
-    borderBottom: `1px solid ${theme.colors.border}`,
-  },
-  tab: {
-    flex: 1,
-    padding: '16px',
-    background: 'transparent',
-    border: 'none',
-    borderBottom: '2px solid transparent',
-    color: theme.colors.textMuted,
-    fontSize: '15px',
-    fontWeight: 500,
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-  },
-  tabActive: {
-    flex: 1,
-    padding: '16px',
-    background: 'transparent',
-    border: 'none',
-    borderBottom: '2px solid theme.colors.accent',
-    color: theme.colors.accent,
-    fontSize: '15px',
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
-  content: {
-    padding: '24px 32px',
-  },
-  emptyState: {
-    textAlign: 'center',
-    padding: '48px 24px',
-  },
-  emptyIcon: {
-    marginBottom: '16px',
-  },
-  emptyTitle: {
-    color: theme.colors.text,
-    fontSize: '18px',
-    fontWeight: 600,
-    marginBottom: '8px',
-  },
-  emptyDesc: {
-    color: theme.colors.textMuted,
-    fontSize: '15px',
-  },
-  list: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '12px',
-  },
-  listItem: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '20px',
-    background: 'rgba(255,255,255,0.04)',
-    borderRadius: theme.borderRadius.md,
-    border: `1px solid ${theme.colors.border}`,
-    textDecoration: 'none',
-    transition: 'all 0.2s ease',
-    position: 'relative',
-  },
-  itemMain: {
-    flex: 1,
-    minWidth: 0,
-  },
-  itemHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    marginBottom: '8px',
-    flexWrap: 'wrap',
-  },
-  boostedBadge: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '4px',
-    background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-    color: '#fff',
-    fontSize: '11px',
-    fontWeight: 600,
-    padding: '3px 8px',
-    borderRadius: '10px',
-  },
-  statusDot: {
-    width: '8px',
-    height: '8px',
-    borderRadius: '50%',
-  },
-  statusText: {
-    color: theme.colors.textMuted,
-    fontSize: '12px',
-    fontWeight: 500,
-    textTransform: 'uppercase',
-  },
-  itemTitle: {
-    color: theme.colors.text,
-    fontSize: '16px',
-    fontWeight: 600,
-    marginBottom: '6px',
-  },
-  itemDesc: {
-    color: theme.colors.textSecondary,
-    fontSize: '14px',
-    lineHeight: 1.5,
-  },
-  itemMeta: {
-    color: theme.colors.textMuted,
-    fontSize: '14px',
-  },
-  metaValue: {
-    color: theme.colors.accent,
-    fontWeight: 500,
-  },
-  itemSide: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'flex-end',
-    gap: '8px',
-    marginLeft: '24px',
-    flexShrink: 0,
-  },
-  itemCategory: {
-    color: theme.colors.accent,
-    fontSize: '13px',
-    fontWeight: 500,
-    background: 'rgba(34, 211, 238, 0.15)',
-    padding: '4px 10px',
-    borderRadius: '4px',
-  },
-  itemDate: {
-    color: theme.colors.textMuted,
-    fontSize: '13px',
-  },
-  deleteBtn: {
-    padding: '8px 14px',
-    fontSize: '13px',
-  },
-  boostBtn: {
-    padding: '8px 14px',
-    fontSize: '13px',
-    background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-    border: 'none',
-  },
 };

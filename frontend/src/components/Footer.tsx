@@ -15,6 +15,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Карта', path: '/map' },
   { label: 'Граф помощи', path: '/graph' },
   { label: 'Достижения', path: '/achievements' },
+  { label: 'Безопасность', path: '/safety' },
   { label: 'Мои заказы', path: '/my-orders' },
 ];
 

@@ -12,13 +12,13 @@ interface EmptyStateProps {
 }
 
 const VARIANT_CONFIG: Record<EmptyStateVariant, { IconComponent: React.ElementType; color: string; gradient: string }> = {
-  default: { IconComponent: Mail, color: theme.colors.accent, gradient: 'linear-gradient(135deg, rgba(34, 211, 238, 0.1) 0%, transparent 100%)' },
-  posts: { IconComponent: TreeDeciduous, color: '#10b981', gradient: 'linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, transparent 100%)' },
-  chats: { IconComponent: MessageCircle, color: '#3b82f6', gradient: 'linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, transparent 100%)' },
-  users: { IconComponent: Users, color: '#8b5cf6', gradient: 'linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, transparent 100%)' },
-  search: { IconComponent: Search, color: '#f59e0b', gradient: 'linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, transparent 100%)' },
-  error: { IconComponent: AlertTriangle, color: '#ef4444', gradient: 'linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, transparent 100%)' },
-  loading: { IconComponent: Hourglass, color: theme.colors.accent, gradient: 'linear-gradient(135deg, rgba(34, 211, 238, 0.1) 0%, transparent 100%)' },
+  default: { IconComponent: Mail, color: theme.colors.accent, gradient: 'linear-gradient(135deg, rgba(200, 245, 106, 0.1) 0%, transparent 100%)' },
+  posts: { IconComponent: TreeDeciduous, color: theme.colors.primary, gradient: 'linear-gradient(135deg, rgba(140, 203, 85, 0.1) 0%, transparent 100%)' },
+  chats: { IconComponent: MessageCircle, color: theme.colors.primary, gradient: 'linear-gradient(135deg, rgba(140, 203, 85, 0.1) 0%, transparent 100%)' },
+  users: { IconComponent: Users, color: theme.colors.primary, gradient: 'linear-gradient(135deg, rgba(140, 203, 85, 0.1) 0%, transparent 100%)' },
+  search: { IconComponent: Search, color: theme.colors.accent, gradient: 'linear-gradient(135deg, rgba(200, 245, 106, 0.1) 0%, transparent 100%)' },
+  error: { IconComponent: AlertTriangle, color: theme.colors.error, gradient: 'linear-gradient(135deg, rgba(255, 119, 119, 0.1) 0%, transparent 100%)' },
+  loading: { IconComponent: Hourglass, color: theme.colors.accent, gradient: 'linear-gradient(135deg, rgba(200, 245, 106, 0.1) 0%, transparent 100%)' },
 };
 
 export const EmptyState: React.FC<EmptyStateProps> = ({ 
@@ -31,9 +31,12 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   const IconComponent = config.IconComponent;
   
   return (
-    <div style={{ ...styles.container, background: config.gradient }}>
-      <div style={styles.iconWrapper}>
-        <IconComponent size={48} color={config.color} />
+    <div
+      style={{ ...styles.container, background: config.gradient }}
+      role={variant === 'error' ? 'alert' : 'status'}
+    >
+      <div style={styles.iconWrapper} aria-hidden="true">
+        <IconComponent size={40} color={config.color} />
       </div>
       <h3 style={styles.title}>{title}</h3>
       {description && <p style={styles.description}>{description}</p>}
@@ -48,32 +51,34 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: '80px 24px',
+    padding: 'clamp(32px, 7vw, 56px) 20px',
     textAlign: 'center',
     borderRadius: theme.borderRadius.lg,
-    margin: '20px 0',
+    margin: '16px 0',
+    border: '1px solid var(--forest-border)',
   },
   iconWrapper: {
-    width: '100px',
-    height: '100px',
+    width: '76px',
+    height: '76px',
     borderRadius: '50%',
     background: 'rgba(255,255,255,0.05)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: '24px',
-    boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+    marginBottom: '18px',
+    boxShadow: '0 4px 20px rgba(0,0,0,0.14)',
+    border: '1px solid var(--forest-border)',
   },
   title: {
     color: theme.colors.text,
-    fontSize: '22px',
+    fontSize: 'clamp(18px, 3vw, 21px)',
     fontWeight: 600,
     margin: '0 0 12px 0',
     maxWidth: '400px',
   },
   description: {
     color: theme.colors.textSecondary,
-    fontSize: '15px',
+    fontSize: '14px',
     margin: 0,
     maxWidth: '350px',
     lineHeight: 1.6,

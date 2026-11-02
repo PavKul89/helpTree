@@ -23,9 +23,9 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 const styles: Record<string, React.CSSProperties> = {
   container: {
     minHeight: '100vh',
-    background: '#071B13',
-    fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-    color: '#F5F8F1',
+    background: 'var(--forest-bg)',
+    fontFamily: 'var(--forest-font)',
+    color: 'var(--forest-text)',
   },
   overlay: {
     background: `
