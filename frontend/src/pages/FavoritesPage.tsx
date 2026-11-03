@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Bookmark } from 'lucide-react';
 import { postsApi } from '../api/postsApi';
 import { authApi } from '../api/authApi';
 import type { Post } from '../types';
 import { Card, Button, Spinner, EmptyState, Avatar, Modal } from '../components';
 import { getStatusColor, getStatusLabel } from '../components/StatusBadge';
-import { theme } from '../theme';
 import { getRelativeTime } from '../utils/dateUtils';
 
 export const FavoritesPage = () => {
@@ -92,23 +92,23 @@ export const FavoritesPage = () => {
           <article key={post.id} style={styles.cardLink}>
             <Card style={styles.postCard}>
               <div style={styles.postHeader}>
-                <div style={styles.postHeaderLeft}>
-                <span style={{
-                  ...styles.statusDot,
-                  backgroundColor: getStatusColor(post.status)
-                }} />
-                <span style={styles.statusText}>{getStatusLabel(post.status)}</span>
-                <span style={styles.category}>{post.category}</span>
-              </div>
-              <button
-                type="button"
-                onClick={(e) => toggleFavorite(post.id, e)}
-                style={styles.favoriteBtn}
-                title="Убрать из избранного"
-                aria-label={`Убрать заявку «${post.title}» из избранного`}
-              >
-                ★
-              </button>
+                <div style={styles.statusChip}>
+                  <span style={{
+                    ...styles.statusDot,
+                    backgroundColor: getStatusColor(post.status)
+                  }} />
+                  <span style={styles.statusText}>{getStatusLabel(post.status)}</span>
+                  <span style={styles.category}>{post.category}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={(e) => toggleFavorite(post.id, e)}
+                  style={styles.favoriteBtn}
+                  title="Убрать из избранного"
+                  aria-label={`Убрать заявку «${post.title}» из избранного`}
+                >
+                  <Bookmark size={16} fill="currentColor" aria-hidden="true" />
+                </button>
               </div>
               <Link to={`/posts/${post.id}`} style={styles.postTitleLink}>
                 <h3 style={styles.postTitle}>{post.title}</h3>
@@ -135,7 +135,7 @@ export const FavoritesPage = () => {
         <EmptyState 
           variant="posts"
           title="Избранное пусто" 
-          description="Добавьте посты в избранное, нажав на ☆"
+          description="Добавьте посты в избранное с помощью значка закладки"
           action={
             <Link to="/">
               <Button>К постам</Button>
@@ -162,41 +162,51 @@ const styles: Record<string, React.CSSProperties> = {
   container: {
     maxWidth: 1200,
     margin: '0 auto',
-    padding: '24px',
+    padding: '32px 24px 40px',
+    minHeight: '100vh',
+    background: 'linear-gradient(180deg, rgba(3,18,14,0.98) 0%, rgba(5,29,19,1) 100%)',
   },
   backLink: {
-    color: theme.colors.accentLight,
+    color: '#dfeee0',
     textDecoration: 'none',
-    fontSize: '14px',
+    fontSize: '15px',
     display: 'inline-block',
     marginBottom: '16px',
+    opacity: 0.9,
   },
   title: {
-    color: theme.colors.text,
-    fontSize: '28px',
+    color: '#f3f1e8',
+    fontSize: 'clamp(2.3rem, 3.2vw, 4rem)',
     fontWeight: 700,
-    margin: '0 0 16px 0',
+    margin: '0 0 18px 0',
+    letterSpacing: '-0.06em',
+    lineHeight: 1.1,
   },
   info: {
-    color: theme.colors.textMuted,
-    fontSize: '14px',
+    color: '#b7c5b8',
+    fontSize: '15px',
+    margin: 0,
   },
   headerRow: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: '24px',
+    marginBottom: '26px',
     flexWrap: 'wrap',
     gap: '12px',
   },
   clearBtn: {
     fontSize: '13px',
-    padding: '8px 16px',
+    fontWeight: 700,
+    padding: '10px 18px',
+    borderRadius: '14px',
+    boxShadow: '0 6px 18px rgba(239, 119, 119, 0.25)',
   },
   grid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 320px), 1fr))',
-    gap: '20px',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+    gap: '22px',
+    alignItems: 'stretch',
   },
   cardLink: {
     minWidth: 0,
@@ -206,47 +216,60 @@ const styles: Record<string, React.CSSProperties> = {
     height: '100%',
     display: 'flex',
     flexDirection: 'column',
+    background: 'rgba(12, 35, 27, 0.84)',
+    border: '1px solid rgba(160, 202, 160, 0.16)',
+    borderRadius: '28px',
+    boxShadow: '0 10px 30px rgba(0, 0, 0, 0.18)',
+    padding: '16px 18px 18px',
   },
   postHeader: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: '8px',
-    marginBottom: '12px',
-    flexWrap: 'wrap',
+    marginBottom: '14px',
   },
-  postHeaderLeft: {
+  statusChip: {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
+    minHeight: '36px',
+    padding: '6px 10px',
+    borderRadius: '12px',
+    background: 'rgba(178, 232, 134, 0.05)',
+    border: '1px solid rgba(178, 232, 134, 0.08)',
   },
   statusDot: {
     width: '8px',
     height: '8px',
     borderRadius: '50%',
+    boxShadow: '0 0 10px rgba(200, 245, 106, 0.35)',
   },
   statusText: {
-    color: theme.colors.textMuted,
-    fontSize: '12px',
+    color: '#dfeee0',
+    fontSize: '13px',
+    fontWeight: 600,
   },
   category: {
-    color: theme.colors.accent,
+    color: '#c8f56a',
     fontSize: '13px',
-    background: 'rgba(200, 245, 106, 0.1)',
-    padding: '4px 10px',
-    borderRadius: '4px',
+    fontWeight: 600,
+    background: 'rgba(200, 245, 106, 0.07)',
+    padding: '4px 8px',
+    borderRadius: '8px',
+    marginLeft: '2px',
   },
   favoriteBtn: {
     display: 'grid',
-    width: 40,
-    height: 40,
-    flex: '0 0 40px',
+    width: 36,
+    height: 36,
+    flex: '0 0 36px',
     placeItems: 'center',
-    background: 'rgba(200, 245, 106, 0.08)',
-    border: '1px solid var(--forest-border)',
-    borderRadius: 'var(--forest-radius-sm)',
-    color: 'var(--forest-lime)',
-    fontSize: '20px',
+    background: 'rgba(200, 245, 106, 0.06)',
+    border: '1px solid rgba(178, 232, 134, 0.12)',
+    borderRadius: '10px',
+    color: '#dffb8a',
+    fontSize: '18px',
     padding: 0,
     transition: 'transform 0.18s ease, background 0.18s ease',
   },
@@ -255,30 +278,36 @@ const styles: Record<string, React.CSSProperties> = {
     textDecoration: 'none',
   },
   postTitle: {
-    color: theme.colors.text,
-    fontSize: '18px',
-    fontWeight: 600,
+    color: '#f3f1e8',
+    fontSize: 'clamp(1.3rem, 2vw, 2.1rem)',
+    fontWeight: 700,
     margin: '0 0 10px 0',
+    letterSpacing: '-0.05em',
+    lineHeight: 1.2,
   },
   postDescription: {
-    color: theme.colors.textSecondary,
+    color: '#c9d8cb',
     fontSize: '14px',
     flex: 1,
-    margin: '0 0 12px 0',
-    lineHeight: 1.5,
+    margin: '0 0 14px 0',
+    lineHeight: 1.55,
+    minHeight: '44px',
   },
   postFooter: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginTop: 'auto',
+    gap: '10px',
   },
   author: {
     display: 'flex',
     alignItems: 'center',
+    minWidth: 0,
   },
   date: {
-    color: theme.colors.textMuted,
+    color: '#b7c5b8',
     fontSize: '12px',
+    whiteSpace: 'nowrap',
   },
 };

@@ -11,7 +11,7 @@ import {
   Trophy,
   ClipboardList,
   User,
-  Star,
+  Bookmark,
   Package,
   MessageCircle,
   Bell,
@@ -338,7 +338,7 @@ export const Navbar: React.FC = () => {
                     </Link>
                   )}
                   <Link to="/favorites" className="navbar-dropdown-item" onClick={closeDropdown}>
-                    <Star size={16} aria-hidden="true" /> Избранное
+                    <Bookmark size={16} aria-hidden="true" /> Избранное
                   </Link>
                   <Link to="/my-orders" className="navbar-dropdown-item" onClick={closeDropdown}>
                     <Package size={16} aria-hidden="true" /> Мои заказы
@@ -460,7 +460,7 @@ export const Navbar: React.FC = () => {
                 </Link>
               )}
               <Link to="/favorites" className="navbar-mobile-link" onClick={closeDropdown}>
-                <Star size={16} aria-hidden="true" /> Избранное
+                <Bookmark size={16} aria-hidden="true" /> Избранное
               </Link>
               <Link to="/my-orders" className="navbar-mobile-link" onClick={closeDropdown}>
                 <Package size={16} aria-hidden="true" /> Мои заказы

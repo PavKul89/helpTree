@@ -3,10 +3,10 @@ import { Link, useParams } from 'react-router-dom';
 import { ClipboardList, FileText, User, HandHeart, Gift, Plus, Trophy, Ban } from 'lucide-react';
 import { activityApi, Activity } from '../api/activityApi';
 import { useAuth } from '../context/AuthContext';
-import { Card } from '../components/Card';
 import { Spinner } from '../components/Spinner';
 import { theme } from '../theme';
 import { getRelativeTime } from '../utils/dateUtils';
+import { getStatusLabel } from '../utils/statusHelpers';
 
 const ACTIVITY_ICONS: Record<string, React.ElementType> = {
   'HELP_GIVEN': HandHeart,
@@ -70,17 +70,17 @@ export const ActivityPage = () => {
   const getStatusBadge = (status?: string) => {
     if (!status) return null;
     const colors: Record<string, string> = {
-      'OPEN': '#22c55e',
-      'IN_PROGRESS': '#f59e0b',
-      'COMPLETED': '#06b6d4',
-      'CANCELLED': '#ef4444',
+      OPEN: '#22c55e',
+      IN_PROGRESS: '#f59e0b',
+      COMPLETED: '#06b6d4',
+      CANCELLED: '#ef4444',
     };
     return (
       <span style={{
         ...styles.statusBadge,
         backgroundColor: colors[status] || '#6b7280',
       }}>
-        {status}
+        {getStatusLabel(status)}
       </span>
     );
   };
@@ -90,8 +90,8 @@ export const ActivityPage = () => {
   return (
     <div style={styles.container}>
       <Link to="/" style={styles.backLink}>← На главную</Link>
-      
-      <Card style={styles.mainCard}>
+
+      <div style={styles.mainCard}>
         <div style={styles.header}>
           <h1 style={styles.title}>История активности</h1>
           {isOwnProfile && (
@@ -111,20 +111,22 @@ export const ActivityPage = () => {
           ) : (
             <div style={styles.timeline}>
               {activities.map((activity, index) => (
-                <div key={index} style={styles.activityItem}>
+                <div key={`${activity.type}-${activity.timestamp}-${index}`} style={styles.activityItem}>
                   <div style={styles.timelineLine}>
-                    <div style={{
-                      ...styles.timelineDot,
-                      backgroundColor: getActivityColor(activity.type),
-                    }}>
+                    <div
+                      style={{
+                        ...styles.timelineDot,
+                        backgroundColor: getActivityColor(activity.type),
+                      }}
+                    >
                       {(() => {
                         const IconComp = ACTIVITY_ICONS[activity.type];
-                        return IconComp ? <IconComp size={18} color="#fff" /> : <Trophy size={18} color="#fff" />;
+                        return IconComp ? <IconComp size={16} color="#fff" /> : <Trophy size={16} color="#fff" />;
                       })()}
                     </div>
                     {index < activities.length - 1 && <div style={styles.timelineConnector} />}
                   </div>
-                  
+
                   <div style={styles.activityContent}>
                     <div style={styles.activityHeader}>
                       <span style={{
@@ -137,18 +139,18 @@ export const ActivityPage = () => {
                         {getRelativeTime(activity.timestamp)}
                       </span>
                     </div>
-                    
+
                     <div style={styles.activityTitle}>{activity.title}</div>
-                    
+
                     {activity.description && (
                       <div style={styles.activityDescription}>
                         {activity.description}
                       </div>
                     )}
-                    
+
                     <div style={styles.activityMeta}>
                       {activity.relatedPostTitle && (
-                        <Link 
+                        <Link
                           to={`/posts/${activity.relatedPostId}`}
                           style={styles.metaLink}
                         >
@@ -156,9 +158,9 @@ export const ActivityPage = () => {
                           {activity.relatedPostTitle}
                         </Link>
                       )}
-                      
+
                       {activity.relatedUserName && activity.type !== 'ACHIEVEMENT_EARNED' && (
-                        <Link 
+                        <Link
                           to={`/profile/${activity.relatedUserId}`}
                           style={styles.metaLink}
                         >
@@ -166,9 +168,9 @@ export const ActivityPage = () => {
                           {activity.relatedUserName}
                         </Link>
                       )}
-                      
+
                       {activity.status && getStatusBadge(activity.status)}
-                      
+
                       {activity.category && (
                         <span style={styles.categoryBadge}>
                           {activity.category}
@@ -181,52 +183,59 @@ export const ActivityPage = () => {
             </div>
           )}
         </div>
-      </Card>
+      </div>
     </div>
   );
 };
 
 const styles: Record<string, React.CSSProperties> = {
   container: {
-    maxWidth: 800,
+    maxWidth: 980,
     margin: '0 auto',
-    padding: '24px',
+    padding: '28px 24px 40px',
+    color: '#f5f4ea',
   },
   backLink: {
-    color: theme.colors.accentLight,
+    color: '#dfeee0',
     textDecoration: 'none',
-    fontSize: '14px',
+    fontSize: '15px',
     display: 'inline-block',
     marginBottom: '16px',
+    opacity: 0.9,
   },
   mainCard: {
-    padding: '0',
+    background: 'linear-gradient(155deg, rgba(11, 42, 31, 0.92), rgba(8, 35, 26, 0.98))',
+    border: '1px solid rgba(180, 225, 155, 0.18)',
+    borderRadius: '24px',
     overflow: 'hidden',
+    boxShadow: '0 18px 44px rgba(0, 0, 0, 0.18)',
   },
   header: {
-    padding: '24px 32px',
-    borderBottom: `1px solid ${theme.colors.border}`,
-    background: 'linear-gradient(180deg, rgba(6, 182, 212, 0.08) 0%, transparent 100%)',
+    padding: '26px 32px 20px',
+    borderBottom: '1px solid rgba(180, 225, 155, 0.14)',
+    background: 'linear-gradient(180deg, rgba(19, 63, 52, 0.15), rgba(0,0,0,0))',
   },
   title: {
-    color: theme.colors.text,
-    fontSize: '24px',
+    color: '#f5f4ea',
+    fontSize: 'clamp(2.2rem, 4vw, 3rem)',
     fontWeight: 700,
+    lineHeight: 1.1,
+    letterSpacing: '-0.06em',
     margin: 0,
   },
   subtitle: {
-    color: theme.colors.textMuted,
-    fontSize: '14px',
-    marginTop: '4px',
+    color: '#b7c5b8',
+    fontSize: '15px',
+    marginTop: '10px',
     display: 'block',
   },
   content: {
-    padding: '24px 32px',
+    padding: '16px 20px 12px 20px',
   },
   emptyState: {
     textAlign: 'center',
-    padding: '40px',
-    color: theme.colors.textMuted,
+    padding: '40px 20px 30px',
+    color: '#b7c5b8',
     fontSize: '15px',
   },
   emptyIcon: {
@@ -234,12 +243,12 @@ const styles: Record<string, React.CSSProperties> = {
     opacity: 0.8,
   },
   emptyHint: {
-    color: theme.colors.textMuted,
+    color: '#b7c5b8',
     fontSize: '14px',
     marginTop: '8px',
-    maxWidth: 400,
+    maxWidth: 420,
     margin: '8px auto 0',
-    lineHeight: 1.5,
+    lineHeight: 1.6,
   },
   timeline: {
     display: 'flex',
@@ -248,91 +257,101 @@ const styles: Record<string, React.CSSProperties> = {
   activityItem: {
     display: 'flex',
     gap: '16px',
+    minHeight: '110px',
   },
   timelineLine: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    width: '40px',
+    width: '36px',
     flexShrink: 0,
   },
   timelineDot: {
-    width: '36px',
-    height: '36px',
+    width: '32px',
+    height: '32px',
     borderRadius: '50%',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontSize: '18px',
     flexShrink: 0,
-    boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+    boxShadow: '0 0 0 6px rgba(200, 245, 106, 0.05)',
+    border: '1px solid rgba(255,255,255,0.08)',
   },
   timelineConnector: {
     width: '2px',
     flex: 1,
     minHeight: '20px',
-    backgroundColor: theme.colors.border,
+    background: 'linear-gradient(180deg, rgba(180, 225, 155, 0.18), rgba(180, 225, 155, 0.08))',
     marginTop: '8px',
   },
   activityContent: {
     flex: 1,
-    paddingBottom: '24px',
+    padding: '2px 0 20px',
   },
   activityHeader: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: '12px',
     marginBottom: '4px',
   },
   activityType: {
     fontSize: '12px',
-    fontWeight: 600,
+    fontWeight: 700,
     textTransform: 'uppercase',
-    letterSpacing: '0.5px',
+    letterSpacing: '0.08em',
   },
   activityTime: {
-    color: theme.colors.textMuted,
+    color: '#b7c5b8',
     fontSize: '12px',
+    whiteSpace: 'nowrap',
   },
   activityTitle: {
-    color: theme.colors.text,
-    fontSize: '16px',
-    fontWeight: 500,
-    marginBottom: '4px',
+    color: '#f5f4ea',
+    fontSize: '17px',
+    fontWeight: 600,
+    lineHeight: 1.4,
+    marginBottom: '6px',
   },
   activityDescription: {
-    color: theme.colors.textSecondary,
+    color: '#c9d8cb',
     fontSize: '14px',
-    marginBottom: '8px',
-    lineHeight: 1.4,
+    marginBottom: '10px',
+    lineHeight: 1.5,
   },
   activityMeta: {
     display: 'flex',
     flexWrap: 'wrap',
     gap: '8px',
     alignItems: 'center',
+    minHeight: '20px',
   },
   metaLink: {
-    color: theme.colors.accentLight,
+    color: '#dfeee0',
     textDecoration: 'none',
     fontSize: '13px',
-    transition: 'opacity 0.2s',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    opacity: 0.96,
   },
   statusBadge: {
-    padding: '2px 8px',
-    borderRadius: '4px',
-    fontSize: '11px',
-    fontWeight: 600,
+    padding: '3px 8px',
+    borderRadius: '6px',
+    fontSize: '10px',
+    fontWeight: 700,
     color: '#fff',
     textTransform: 'uppercase',
+    letterSpacing: '0.04em',
   },
   categoryBadge: {
-    padding: '2px 8px',
-    borderRadius: '4px',
-    fontSize: '11px',
-    fontWeight: 500,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    color: theme.colors.textMuted,
+    padding: '3px 8px',
+    borderRadius: '6px',
+    fontSize: '10px',
+    fontWeight: 600,
+    background: 'rgba(255,255,255,0.06)',
+    color: '#b7c5b8',
     textTransform: 'uppercase',
+    letterSpacing: '0.06em',
   },
 };

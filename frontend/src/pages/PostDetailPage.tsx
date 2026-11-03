@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
+  Bookmark,
   Ban,
   CalendarDays,
   Check,
@@ -67,6 +68,7 @@ export const PostDetailPage = () => {
   const [showDeletePostModal, setShowDeletePostModal] = useState(false);
   const [showFavoriteModal, setShowFavoriteModal] = useState(false);
   const [isBoosting, setIsBoosting] = useState(false);
+  const isStartingChatRef = useRef(false);
   const [isCommenting, setIsCommenting] = useState(false);
   const [isReplying, setIsReplying] = useState(false);
   const [deletingCommentId, setDeletingCommentId] = useState<number | null>(null);
@@ -311,12 +313,15 @@ export const PostDetailPage = () => {
   };
 
   const handleStartChat = async () => {
-    if (!post) return;
+    if (!post || isStartingChatRef.current) return;
+    isStartingChatRef.current = true;
     try {
       const chat = await chatApi.createChat({ participantId: post.userId });
       navigate(`/chats/${chat.id}`);
     } catch {
       showToast('Не удалось открыть чат. Попробуйте ещё раз.', 'error');
+    } finally {
+      isStartingChatRef.current = false;
     }
   };
 
@@ -429,8 +434,13 @@ export const PostDetailPage = () => {
               </Button>
             )}
             {user && user.id !== post.userId && (
-              <Button variant="outline" onClick={() => void handleStartChat()}>
-                <MessageCircle size={16} aria-hidden="true" /> Написать
+              <Button
+                variant="outline"
+                onClick={() => void handleStartChat()}
+                disableRipple
+              >
+                <MessageCircle size={16} aria-hidden="true" />
+                Написать
               </Button>
             )}
             {currentUserId && currentUserId !== post.userId && (
@@ -440,7 +450,12 @@ export const PostDetailPage = () => {
                 onClick={() => void handleToggleFavorite()}
                 aria-pressed={isFavorite}
               >
-                <span aria-hidden="true">{isFavorite ? '★' : '☆'}</span>
+                <Bookmark
+                  size={15}
+                  aria-hidden="true"
+                  fill={isFavorite ? 'currentColor' : 'none'}
+                  strokeWidth={isFavorite ? 2.5 : 2}
+                />
                 {isFavorite ? 'В избранном' : 'В избранное'}
               </button>
             )}
@@ -496,9 +511,9 @@ export const PostDetailPage = () => {
         onClose={() => setShowFavoriteModal(false)}
         onConfirm={() => setShowFavoriteModal(false)}
         title="Нельзя добавить в избранное"
-        message="В избранное можно добавлять только открытые заявки."
+        message={'В избранное можно добавлять только\nоткрытые заявки.'}
         confirmText="Понятно"
-        cancelText=""
+        cancelText={null}
       />
 
       {helps.length > 0 && (

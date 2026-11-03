@@ -221,7 +221,7 @@
 }
 
 .profile-button:hover:not(:disabled) {
-  transform: translateY(-1px);
+  transform: none;
 }
 
 .profile-button:disabled {

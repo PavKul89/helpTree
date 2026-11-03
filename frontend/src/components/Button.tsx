@@ -4,6 +4,7 @@ import './Button.css';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'outline' | 'danger';
+  disableRipple?: boolean;
   children: React.ReactNode;
 }
 
@@ -15,6 +16,7 @@ interface Ripple {
 
 export const Button: React.FC<ButtonProps> = ({ 
   variant = 'primary', 
+  disableRipple = false,
   children, 
   style,
   onClick,
@@ -26,17 +28,19 @@ export const Button: React.FC<ButtonProps> = ({
   const variantStyles = getVariantStyles(variant, isHovered);
   
   const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
-    const button = e.currentTarget;
-    const rect = button.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    const id = Date.now();
-    
-    setRipples([...ripples, { x, y, id }]);
-    
-    setTimeout(() => {
-      setRipples(prev => prev.filter(r => r.id !== id));
-    }, 600);
+    if (!disableRipple) {
+      const button = e.currentTarget;
+      const rect = button.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const id = Date.now();
+
+      setRipples((current) => [...current, { x, y, id }]);
+
+      setTimeout(() => {
+        setRipples((current) => current.filter((ripple) => ripple.id !== id));
+      }, 600);
+    }
     
     if (onClick) {
       onClick(e);
@@ -83,6 +87,7 @@ const getVariantStyles = (variant: string, isHovered: boolean): React.CSSPropert
     case 'outline':
       return isHovered ? {
         background: 'rgba(200, 245, 106, 0.1)',
+        border: `1px solid ${theme.colors.border}`,
         borderColor: 'var(--forest-lime)',
         color: 'var(--forest-lime)',
       } : {

@@ -319,10 +319,11 @@
   transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease;
 }
 
-.post-detail-favorite > span {
+.post-detail-favorite svg {
+  width: 15px;
+  height: 15px;
   color: var(--forest-lime);
-  font-size: 17px;
-  line-height: 1;
+  flex: 0 0 auto;
 }
 
 .post-detail-favorite:hover,
@@ -330,6 +331,7 @@
   border-color: rgba(200, 245, 106, 0.34);
   background: rgba(200, 245, 106, 0.08);
   color: var(--forest-lime);
+  transform: none;
 }
 
 .post-detail-notice {

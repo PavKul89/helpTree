@@ -9,7 +9,7 @@ interface ModalProps {
   title: string;
   message: string;
   confirmText?: string;
-  cancelText?: string;
+  cancelText?: string | null;
   variant?: 'danger' | 'primary';
 }
 
@@ -88,6 +88,8 @@ export const Modal: React.FC<ModalProps> = ({
     onClose();
   };
 
+  const hasCancel = Boolean(cancelText && cancelText.trim());
+
   if (!isOpen) return null;
 
   return (
@@ -106,18 +108,23 @@ export const Modal: React.FC<ModalProps> = ({
         aria-describedby="confirmation-modal-message"
         tabIndex={-1}
       >
-        <div style={styles.icon}>
-          {variant === 'danger' ? <AlertTriangle size={48} /> : <Info size={48} />}
+        <div style={styles.iconWrap}>
+          <div style={styles.icon}>
+            {variant === 'danger' ? <AlertTriangle size={42} strokeWidth={2.5} /> : <Info size={42} strokeWidth={2.5} />}
+          </div>
         </div>
         <h3 id="confirmation-modal-title" style={styles.title}>{title}</h3>
         <p id="confirmation-modal-message" style={styles.message}>{message}</p>
         <div style={styles.buttons}>
-          <Button variant="outline" onClick={handleClose}>
-            {cancelText}
-          </Button>
+          {hasCancel && (
+            <Button variant="outline" onClick={handleClose} style={styles.cancelButton}>
+              {cancelText}
+            </Button>
+          )}
           <Button 
             variant={variant} 
             onClick={handleConfirm}
+            style={styles.confirmButton}
           >
             {confirmText}
           </Button>
@@ -134,7 +141,7 @@ const styles: Record<string, React.CSSProperties> = {
     left: 0,
     right: 0,
     bottom: 0,
-    background: 'rgba(0, 0, 0, 0.8)',
+    background: 'rgba(0, 0, 0, 0.72)',
     backdropFilter: 'blur(8px)',
     display: 'flex',
     alignItems: 'center',
@@ -143,35 +150,66 @@ const styles: Record<string, React.CSSProperties> = {
     animation: 'fadeIn 0.2s ease',
   },
   modal: {
-    background: 'linear-gradient(160deg, var(--forest-surface) 0%, var(--forest-bg-secondary) 100%)',
-    borderRadius: 'var(--forest-radius-lg)',
-    padding: 'clamp(20px, 5vw, 32px)',
-    maxWidth: '400px',
-    width: 'min(400px, calc(100vw - 32px))',
+    background: 'linear-gradient(155deg, rgba(12, 40, 31, 0.96), rgba(8, 31, 24, 0.98))',
+    borderRadius: '22px',
+    padding: '28px 26px 24px',
+    maxWidth: '560px',
+    width: 'min(560px, calc(100vw - 32px))',
     textAlign: 'center',
     boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)',
-    border: '1px solid var(--forest-border)',
+    border: '1px solid rgba(180, 225, 155, 0.18)',
     animation: 'slideUp 0.3s ease',
   },
+  iconWrap: {
+    display: 'flex',
+    justifyContent: 'center',
+    marginBottom: '18px',
+  },
   icon: {
-    marginBottom: '16px',
-    color: '#f59e0b',
+    display: 'grid',
+    placeItems: 'center',
+    width: '72px',
+    height: '72px',
+    borderRadius: '18px',
+    color: '#f5b93c',
+    background: 'rgba(200, 245, 106, 0.04)',
   },
   title: {
-    color: '#fff',
-    fontSize: '20px',
+    color: '#f3f1e8',
+    fontSize: 'clamp(2rem, 2.5vw, 2.5rem)',
+    lineHeight: 1.2,
+    letterSpacing: '-0.05em',
     fontWeight: 700,
     margin: '0 0 12px 0',
   },
   message: {
-    color: 'rgba(255, 255, 255, 0.8)',
-    fontSize: '15px',
-    margin: '0 0 24px 0',
+    color: '#c9d8cb',
+    fontSize: '16px',
+    margin: '0 0 20px 0',
     lineHeight: 1.5,
+    whiteSpace: 'pre-line',
   },
   buttons: {
     display: 'flex',
-    gap: '12px',
+    alignItems: 'center',
     justifyContent: 'center',
+    gap: '12px',
+  },
+  cancelButton: {
+    minWidth: '112px',
+    minHeight: '52px',
+    borderRadius: '12px',
+    borderColor: 'rgba(255,255,255,0.18)',
+    background: 'rgba(255,255,255,0.02)',
+    color: '#f3f1e8',
+  },
+  confirmButton: {
+    minWidth: '140px',
+    minHeight: '52px',
+    borderRadius: '12px',
+    boxShadow: '0 6px 18px rgba(239, 119, 119, 0.22)',
+    fontSize: '15px',
+    fontWeight: 700,
+    padding: '0 22px',
   },
 };
