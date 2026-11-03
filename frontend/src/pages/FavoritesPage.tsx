@@ -7,6 +7,7 @@ import type { Post } from '../types';
 import { Card, Button, Spinner, EmptyState, Avatar, Modal } from '../components';
 import { getStatusColor, getStatusLabel } from '../components/StatusBadge';
 import { getRelativeTime } from '../utils/dateUtils';
+import './FavoritesPage.css';
 
 export const FavoritesPage = () => {
   const [posts, setPosts] = useState<Post[]>([]);
@@ -72,16 +73,20 @@ export const FavoritesPage = () => {
   if (loading) return <Spinner message="Загрузка избранного..." />;
 
   return (
-    <div style={styles.container}>
+    <div className="favorites-page">
       <Link to="/" style={styles.backLink}>← На главную</Link>
-      <h1 className="page-title" style={styles.title}>Избранное</h1>
+      <h1 className="favorites-title">Избранное</h1>
 
       <div style={styles.headerRow}>
         <div style={styles.info}>
           У вас {posts.length} избранных постов
         </div>
         {posts.length > 0 && (
-          <Button onClick={clearAllFavorites} variant="danger" style={styles.clearBtn}>
+          <Button
+            onClick={clearAllFavorites}
+            variant="danger"
+            className="favorites-clear-button"
+          >
             Удалить все
           </Button>
         )}
@@ -120,7 +125,16 @@ export const FavoritesPage = () => {
               </p>
               <div style={styles.postFooter}>
                 <div style={styles.author}>
-                  <Avatar name={post.authorName} avatarUrl={post.authorAvatarUrl} size="small" showName withRating={post.authorRating} clickable userId={post.userId} />
+                  <Avatar
+                    name={post.authorName}
+                    avatarUrl={post.authorAvatarUrl}
+                    size="small"
+                    showName
+                    withRating={post.authorRating}
+                    clickable
+                    userId={post.userId}
+                    tone="forest"
+                  />
                 </div>
                 <span style={styles.date}>
                   {getRelativeTime(post.createdAt)}
@@ -159,13 +173,6 @@ export const FavoritesPage = () => {
 };
 
 const styles: Record<string, React.CSSProperties> = {
-  container: {
-    maxWidth: 1200,
-    margin: '0 auto',
-    padding: '32px 24px 40px',
-    minHeight: '100vh',
-    background: 'linear-gradient(180deg, rgba(3,18,14,0.98) 0%, rgba(5,29,19,1) 100%)',
-  },
   backLink: {
     color: '#dfeee0',
     textDecoration: 'none',
@@ -173,14 +180,6 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'inline-block',
     marginBottom: '16px',
     opacity: 0.9,
-  },
-  title: {
-    color: '#f3f1e8',
-    fontSize: 'clamp(2.3rem, 3.2vw, 4rem)',
-    fontWeight: 700,
-    margin: '0 0 18px 0',
-    letterSpacing: '-0.06em',
-    lineHeight: 1.1,
   },
   info: {
     color: '#b7c5b8',
@@ -194,13 +193,6 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: '26px',
     flexWrap: 'wrap',
     gap: '12px',
-  },
-  clearBtn: {
-    fontSize: '13px',
-    fontWeight: 700,
-    padding: '10px 18px',
-    borderRadius: '14px',
-    boxShadow: '0 6px 18px rgba(239, 119, 119, 0.25)',
   },
   grid: {
     display: 'grid',

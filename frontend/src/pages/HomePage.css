@@ -53,6 +53,67 @@
   background-size: cover;
   background-position: center 58%;
   z-index: 0;
+  animation: home-hero-image-enter 0.55s ease both;
+}
+
+@keyframes home-hero-image-enter {
+  from {
+    opacity: 0.45;
+    transform: scale(1.015);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-hero-photo {
+    animation: none;
+  }
+}
+
+.home-hero-carousel {
+  position: absolute;
+  z-index: 3;
+  top: 50%;
+  right: 24px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px;
+  border: 1px solid rgba(200, 245, 106, 0.22);
+  border-radius: 999px;
+  background: rgba(7, 27, 19, 0.62);
+  color: var(--forest-text);
+  transform: translateY(-50%);
+  backdrop-filter: blur(8px);
+}
+
+.home-hero-carousel-button {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--forest-lime);
+  transition: background-color 0.18s ease, border-color 0.18s ease;
+}
+
+.home-hero-carousel-button:hover {
+  border-color: rgba(200, 245, 106, 0.28);
+  background: rgba(200, 245, 106, 0.12);
+}
+
+.home-hero-carousel-count {
+  min-width: 42px;
+  color: var(--forest-text-2);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
 }
 
 .home-hero-shade {
@@ -1158,6 +1219,47 @@
   color: var(--forest-on-light-2);
 }
 
+.home-help-reciprocity {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  margin-top: 20px;
+  border: 1px solid rgba(140, 203, 85, 0.32);
+  border-radius: 14px;
+  background: rgba(200, 245, 106, 0.12);
+}
+
+.home-help-reciprocity-icon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  place-items: center;
+  border: 1px solid rgba(140, 203, 85, 0.3);
+  border-radius: 11px;
+  background: rgba(200, 245, 106, 0.24);
+  color: #3f5d12;
+}
+
+.home-help-reciprocity h3 {
+  margin: 1px 0 4px;
+  color: var(--forest-on-light);
+  font-size: 14px;
+  font-weight: 750;
+}
+
+.home-help-reciprocity p {
+  margin: 0;
+  color: var(--forest-on-light-2);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.home-help-reciprocity strong {
+  color: var(--forest-on-light);
+}
+
 .home-modal-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1235,6 +1337,13 @@
     background-position: 68% center;
   }
 
+  .home-hero-carousel {
+    top: auto;
+    right: 16px;
+    bottom: 14px;
+    transform: none;
+  }
+
   .home-hero-shade {
     background:
       linear-gradient(
@@ -1248,7 +1357,7 @@
 
   .home-hero-inner {
     align-items: flex-end;
-    padding: 24px 22px 28px;
+    padding: 24px 22px 76px;
   }
 
   .home-hero-content {

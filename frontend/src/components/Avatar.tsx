@@ -10,6 +10,7 @@ interface AvatarProps {
   withRating?: number;
   clickable?: boolean;
   userId?: number;
+  tone?: 'default' | 'forest';
 }
 
 const SIZES = {
@@ -51,7 +52,8 @@ export const Avatar: React.FC<AvatarProps> = ({
   showName = false,
   withRating,
   clickable = false,
-  userId
+  userId,
+  tone = 'default',
 }) => {
   const navigate = useNavigate();
   const sizeConfig = SIZES[size];
@@ -106,7 +108,7 @@ export const Avatar: React.FC<AvatarProps> = ({
       };
 
   const nameStyle: React.CSSProperties = {
-    color: theme.colors.text,
+    color: tone === 'forest' ? 'var(--forest-text-secondary)' : theme.colors.text,
     fontSize: size === 'small' ? '13px' : '15px',
     fontWeight: 500,
     cursor: clickable ? 'pointer' : 'default',
@@ -114,7 +116,7 @@ export const Avatar: React.FC<AvatarProps> = ({
   };
 
   const ratingStyle: React.CSSProperties = {
-    color: '#fbbf24',
+    color: tone === 'forest' ? 'var(--forest-lime)' : '#fbbf24',
     fontSize: '12px',
     fontWeight: 600,
     marginLeft: '2px',
@@ -123,7 +125,9 @@ export const Avatar: React.FC<AvatarProps> = ({
   const handleMouseEnter = (e: React.MouseEvent<HTMLDivElement>) => {
     if (clickable) {
       e.currentTarget.style.transform = 'scale(1.05)';
-      e.currentTarget.style.boxShadow = '0 0 10px rgba(34, 211, 238, 0.5)';
+      e.currentTarget.style.boxShadow = tone === 'forest'
+        ? '0 0 10px rgba(140, 203, 85, 0.35)'
+        : '0 0 10px rgba(34, 211, 238, 0.5)';
     }
   };
 
@@ -144,7 +148,7 @@ export const Avatar: React.FC<AvatarProps> = ({
         {!avatarUrl && initials}
       </div>
       {showName && (
-        <span style={clickable ? { ...nameStyle, color: '#22d3ee' } : nameStyle}>
+        <span style={clickable && tone === 'default' ? { ...nameStyle, color: '#22d3ee' } : nameStyle}>
           {name}
           {withRating !== undefined && <span style={ratingStyle}> ★ {withRating}</span>}
         </span>

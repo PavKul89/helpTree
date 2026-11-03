@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   ArrowRight,
   Bookmark,
+  ChevronLeft,
   ChevronRight,
   CircleCheckBig,
   ClipboardList,
@@ -35,6 +36,28 @@ import type { Post, UserPublic } from '../types';
 import './HomePage.css';
 
 const HOME_CATEGORIES = CATEGORIES.slice(0, 10);
+const HERO_IMAGES = [
+  '1593113598332-cd288d649433',
+  '1531206715517-5c0ba140b2b8',
+  '1559027615-cd4628902d4a',
+  '1469571486292-0ba58a3f068b',
+  '1491438590914-bc09fcaaf77a',
+  '1529156069898-49953e39b3ac',
+  '1511632765486-a01980e01a18',
+  '1488521787991-ed7bbaae773c',
+  '1509099836639-18ba1795216d',
+  '1542810634-71277d95dcbb',
+  '1527529482837-4698179dc6ce',
+  '1517245386807-bb43f82c33c4',
+  '1556761175-b413da4baf72',
+  '1528605248644-14dd04022da1',
+  '1509062522246-3755977927d7',
+  '1500530855697-b586d89ba3ee',
+  '1466692476868-aef1dfb1e735',
+  '1497250681960-ef046c08a56e',
+  '1501004318641-b39e6451bec6',
+  '1416879595882-3373a0480b5b',
+].map((id) => `https://images.unsplash.com/photo-${id}?auto=format&fit=crop&w=1920&q=85`);
 
 const STATUS_CLASS: Record<Post['status'], string> = {
   OPEN: 'home-status--open',
@@ -85,6 +108,19 @@ export const HomePage = () => {
   const [community, setCommunity] = useState<UserPublic[]>([]);
   const [favorites, setFavorites] = useState<number[]>([]);
   const [howOpen, setHowOpen] = useState(false);
+  const [heroImageIndex, setHeroImageIndex] = useState(0);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setHeroImageIndex((current) => (current + 1) % HERO_IMAGES.length);
+    }, 30_000);
+    return () => window.clearTimeout(timer);
+  }, [heroImageIndex]);
+
+  useEffect(() => {
+    const nextImage = new Image();
+    nextImage.src = HERO_IMAGES[(heroImageIndex + 1) % HERO_IMAGES.length];
+  }, [heroImageIndex]);
 
   const loadStats = useCallback(async () => {
     setStatsLoading(true);
@@ -230,8 +266,36 @@ export const HomePage = () => {
   return (
     <div className="home-page">
       <section className="home-hero" aria-label="HelpTree — добрые дела начинаются здесь">
-        <div className="home-hero-photo" aria-hidden="true" />
+        <div
+          key={heroImageIndex}
+          className="home-hero-photo"
+          style={{ backgroundImage: `url("${HERO_IMAGES[heroImageIndex]}")` }}
+          aria-hidden="true"
+        />
         <div className="home-hero-shade" aria-hidden="true" />
+        <div className="home-hero-carousel" role="group" aria-label="Смена фонового изображения">
+          <button
+            type="button"
+            className="home-hero-carousel-button"
+            aria-label="Предыдущее изображение"
+            onClick={() =>
+              setHeroImageIndex((current) => (current - 1 + HERO_IMAGES.length) % HERO_IMAGES.length)
+            }
+          >
+            <ChevronLeft size={17} aria-hidden="true" />
+          </button>
+          <span className="home-hero-carousel-count" aria-live="polite">
+            {heroImageIndex + 1} / {HERO_IMAGES.length}
+          </span>
+          <button
+            type="button"
+            className="home-hero-carousel-button"
+            aria-label="Следующее изображение"
+            onClick={() => setHeroImageIndex((current) => (current + 1) % HERO_IMAGES.length)}
+          >
+            <ChevronRight size={17} aria-hidden="true" />
+          </button>
+        </div>
         <div className="home-hero-inner">
           <div className="home-hero-content">
             <span className="home-hero-badge">
@@ -664,6 +728,22 @@ export const HomePage = () => {
                 </div>
               </li>
             </ol>
+
+            <div className="home-help-reciprocity">
+              <span className="home-help-reciprocity-icon">
+                <HeartHandshake size={19} aria-hidden="true" />
+              </span>
+              <div>
+                <h3>Правило взаимопомощи</h3>
+                <p>
+                  Когда полученная вами помощь подтверждена, к вашему долгу прибавляются 2 единицы.
+                  За каждую оказанную вами и подтверждённую помощь долг уменьшается на 1 единицу.
+                  <strong>
+                    {' '}Чтобы погасить долг за одну полученную помощь, нужно помочь двум людям.
+                  </strong>
+                </p>
+              </div>
+            </div>
 
             <div className="home-modal-actions">
               <Link to={user ? '/posts/new' : '/register'} className="home-btn home-btn--primary">
