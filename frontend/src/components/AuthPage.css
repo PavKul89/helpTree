@@ -95,15 +95,15 @@
   display: grid;
   flex: 0 0 auto;
   place-items: center;
-  color: var(--auth-lime);
-  background: rgba(200, 245, 106, 0.11);
-  border: 1px solid rgba(200, 245, 106, 0.24);
+  background: #fff;
+  border: 1px solid rgba(180, 225, 155, 0.4);
+  object-fit: contain;
 }
 
 .auth-brand-icon {
-  width: 42px;
-  height: 42px;
-  border-radius: 14px;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
 }
 
 .auth-story-copy {
@@ -444,9 +444,8 @@
   }
 
   .auth-brand-icon {
-    width: 37px;
-    height: 37px;
-    border-radius: 12px;
+    width: 40px;
+    height: 40px;
   }
 
   .auth-story-copy {

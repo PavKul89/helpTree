@@ -20,7 +20,6 @@ import {
   Plus,
   Coins,
   ChevronDown,
-  Leaf,
   LogOut,
   Menu,
   Settings2,
@@ -254,9 +253,7 @@ export const Navbar: React.FC = () => {
     <nav className="navbar">
       <div className="navbar-container">
         <Link to="/" className="navbar-logo" onClick={closeDropdown} aria-label="HelpTree — на главную">
-          <span className="navbar-logo-mark" aria-hidden="true">
-            <Leaf size={20} strokeWidth={1.8} />
-          </span>
+          <img className="navbar-logo-mark" src="/helptree-logo.png" alt="" />
           <span className="navbar-logo-text">
             help<span>Tree</span>
           </span>

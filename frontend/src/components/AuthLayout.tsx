@@ -1,13 +1,12 @@
 import { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { Sprout } from 'lucide-react';
 import './AuthPage.css';
 
 export const AuthLayout = ({ children }: { children: ReactNode }) => (
   <main className="auth-page">
     <section className="auth-story" aria-label="О HelpTree">
       <Link to="/" className="auth-brand" aria-label="HelpTree — на главную">
-        <span className="auth-brand-icon"><Sprout size={24} strokeWidth={2.2} /></span>
+        <img className="auth-brand-icon" src="/helptree-logo.png" alt="" />
         <span>HelpTree</span>
       </Link>
 
@@ -18,7 +17,7 @@ export const AuthLayout = ({ children }: { children: ReactNode }) => (
       </div>
 
       <div className="auth-community">
-        <span className="auth-community-mark" aria-hidden="true"><Sprout size={18} /></span>
+        <img className="auth-community-mark" src="/helptree-logo.png" alt="" />
         <span>Присоединяйтесь к сообществу HelpTree</span>
       </div>
     </section>

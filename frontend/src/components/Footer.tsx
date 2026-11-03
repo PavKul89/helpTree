@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowUpRight, FileText, HeartHandshake, TreeDeciduous, Users } from 'lucide-react';
+import { ArrowUpRight, FileText, HeartHandshake, Users } from 'lucide-react';
 import { statsApi } from '../api/statsApi';
 import './Footer.css';
 
@@ -70,7 +70,7 @@ export const Footer: React.FC = () => {
         <div className="footer-main">
           <div className="footer-brand">
             <Link to="/" className="footer-logo" aria-label="HelpTree — на главную">
-              <TreeDeciduous size={24} strokeWidth={1.7} aria-hidden="true" />
+              <img src="/helptree-logo.png" alt="" />
               <span>help<span className="footer-logo-accent">Tree</span></span>
             </Link>
             <p className="footer-description">
