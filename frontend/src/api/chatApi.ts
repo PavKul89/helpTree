@@ -8,6 +8,12 @@ interface MessagesResponse {
   number: number;
 }
 
+export interface MessagesCursorResponse {
+  items: Message[];
+  nextCursor: number | null;
+  hasMore: boolean;
+}
+
 export const chatApi = {
   getChats: async (): Promise<Chat[]> => {
     const response = await api.get<Chat[]>('/api/chats');
@@ -26,6 +32,17 @@ export const chatApi = {
   getMessages: async (chatId: number, page = 0, size = 20): Promise<MessagesResponse> => {
     const response = await api.get<MessagesResponse>(`/api/chats/${chatId}/messages`, {
       params: { page, size },
+    });
+    return response.data;
+  },
+
+  getMessagesCursor: async (
+    chatId: number,
+    beforeId?: number,
+    limit = 20
+  ): Promise<MessagesCursorResponse> => {
+    const response = await api.get<MessagesCursorResponse>(`/api/chats/${chatId}/messages/cursor`, {
+      params: { beforeId, limit },
     });
     return response.data;
   },

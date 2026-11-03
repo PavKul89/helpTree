@@ -1,8 +1,8 @@
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/helpTree_db
-    username: postgres
-    password: postgres
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/helpTree_db}
+    username: ${DB_USER:helpTree}
+    password: ${DB_PASS:helpTree}
   jpa:
     hibernate:
       ddl-auto: none
@@ -13,8 +13,8 @@ app:
   jwtSecret: testSecretKeyForJwtTesting12345678901234567890
   jwtExpirationMs: 86400000
   admin:
-    email: Admin@test.com
-    password: Admin1234
+    email: admin@helptree.dev
+    password: dev-admin-password-change-in-prod
 
 silo:
   endpoint: http://localhost:9000

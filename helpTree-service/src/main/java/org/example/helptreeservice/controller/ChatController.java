@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.helptreeservice.dto.chat.ChatResponse;
 import org.example.helptreeservice.dto.chat.CreateChatRequest;
+import org.example.helptreeservice.dto.chat.MessageCursorResponse;
 import org.example.helptreeservice.dto.chat.MessageResponse;
 import org.example.helptreeservice.exception.UnauthorizedException;
 import org.example.helptreeservice.service.AuthorizationService;
@@ -51,12 +52,25 @@ public class ChatController {
     public ResponseEntity<Page<MessageResponse>> getMessages(
             @PathVariable Long chatId,
             @PageableDefault(size = 20) Pageable pageable) {
-        
         AuthorizationService.UserContext user = authorizationService.getCurrentUser();
         if (user == null) {
             throw new UnauthorizedException("Требуется авторизация");
         }
         Page<MessageResponse> messages = chatService.getMessages(chatId, user.getUserId(), pageable);
+        return ResponseEntity.ok(messages);
+    }
+
+    @GetMapping("/{chatId}/messages/cursor")
+    public ResponseEntity<MessageCursorResponse> getMessagesCursor(
+            @PathVariable Long chatId,
+            @RequestParam(required = false) Long beforeId,
+            @RequestParam(required = false) Integer limit) {
+        AuthorizationService.UserContext user = authorizationService.getCurrentUser();
+        if (user == null) {
+            throw new UnauthorizedException("Требуется авторизация");
+        }
+        MessageCursorResponse messages = chatService.getMessagesCursor(
+                chatId, beforeId, limit, user.getUserId());
         return ResponseEntity.ok(messages);
     }
 

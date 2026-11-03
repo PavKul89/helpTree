@@ -38,4 +38,19 @@ public class Chat {
 
     @Column(name = "last_message_at")
     private LocalDateTime lastMessageAt;
+
+    public boolean hasParticipant(Long userId) {
+        return userId != null
+                && (userId.equals(user1.getId()) || userId.equals(user2.getId()));
+    }
+
+    public Long otherParticipantId(Long userId) {
+        if (user1.getId().equals(userId)) {
+            return user2.getId();
+        }
+        if (user2.getId().equals(userId)) {
+            return user1.getId();
+        }
+        return null;
+    }
 }

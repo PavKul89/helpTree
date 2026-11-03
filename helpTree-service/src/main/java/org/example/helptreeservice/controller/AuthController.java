@@ -15,10 +15,12 @@ import org.example.helptreeservice.dto.auth.PasswordResetConfirmRequest;
 import org.example.helptreeservice.dto.auth.PasswordResetRequest;
 import org.example.helptreeservice.dto.auth.RefreshTokenRequest;
 import org.example.helptreeservice.dto.auth.SessionDto;
+import org.example.helptreeservice.dto.auth.WsTicketResponse;
 import org.example.helptreeservice.dto.users.CreateUserRequest;
 import org.example.helptreeservice.exception.UnauthorizedException;
 import org.example.helptreeservice.security.ClientInfoResolver;
 import org.example.helptreeservice.service.AuthService;
+import org.example.helptreeservice.service.AuthSessionService;
 import org.example.helptreeservice.service.AuthorizationService;
 import org.example.helptreeservice.service.AuthorizationService.UserContext;
 import org.springframework.http.HttpStatus;
@@ -91,6 +93,21 @@ public class AuthController {
     public ResponseEntity<List<SessionDto>> listSessions() {
         UserContext user = requireCurrentUser();
         return ResponseEntity.ok(authService.listSessions(user.getUserId(), requireCurrentSession()));
+    }
+
+    /**
+     * Issues the short-lived ticket used only for the WebSocket upgrade. The
+     * access token is still required in the STOMP CONNECT frame.
+     */
+    @PostMapping("/ws-ticket")
+    public ResponseEntity<WsTicketResponse> createWsTicket() {
+        UserContext user = requireCurrentUser();
+        UUID sessionId = requireCurrentSession();
+        AuthSessionService.WsTicket ticket = authService.issueWsTicket(user.getUserId(), sessionId);
+        return ResponseEntity.ok(WsTicketResponse.builder()
+                .ticket(ticket.ticket())
+                .expiresInSeconds(ticket.expiresInSeconds())
+                .build());
     }
 
     @DeleteMapping("/sessions/{sessionId}")

@@ -15,4 +15,9 @@ public class AuthConfig {
     private int sessionTouchMinutes = 1;
     private boolean trustForwardedHeaders = false;
     private String frontendBaseUrl = "http://localhost:3000";
+    /**
+     * Lifetime of the one-purpose ticket used only for the WebSocket handshake.
+     * The full access token is still required in the STOMP CONNECT frame.
+     */
+    private int wsTicketSeconds = 60;
 }

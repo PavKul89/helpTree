@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Client, StompSubscription } from '@stomp/stompjs';
 import { API_URL } from '../api/axios';
+import { authApi } from '../api/authApi';
 import type { Chat, Message, WsMessageEnvelope } from '../types';
 
-export type WsMessageType = 'NEW_MESSAGE' | 'MESSAGE_DELETED' | 'MESSAGES_READ' | 'CHAT_DELETED' | 'CHAT_UPDATED';
+export type WsMessageType = 'NEW_MESSAGE' | 'MESSAGE_DELETED' | 'MESSAGES_READ' | 'CHAT_DELETED' | 'CHAT_UPDATED' | 'ERROR';
 
 const WS_URL = process.env.REACT_APP_WS_URL || `${API_URL.replace(/^http/, 'ws')}/ws/chat`;
 
@@ -14,6 +15,7 @@ interface UseWebSocketChatOptions {
   onMessagesRead: (chatId: number) => void;
   onChatDeleted: (chatId: number) => void;
   onChatUpdated?: (chat: Chat) => void;
+  onError?: (message: string) => void;
 }
 
 export function useWebSocketChat(options: UseWebSocketChatOptions) {
@@ -22,6 +24,7 @@ export function useWebSocketChat(options: UseWebSocketChatOptions) {
   const clientRef = useRef<Client | null>(null);
   const subscriptionsRef = useRef<Map<number, StompSubscription>>(new Map());
   const userSubscriptionRef = useRef<StompSubscription | null>(null);
+  const errorSubscriptionRef = useRef<StompSubscription | null>(null);
   const chatIdsRef = useRef<Set<number>>(new Set());
   const handlersRef = useRef(options);
 
@@ -36,6 +39,7 @@ export function useWebSocketChat(options: UseWebSocketChatOptions) {
       onMessagesRead,
       onChatDeleted,
       onChatUpdated,
+      onError,
     } = handlersRef.current;
 
     switch (envelope.type) {
@@ -64,6 +68,15 @@ export function useWebSocketChat(options: UseWebSocketChatOptions) {
           onChatUpdated(envelope.chat);
         }
         break;
+      case 'ERROR':
+        if (envelope.error) {
+          if (onError) {
+            onError(envelope.error);
+          } else {
+            console.warn('WebSocket:', envelope.error);
+          }
+        }
+        break;
     }
   }, []);
 
@@ -79,11 +92,18 @@ export function useWebSocketChat(options: UseWebSocketChatOptions) {
     const client = clientRef.current;
     if (!client || !client.connected || !userId) return;
 
-    if (userSubscriptionRef.current) return;
+    if (!userSubscriptionRef.current) {
+      // Server-side user destination: each session gets only its own updates.
+      userSubscriptionRef.current = client.subscribe('/user/queue/chat-updates', (message) => {
+        parseEnvelope(message.body);
+      });
+    }
 
-    userSubscriptionRef.current = client.subscribe(`/topic/user/${userId}`, (message) => {
-      parseEnvelope(message.body);
-    });
+    if (!errorSubscriptionRef.current) {
+      errorSubscriptionRef.current = client.subscribe('/user/queue/errors', (message) => {
+        parseEnvelope(message.body);
+      });
+    }
   }, [userId, parseEnvelope]);
 
   const subscribeToChat = useCallback((chatId: number) => {
@@ -94,7 +114,8 @@ export function useWebSocketChat(options: UseWebSocketChatOptions) {
 
     if (subscriptionsRef.current.has(chatId)) return;
 
-    const subscription = client.subscribe(`/topic/chat/${chatId}`, (message) => {
+    // A private user destination instead of the guessable /topic/chat/{id}.
+    const subscription = client.subscribe(`/user/queue/chat/${chatId}`, (message) => {
       parseEnvelope(message.body);
     });
 
@@ -133,6 +154,15 @@ export function useWebSocketChat(options: UseWebSocketChatOptions) {
       }
       userSubscriptionRef.current = null;
     }
+
+    if (errorSubscriptionRef.current) {
+      try {
+        errorSubscriptionRef.current.unsubscribe();
+      } catch {
+        // сокет уже закрыт — игнорируем
+      }
+      errorSubscriptionRef.current = null;
+    }
   }, []);
 
   const connect = useCallback(() => {
@@ -146,6 +176,13 @@ export function useWebSocketChat(options: UseWebSocketChatOptions) {
       brokerURL: WS_URL,
       connectHeaders: {
         Authorization: `Bearer ${token}`,
+      },
+      // The HTTP upgrade needs a short-lived ticket. Fetch a fresh one for every
+      // connection attempt, including automatic reconnects.
+      beforeConnect: async () => {
+        const wsTicket = await authApi.getWsTicket();
+        const separator = WS_URL.includes('?') ? '&' : '?';
+        client.brokerURL = `${WS_URL}${separator}ticket=${encodeURIComponent(wsTicket.ticket)}`;
       },
       reconnectDelay: 5000,
       heartbeatIncoming: 10000,

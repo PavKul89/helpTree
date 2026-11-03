@@ -40,4 +40,15 @@ public class Message {
     @Column(name = "is_read", nullable = false)
     @Builder.Default
     private Boolean isRead = false;
+
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "deleted_by_id")
+    private User deletedBy;
+
+    public boolean isDeleted() {
+        return deletedAt != null;
+    }
 }

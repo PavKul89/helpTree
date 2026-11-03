@@ -67,6 +67,9 @@ public class AuthSessionService {
                               boolean current) {
     }
 
+    public record WsTicket(String ticket, int expiresInSeconds) {
+    }
+
     @Transactional
     public IssuedTokens createSession(User user, String ipAddress, String userAgent) {
         LocalDateTime now = LocalDateTime.now();
@@ -199,6 +202,38 @@ public class AuthSessionService {
 
         return new AuthenticatedUser(user.getId(), user.getEmail(), user.getRole().name(),
                 session.getId(), safeTokenVersion(user));
+    }
+
+    /**
+     * Issues a short-lived, single-purpose ticket for the WebSocket handshake.
+     * The ticket is bound to the caller's active session and is revalidated against
+     * the database when the WebSocket upgrade is accepted.
+     */
+    @Transactional(readOnly = true)
+    public WsTicket issueWsTicket(Long userId, UUID sessionId) {
+        if (userId == null || sessionId == null) {
+            throw new UnauthorizedException("Требуется авторизация");
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        AuthSession session = authSessionRepository.findActiveById(sessionId, now)
+                .orElseThrow(() -> new UnauthorizedException("Сессия недействительна"));
+
+        User user = session.getUser();
+        if (user == null || !user.getId().equals(userId)) {
+            throw new UnauthorizedException("Сессия недействительна");
+        }
+        assertUserCanAuthenticate(user, now);
+
+        int ttlSeconds = Math.max(1, authConfig.getWsTicketSeconds());
+        String ticket = jwtService.generateWsTicket(
+                user.getId(),
+                user.getEmail(),
+                user.getRole().name(),
+                session.getId().toString(),
+                safeTokenVersion(user),
+                ttlSeconds);
+        return new WsTicket(ticket, ttlSeconds);
     }
 
     @Transactional

@@ -12,6 +12,7 @@ public enum ErrorType {
     VALIDATION_FAILED("Validation Failed"),
     UNAUTHORIZED("Unauthorized"),
     FORBIDDEN("Forbidden"),
+    TOO_MANY_REQUESTS("Too Many Requests"),
     METHOD_NOT_ALLOWED("Method Not Allowed"),
     UNSUPPORTED_MEDIA_TYPE("Unsupported Media Type"),
     INTERNAL_SERVER_ERROR("Internal Server Error");

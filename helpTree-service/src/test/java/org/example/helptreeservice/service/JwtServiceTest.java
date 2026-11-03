@@ -3,6 +3,7 @@ package org.example.helptreeservice.service;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
+import org.example.helptreeservice.exception.UnauthorizedException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -85,6 +86,80 @@ class JwtServiceTest {
     @Test
     void getExpirationTime_shouldReturnConfiguredValue() {
         assertEquals(EXPIRATION_MS, jwtService.getExpirationTime());
+    }
+
+    @Test
+    void generateToken_shouldMarkTokenAsAccessToken() {
+        String token = jwtService.generateToken(1L, "test@email.com", "USER", SESSION_ID, 0L);
+
+        Claims claims = jwtService.parseClaims(token);
+
+        assertEquals(JwtService.TOKEN_TYPE_ACCESS,
+                claims.get(JwtService.CLAIM_TOKEN_TYPE, String.class));
+        assertNotNull(jwtService.parseAccessClaims(token));
+    }
+
+    @Test
+    void generateWsTicket_shouldCreateShortLivedTicketThatIsNotAnAccessToken() {
+        String ticket = jwtService.generateWsTicket(
+                1L, "test@email.com", "USER", SESSION_ID, 0L, 60);
+
+        Claims claims = jwtService.parseClaims(ticket);
+
+        assertEquals(JwtService.TOKEN_TYPE_WS_TICKET,
+                claims.get(JwtService.CLAIM_TOKEN_TYPE, String.class));
+        assertNotNull(jwtService.parseWsTicket(ticket));
+        assertThrows(UnauthorizedException.class,
+                () -> jwtService.parseAccessClaims(ticket));
+
+        long ttlMs = claims.getExpiration().getTime() - claims.getIssuedAt().getTime();
+        assertTrue(ttlMs <= 60_000L);
+        assertTrue(ttlMs > 0L);
+    }
+
+    @Test
+    void parseWsTicket_shouldRejectAccessToken() {
+        String token = jwtService.generateToken(1L, "test@email.com", "USER", SESSION_ID, 0L);
+
+        assertThrows(UnauthorizedException.class,
+                () -> jwtService.parseWsTicket(token));
+    }
+
+    @Test
+    void parseAccessClaims_shouldAcceptLegacyTokenWithoutTypeClaim() {
+        Date now = new Date();
+        String legacyToken = Jwts.builder()
+                .subject("legacy@test.com")
+                .claim(JwtService.CLAIM_USER_ID, 5L)
+                .claim(JwtService.CLAIM_ROLE, "USER")
+                .claim(JwtService.CLAIM_SESSION_ID, SESSION_ID)
+                .claim(JwtService.CLAIM_TOKEN_VERSION, 1L)
+                .issuedAt(now)
+                .expiration(new Date(now.getTime() + 60_000L))
+                .signWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8)))
+                .compact();
+
+        Claims claims = jwtService.parseAccessClaims(legacyToken);
+
+        assertEquals(5L, ((Number) claims.get(JwtService.CLAIM_USER_ID)).longValue());
+        assertThrows(UnauthorizedException.class,
+                () -> jwtService.parseWsTicket(legacyToken));
+    }
+
+    @Test
+    void parseAccessClaims_shouldRejectUnknownTokenType() {
+        Date now = new Date();
+        String unknown = Jwts.builder()
+                .subject("unknown@test.com")
+                .claim(JwtService.CLAIM_USER_ID, 5L)
+                .claim(JwtService.CLAIM_TOKEN_TYPE, "refresh")
+                .issuedAt(now)
+                .expiration(new Date(now.getTime() + 60_000L))
+                .signWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8)))
+                .compact();
+
+        assertThrows(UnauthorizedException.class,
+                () -> jwtService.parseAccessClaims(unknown));
     }
 }
 

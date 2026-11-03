@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { AuthResponse, LoginRequest, RegisterRequest, User, UserPublic } from '../types';
+import type { AuthResponse, LoginRequest, RegisterRequest, User, UserPublic, WsTicket } from '../types';
 
 const API_URL = 'http://localhost:8080';
 
@@ -27,6 +27,11 @@ const api = createAuthApi();
 export const authApi = {
   login: async (data: LoginRequest): Promise<AuthResponse> => {
     const response = await api.post<AuthResponse>('/api/auth/login', data);
+    return response.data;
+  },
+
+  getWsTicket: async (): Promise<WsTicket> => {
+    const response = await api.post<WsTicket>('/api/auth/ws-ticket');
     return response.data;
   },
 

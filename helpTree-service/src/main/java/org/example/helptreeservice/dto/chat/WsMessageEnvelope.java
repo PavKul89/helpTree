@@ -17,6 +17,8 @@ public class WsMessageEnvelope {
     private MessageResponse message;
     private ChatResponse chat;
     private Long chatId;
+    private Long lastReadMessageId;
+    private String error;
     private LocalDateTime timestamp;
 
     public static WsMessageEnvelope newMessage(MessageResponse message) {
@@ -45,10 +47,11 @@ public class WsMessageEnvelope {
                 .build();
     }
 
-    public static WsMessageEnvelope messagesRead(Long chatId) {
+    public static WsMessageEnvelope messagesRead(Long chatId, Long lastReadMessageId) {
         return WsMessageEnvelope.builder()
                 .type("MESSAGES_READ")
                 .chatId(chatId)
+                .lastReadMessageId(lastReadMessageId)
                 .timestamp(LocalDateTime.now())
                 .build();
     }
@@ -58,6 +61,14 @@ public class WsMessageEnvelope {
                 .type("CHAT_UPDATED")
                 .chat(chat)
                 .chatId(chat.getId())
+                .timestamp(LocalDateTime.now())
+                .build();
+    }
+
+    public static WsMessageEnvelope error(String message) {
+        return WsMessageEnvelope.builder()
+                .type("ERROR")
+                .error(message)
                 .timestamp(LocalDateTime.now())
                 .build();
     }

@@ -29,6 +29,15 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query("SELECT u FROM User u WHERE u.id = :userId")
     Optional<User> findByIdForUpdate(@Param("userId") Long userId);
 
+    /**
+     * Locks both participants in a deterministic id order. Chat creation uses this
+     * to serialize concurrent requests for the same (and reverse) pair, which makes
+     * the normalized unique index a backstop rather than the primary mechanism.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT u FROM User u WHERE u.id IN :ids ORDER BY u.id")
+    List<User> findAllByIdInForUpdate(@Param("ids") List<Long> ids);
+
     List<User> findByDeletedFalse();
 
     Page<User> findByDeletedFalse(Pageable pageable);

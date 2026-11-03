@@ -45,7 +45,7 @@ class JwtAuthFilterTest {
 
     private void stubValidToken(String role, String email) {
         Claims claims = mock(Claims.class);
-        when(jwtService.parseClaims(TOKEN)).thenReturn(claims);
+        when(jwtService.parseAccessClaims(TOKEN)).thenReturn(claims);
         when(claims.get(JwtService.CLAIM_USER_ID)).thenReturn(USER_ID);
         when(claims.get(JwtService.CLAIM_ROLE, String.class)).thenReturn(role);
         when(claims.get(JwtService.CLAIM_SESSION_ID, String.class)).thenReturn(SESSION_ID);
@@ -135,7 +135,7 @@ class JwtAuthFilterTest {
 
     @Test
     void filter_shouldIgnoreInvalidTokenOnPublicPath() throws Exception {
-        when(jwtService.parseClaims("bad-token")).thenThrow(new IllegalArgumentException("bad"));
+        when(jwtService.parseAccessClaims("bad-token")).thenThrow(new IllegalArgumentException("bad"));
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/posts/map");
         request.addHeader("Authorization", "Bearer bad-token");
 
@@ -149,7 +149,7 @@ class JwtAuthFilterTest {
     @Test
     void filter_shouldIgnoreRevokedSessionOnPublicPath() throws Exception {
         Claims claims = mock(Claims.class);
-        when(jwtService.parseClaims(TOKEN)).thenReturn(claims);
+        when(jwtService.parseAccessClaims(TOKEN)).thenReturn(claims);
         when(claims.get(JwtService.CLAIM_USER_ID)).thenReturn(USER_ID);
         when(claims.get(JwtService.CLAIM_ROLE, String.class)).thenReturn("USER");
         when(claims.get(JwtService.CLAIM_SESSION_ID, String.class)).thenReturn(SESSION_ID);
@@ -168,7 +168,7 @@ class JwtAuthFilterTest {
 
     @Test
     void filter_shouldRejectInvalidTokenOnProtectedPath() throws Exception {
-        when(jwtService.parseClaims("bad-token")).thenThrow(new IllegalArgumentException("bad"));
+        when(jwtService.parseAccessClaims("bad-token")).thenThrow(new IllegalArgumentException("bad"));
         MockHttpServletRequest request = new MockHttpServletRequest("PUT", "/api/posts/1");
         request.addHeader("Authorization", "Bearer bad-token");
 
@@ -252,7 +252,7 @@ class JwtAuthFilterTest {
     @Test
     void filter_shouldReturn403ForBlockedUser() throws Exception {
         Claims claims = mock(Claims.class);
-        when(jwtService.parseClaims(TOKEN)).thenReturn(claims);
+        when(jwtService.parseAccessClaims(TOKEN)).thenReturn(claims);
         when(claims.get(JwtService.CLAIM_USER_ID)).thenReturn(USER_ID);
         when(claims.get(JwtService.CLAIM_ROLE, String.class)).thenReturn("USER");
         when(claims.get(JwtService.CLAIM_SESSION_ID, String.class)).thenReturn(SESSION_ID);
@@ -272,7 +272,7 @@ class JwtAuthFilterTest {
     @Test
     void filter_shouldReturn401ForRevokedSessionOnProtectedPath() throws Exception {
         Claims claims = mock(Claims.class);
-        when(jwtService.parseClaims(TOKEN)).thenReturn(claims);
+        when(jwtService.parseAccessClaims(TOKEN)).thenReturn(claims);
         when(claims.get(JwtService.CLAIM_USER_ID)).thenReturn(USER_ID);
         when(claims.get(JwtService.CLAIM_ROLE, String.class)).thenReturn("USER");
         when(claims.get(JwtService.CLAIM_SESSION_ID, String.class)).thenReturn(SESSION_ID);

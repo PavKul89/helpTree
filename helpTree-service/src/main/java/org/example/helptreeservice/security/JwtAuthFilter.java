@@ -90,7 +90,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         String token = authHeader.substring(7);
 
         try {
-            Claims claims = jwtService.parseClaims(token);
+            Claims claims = jwtService.parseAccessClaims(token);
             Long userId = numberClaim(claims, JwtService.CLAIM_USER_ID);
             String role = claims.get(JwtService.CLAIM_ROLE, String.class);
             String sessionId = claims.get(JwtService.CLAIM_SESSION_ID, String.class);

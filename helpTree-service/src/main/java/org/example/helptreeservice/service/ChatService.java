@@ -2,11 +2,15 @@ package org.example.helptreeservice.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.example.helptreeservice.config.ChatProperties;
 import org.example.helptreeservice.dto.chat.ChatResponse;
 import org.example.helptreeservice.dto.chat.CreateChatRequest;
 import org.example.helptreeservice.dto.chat.CreateMessageRequest;
+import org.example.helptreeservice.dto.chat.MessageCursorResponse;
 import org.example.helptreeservice.dto.chat.MessageResponse;
+import org.example.helptreeservice.dto.chat.WsMessageEnvelope;
 import org.example.helptreeservice.entity.Chat;
+import org.example.helptreeservice.entity.ChatUserState;
 import org.example.helptreeservice.entity.Message;
 import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.exception.BadRequestException;
@@ -14,17 +18,22 @@ import org.example.helptreeservice.exception.ForbiddenException;
 import org.example.helptreeservice.exception.NotFoundException;
 import org.example.helptreeservice.mapper.ChatMapper;
 import org.example.helptreeservice.repository.ChatRepository;
+import org.example.helptreeservice.repository.ChatUserStateRepository;
 import org.example.helptreeservice.repository.MessageRepository;
 import org.example.helptreeservice.repository.UserRepository;
-import org.example.helptreeservice.dto.chat.WsMessageEnvelope;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -33,40 +42,77 @@ import java.util.stream.Collectors;
 public class ChatService {
 
     private final ChatRepository chatRepository;
+    private final ChatUserStateRepository chatUserStateRepository;
     private final MessageRepository messageRepository;
     private final UserRepository userRepository;
     private final ChatMapper chatMapper;
     private final SimpMessagingTemplate messagingTemplate;
+    private final ChatContentSanitizer contentSanitizer;
+    private final ChatRateLimiter chatRateLimiter;
+    private final ChatProperties chatProperties;
 
+    /**
+     * Creates or returns the single chat for an unordered participant pair.
+     * Both user rows are locked in deterministic id order, so concurrent requests
+     * for the same or reverse pair cannot create duplicates; the normalized unique
+     * index in the database is the final backstop.
+     */
     @Transactional
     public ChatResponse createChat(CreateChatRequest request, Long currentUserId) {
-        if (request.getParticipantId().equals(currentUserId)) {
+        Long participantId = request != null ? request.getParticipantId() : null;
+        if (participantId == null) {
+            throw new BadRequestException("ID пользователя обязательно");
+        }
+        if (participantId.equals(currentUserId)) {
             throw new BadRequestException("Нельзя создать чат с самим собой");
         }
 
-        User participant = getActiveUser(request.getParticipantId());
+        List<Long> orderedIds = List.of(currentUserId, participantId).stream()
+                .sorted()
+                .toList();
+        List<User> lockedUsers = userRepository.findAllByIdInForUpdate(orderedIds);
+        if (lockedUsers.size() != 2) {
+            throw new NotFoundException("Пользователь не найден");
+        }
 
-        Chat chat = chatRepository.findByUsers(currentUserId, request.getParticipantId())
-                .orElseGet(() -> {
-                    User currentUser = getActiveUser(currentUserId);
-                    
-                    Chat newChat = Chat.builder()
-                            .user1(currentUser)
-                            .user2(participant)
-                            .build();
-                    return chatRepository.save(newChat);
-                });
+        User currentUser = findUser(lockedUsers, currentUserId);
+        User participant = findUser(lockedUsers, participantId);
+        assertCanUseChat(currentUser);
+        assertCanUseChat(participant);
 
-        log.info("Создан/найден чат ID={} между пользователями {} и {}", chat.getId(), currentUserId, request.getParticipantId());
-        return chatMapper.toResponse(chat, currentUserId);
+        Chat chat = chatRepository.findByUsers(currentUserId, participantId)
+                .orElseGet(() -> chatRepository.save(createCanonicalChat(currentUser, participant)));
+
+        ensureState(chat, currentUser);
+        ensureState(chat, participant);
+        chatUserStateRepository.restore(chat.getId(), currentUserId);
+
+        Chat freshChat = chatRepository.findById(chat.getId())
+                .orElseThrow(() -> new NotFoundException("Чат не найден"));
+        ChatUserState state = chatUserStateRepository
+                .findByChatIdAndUserId(chat.getId(), currentUserId)
+                .orElse(null);
+
+        log.info("Создан/найден чат ID={} между пользователями {} и {}",
+                chat.getId(), currentUserId, participantId);
+        return chatMapper.toResponse(freshChat, currentUserId, state);
     }
 
     @Transactional(readOnly = true)
     public List<ChatResponse> getChats(Long currentUserId) {
         getActiveUser(currentUserId);
-        List<Chat> chats = chatRepository.findByUserId(currentUserId);
+        List<Chat> chats = chatRepository.findVisibleByUserId(currentUserId);
+        Map<Long, ChatUserState> states = chatUserStateRepository
+                .findByUserIdAndDeletedAtIsNull(currentUserId)
+                .stream()
+                .collect(Collectors.toMap(
+                        state -> state.getChat().getId(),
+                        state -> state,
+                        (first, ignored) -> first));
+
         return chats.stream()
-                .map(chat -> chatMapper.toResponse(chat, currentUserId))
+                .map(chat -> chatMapper.toResponse(
+                        chat, currentUserId, states.get(chat.getId())))
                 .collect(Collectors.toList());
     }
 
@@ -74,33 +120,41 @@ public class ChatService {
     public MessageResponse sendMessage(Long chatId, CreateMessageRequest request, Long currentUserId) {
         Chat chat = getChatForParticipant(chatId, currentUserId);
         User sender = getActiveUser(currentUserId);
+        User recipient = getActiveUser(chat.otherParticipantId(currentUserId));
+        assertCanUseChat(sender);
+        assertCanUseChat(recipient);
 
-        Message message = Message.builder()
+        String content = sanitizeContent(request != null ? request.getContent() : null);
+        chatRateLimiter.checkAllowed(currentUserId);
+
+        Message saved = messageRepository.save(Message.builder()
                 .chat(chat)
                 .sender(sender)
-                .content(request.getContent())
+                .content(content)
                 .isRead(false)
-                .build();
-
-        Message saved = messageRepository.save(message);
+                .build());
 
         chat.setLastMessageAt(LocalDateTime.now());
         chatRepository.save(chat);
 
-        log.info("Пользователь {} отправил сообщение в чат {}", currentUserId, chatId);
+        ensureState(chat, sender);
+        ensureState(chat, recipient);
+        // A new message makes the chat visible again for both participants even if
+        // one of them hid it earlier.
+        chatUserStateRepository.restore(chatId, sender.getId());
+        chatUserStateRepository.restore(chatId, recipient.getId());
+
         MessageResponse response = chatMapper.toMessageResponse(saved);
+        List<Delivery> deliveries = new ArrayList<>();
+        publishNewMessage(chat, response, deliveries);
 
-        Long otherUserId = chat.getUser1().getId().equals(currentUserId)
-                ? chat.getUser2().getId()
-                : chat.getUser1().getId();
+        // Keep the sender's read cursor at their own newest message. This is done
+        // after the payloads are built because the bulk update clears the
+        // persistence context, and after the message row exists but before commit.
+        chatUserStateRepository.markReadUpTo(chatId, sender.getId(), saved.getId());
+        dispatchAfterCommit(deliveries);
 
-        ChatResponse chatResponse = chatMapper.toResponse(chat, currentUserId);
-        ChatResponse otherChatResponse = chatMapper.toResponse(chat, otherUserId);
-
-        messagingTemplate.convertAndSend("/topic/chat/" + chatId, WsMessageEnvelope.newMessage(response));
-        messagingTemplate.convertAndSend("/topic/user/" + currentUserId, WsMessageEnvelope.chatUpdated(chatResponse));
-        messagingTemplate.convertAndSend("/topic/user/" + otherUserId, WsMessageEnvelope.chatUpdated(otherChatResponse));
-
+        log.info("Пользователь {} отправил сообщение в чат {}", currentUserId, chatId);
         return response;
     }
 
@@ -108,61 +162,253 @@ public class ChatService {
     public Page<MessageResponse> getMessages(Long chatId, Long currentUserId, Pageable pageable) {
         getChatForParticipant(chatId, currentUserId);
 
-        return messageRepository.findByChatIdOrderByCreatedAtDesc(chatId, pageable)
+        return messageRepository
+                .findByChatIdAndDeletedAtIsNullOrderByCreatedAtDescIdDesc(chatId, pageable)
                 .map(chatMapper::toMessageResponse);
+    }
+
+    /**
+     * Cursor pagination for message history. The cursor is the id of the last item
+     * already loaded; the response is ordered newest first, matching the legacy
+     * pageable endpoint.
+     */
+    @Transactional(readOnly = true)
+    public MessageCursorResponse getMessagesCursor(Long chatId,
+                                                   Long beforeId,
+                                                   Integer limit,
+                                                   Long currentUserId) {
+        getChatForParticipant(chatId, currentUserId);
+
+        int pageSize = limit != null ? limit : chatProperties.getCursorDefaultLimit();
+        pageSize = Math.max(1, Math.min(pageSize, chatProperties.getCursorMaxLimit()));
+
+        List<Message> messages = messageRepository.findPageByCursor(
+                chatId, beforeId, PageRequest.of(0, pageSize + 1));
+
+        boolean hasMore = messages.size() > pageSize;
+        List<Message> page = hasMore ? messages.subList(0, pageSize) : messages;
+        Long nextCursor = hasMore && !page.isEmpty()
+                ? page.get(page.size() - 1).getId()
+                : null;
+
+        return MessageCursorResponse.builder()
+                .items(page.stream().map(chatMapper::toMessageResponse).toList())
+                .nextCursor(nextCursor)
+                .hasMore(hasMore)
+                .build();
     }
 
     @Transactional
     public void markMessagesAsRead(Long chatId, Long currentUserId) {
-        getChatForParticipant(chatId, currentUserId);
+        Chat chat = getChatForParticipant(chatId, currentUserId);
+        User currentUser = getActiveUser(currentUserId);
+        ensureState(chat, currentUser);
 
+        long maxMessageId = messageRepository.findMaxActiveMessageId(chatId);
         messageRepository.markMessagesAsRead(chatId, currentUserId);
-        log.info("Пользователь {} прочитал сообщения в чате {}", currentUserId, chatId);
+        if (maxMessageId > 0) {
+            chatUserStateRepository.markReadUpTo(chatId, currentUserId, maxMessageId);
+        }
 
-        messagingTemplate.convertAndSend("/topic/chat/" + chatId, WsMessageEnvelope.messagesRead(chatId));
+        // The bulk updates clear the persistence context; reload the chat before
+        // building per-user responses.
+        Chat freshChat = chatRepository.findById(chatId)
+                .orElseThrow(() -> new NotFoundException("Чат не найден"));
+
+        WsMessageEnvelope envelope = WsMessageEnvelope.messagesRead(
+                chatId, maxMessageId > 0 ? maxMessageId : null);
+        List<Delivery> deliveries = new ArrayList<>();
+        addChatParticipants(deliveries, freshChat, envelope);
+        addChatUpdated(deliveries, freshChat, freshChat.getUser1().getId());
+        addChatUpdated(deliveries, freshChat, freshChat.getUser2().getId());
+        dispatchAfterCommit(deliveries);
+
+        log.info("Пользователь {} прочитал сообщения в чате {}", currentUserId, chatId);
     }
 
+    /**
+     * Soft-deletes the chat only for the calling user. The other participant keeps
+     * the full history, and the deletion event is delivered only to the caller's
+     * own sessions.
+     */
     @Transactional
     public void deleteChat(Long chatId, Long currentUserId) {
         Chat chat = getChatForParticipant(chatId, currentUserId);
+        User currentUser = getActiveUser(currentUserId);
+        ensureState(chat, currentUser);
 
-        Long otherUserId = chat.getUser1().getId().equals(currentUserId) 
-                ? chat.getUser2().getId() 
-                : chat.getUser1().getId();
+        chatUserStateRepository.markDeleted(chatId, currentUserId, LocalDateTime.now());
+        log.info("Пользователь {} скрыл чат {}", currentUserId, chatId);
 
-        chatRepository.delete(chat);
-        log.info("Пользователь {} удалил чат {}", currentUserId, chatId);
-
-        messagingTemplate.convertAndSend("/topic/user/" + currentUserId, WsMessageEnvelope.chatDeleted(chatId));
-        messagingTemplate.convertAndSend("/topic/user/" + otherUserId, WsMessageEnvelope.chatDeleted(chatId));
+        WsMessageEnvelope envelope = WsMessageEnvelope.chatDeleted(chatId);
+        List<Delivery> deliveries = new ArrayList<>();
+        addUserDelivery(deliveries, currentUserId, "/queue/chat/" + chatId, envelope);
+        addUserDelivery(deliveries, currentUserId, "/queue/chat-updates", envelope);
+        addLegacyDelivery(deliveries, "/topic/user/" + currentUserId, envelope);
+        dispatchAfterCommit(deliveries);
     }
 
     @Transactional
     public void deleteMessage(Long chatId, Long messageId, Long currentUserId) {
-        getChatForParticipant(chatId, currentUserId);
+        Chat chat = getChatForParticipant(chatId, currentUserId);
 
-        Message message = messageRepository.findById(messageId)
+        Message message = messageRepository
+                .findByIdAndChatIdAndDeletedAtIsNull(messageId, chatId)
                 .orElseThrow(() -> new NotFoundException("Сообщение не найдено"));
-
-        if (message.getChat() == null || !message.getChat().getId().equals(chatId)) {
-            throw new NotFoundException("Сообщение не найдено");
-        }
 
         if (!message.getSender().getId().equals(currentUserId)) {
             throw new ForbiddenException("Вы можете удалить только свое сообщение");
         }
 
-        messageRepository.delete(message);
-        log.info("Пользователь {} удалил сообщение {} из чата {}", currentUserId, messageId, chatId);
+        message.setDeletedAt(LocalDateTime.now());
+        message.setDeletedBy(getActiveUser(currentUserId));
+        messageRepository.save(message);
 
-        messagingTemplate.convertAndSend("/topic/chat/" + chatId, WsMessageEnvelope.messageDeleted(chatId, messageId));
+        // Keep the chat preview consistent with the surviving history.
+        messageRepository.findTopByChatIdAndDeletedAtIsNullOrderByIdDesc(chatId)
+                .ifPresentOrElse(
+                        latest -> chat.setLastMessageAt(latest.getCreatedAt()),
+                        () -> chat.setLastMessageAt(null));
+        chatRepository.save(chat);
+
+        WsMessageEnvelope envelope = WsMessageEnvelope.messageDeleted(chatId, messageId);
+        List<Delivery> deliveries = new ArrayList<>();
+        addChatParticipants(deliveries, chat, envelope);
+        addChatUpdated(deliveries, chat, chat.getUser1().getId());
+        addChatUpdated(deliveries, chat, chat.getUser2().getId());
+        dispatchAfterCommit(deliveries);
+
+        log.info("Пользователь {} удалил сообщение {} из чата {}", currentUserId, messageId, chatId);
+    }
+
+    private Chat createCanonicalChat(User first, User second) {
+        User user1 = first.getId() < second.getId() ? first : second;
+        User user2 = first.getId() < second.getId() ? second : first;
+        return Chat.builder()
+                .user1(user1)
+                .user2(user2)
+                .build();
+    }
+
+    private User findUser(List<User> users, Long userId) {
+        return users.stream()
+                .filter(user -> user.getId().equals(userId))
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException("Пользователь не найден"));
+    }
+
+    private ChatUserState ensureState(Chat chat, User user) {
+        return chatUserStateRepository.findByChatIdAndUserId(chat.getId(), user.getId())
+                .orElseGet(() -> chatUserStateRepository.save(ChatUserState.builder()
+                        .chat(chat)
+                        .user(user)
+                        .build()));
+    }
+
+    private String sanitizeContent(String rawContent) {
+        String content = contentSanitizer.sanitize(rawContent);
+        if (contentSanitizer.isBlank(content)) {
+            throw new BadRequestException("Сообщение не может быть пустым");
+        }
+        if (contentSanitizer.exceedsMaxLength(content)) {
+            throw new BadRequestException("Сообщение слишком длинное");
+        }
+        return content;
+    }
+
+    private void publishNewMessage(Chat chat, MessageResponse response,
+                                   List<Delivery> deliveries) {
+        WsMessageEnvelope envelope = WsMessageEnvelope.newMessage(response);
+        addChatParticipants(deliveries, chat, envelope);
+        addChatUpdated(deliveries, chat, chat.getUser1().getId());
+        addChatUpdated(deliveries, chat, chat.getUser2().getId());
+    }
+
+    private void addChatParticipants(List<Delivery> deliveries, Chat chat,
+                                     WsMessageEnvelope envelope) {
+        addUserDelivery(deliveries, chat.getUser1().getId(),
+                "/queue/chat/" + chat.getId(), envelope);
+        addUserDelivery(deliveries, chat.getUser2().getId(),
+                "/queue/chat/" + chat.getId(), envelope);
+        addLegacyDelivery(deliveries, "/topic/chat/" + chat.getId(), envelope);
+    }
+
+    private void addChatUpdated(List<Delivery> deliveries, Chat chat, Long userId) {
+        if (userId == null) {
+            return;
+        }
+        ChatUserState state = chatUserStateRepository
+                .findByChatIdAndUserId(chat.getId(), userId)
+                .orElse(null);
+        ChatResponse response = chatMapper.toResponse(chat, userId, state);
+        WsMessageEnvelope envelope = WsMessageEnvelope.chatUpdated(response);
+        addUserDelivery(deliveries, userId, "/queue/chat-updates", envelope);
+        addLegacyDelivery(deliveries, "/topic/user/" + userId, envelope);
+    }
+
+    private void addUserDelivery(List<Delivery> deliveries, Long userId,
+                                 String destination, WsMessageEnvelope envelope) {
+        deliveries.add(new Delivery(userId, destination, envelope));
+    }
+
+    private void addLegacyDelivery(List<Delivery> deliveries,
+                                   String destination, WsMessageEnvelope envelope) {
+        if (chatProperties.isLegacyTopicsEnabled()) {
+            deliveries.add(new Delivery(null, destination, envelope));
+        }
+    }
+
+    /**
+     * WebSocket notifications must never be emitted before the database commit:
+     * a client that reacts immediately (for example by deleting the message it
+     * just received) would otherwise look at a row that does not exist yet, and a
+     * rolled-back transaction would still produce an event. Payloads are built
+     * inside the transaction, delivery happens after a successful commit.
+     */
+    private void dispatchAfterCommit(List<Delivery> deliveries) {
+        if (deliveries.isEmpty()) {
+            return;
+        }
+        Runnable dispatch = () -> {
+            for (Delivery delivery : deliveries) {
+                try {
+                    if (delivery.userId() == null) {
+                        messagingTemplate.convertAndSend(
+                                delivery.destination(), delivery.envelope());
+                    } else {
+                        messagingTemplate.convertAndSendToUser(
+                                delivery.userId().toString(),
+                                delivery.destination(),
+                                delivery.envelope());
+                    }
+                } catch (RuntimeException e) {
+                    log.warn("Не удалось доставить WebSocket-уведомление {}: {}",
+                            delivery.destination(), e.getMessage());
+                }
+            }
+        };
+
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(
+                    new TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() {
+                            dispatch.run();
+                        }
+                    });
+        } else {
+            dispatch.run();
+        }
+    }
+
+    private record Delivery(Long userId, String destination, WsMessageEnvelope envelope) {
     }
 
     private Chat getChatForParticipant(Long chatId, Long currentUserId) {
         Chat chat = chatRepository.findById(chatId)
                 .orElseThrow(() -> new NotFoundException("Чат не найден"));
 
-        if (!chat.getUser1().getId().equals(currentUserId) && !chat.getUser2().getId().equals(currentUserId)) {
+        if (!chat.hasParticipant(currentUserId)) {
             throw new ForbiddenException("Вы не участник этого чата");
         }
 
@@ -178,5 +424,14 @@ public class ChatService {
         }
 
         return user;
+    }
+
+    private void assertCanUseChat(User user) {
+        if (Boolean.TRUE.equals(user.getDeleted())) {
+            throw new NotFoundException("Пользователь не найден");
+        }
+        if (user.getBlockedUntil() != null && user.getBlockedUntil().isAfter(LocalDateTime.now())) {
+            throw new ForbiddenException("Один из участников чата заблокирован");
+        }
     }
 }

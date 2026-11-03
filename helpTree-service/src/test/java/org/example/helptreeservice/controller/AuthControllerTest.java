@@ -44,6 +44,36 @@ class AuthControllerTest {
     }
 
     @Test
+    void createWsTicket_shouldRequireAuthenticatedSession() {
+        when(authorizationService.getCurrentUser())
+                .thenReturn(new UserContext(7L, "USER", "user@test.com"));
+
+        assertThrows(UnauthorizedException.class, () -> controller.createWsTicket());
+
+        verify(authService, never()).issueWsTicket(any(), any());
+    }
+
+    @Test
+    void createWsTicket_shouldIssueTicketForAuthenticatedSession() {
+        UUID sessionId = UUID.randomUUID();
+        when(authorizationService.getCurrentUser())
+                .thenReturn(new UserContext(7L, "USER", "user@test.com"));
+        when(authorizationService.getCurrentSessionId()).thenReturn(sessionId);
+        when(authService.issueWsTicket(7L, sessionId))
+                .thenReturn(new org.example.helptreeservice.service.AuthSessionService
+                        .WsTicket("ticket-value", 60));
+
+        var response = controller.createWsTicket();
+
+        org.junit.jupiter.api.Assertions.assertEquals(200, response.getStatusCode().value());
+        org.junit.jupiter.api.Assertions.assertEquals("ticket-value",
+                response.getBody().getTicket());
+        org.junit.jupiter.api.Assertions.assertEquals(60,
+                response.getBody().getExpiresInSeconds());
+        verify(authService).issueWsTicket(7L, sessionId);
+    }
+
+    @Test
     void logout_shouldRequireAuthenticatedUser() {
         assertThrows(UnauthorizedException.class,
                 () -> controller.logout(new LogoutRequest()));

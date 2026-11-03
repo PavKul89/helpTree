@@ -116,6 +116,26 @@ app:
     session-touch-minutes: ${SESSION_TOUCH_MINUTES:1}
     trust-forwarded-headers: ${TRUST_FORWARDED_HEADERS:false}
     frontend-base-url: ${FRONTEND_BASE_URL:http://localhost:3000}
+    ws-ticket-seconds: ${WS_TICKET_SECONDS:60}
+  chat:
+    max-message-length: ${CHAT_MAX_MESSAGE_LENGTH:5000}
+    rate-limit-enabled: ${CHAT_RATE_LIMIT_ENABLED:true}
+    messages-per-minute: ${CHAT_MESSAGES_PER_MINUTE:30}
+    cursor-default-limit: ${CHAT_CURSOR_DEFAULT_LIMIT:20}
+    cursor-max-limit: ${CHAT_CURSOR_MAX_LIMIT:100}
+    # Legacy /topic destinations remain authorized for older frontend builds.
+    # Disable after the frontend has fully moved to /user/queue destinations.
+    legacy-topics-enabled: ${CHAT_LEGACY_TOPICS_ENABLED:true}
+  websocket:
+    allowed-origins: ${WS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:3001,http://localhost:5173}
+    relay-enabled: ${WS_RELAY_ENABLED:false}
+    relay-host: ${WS_RELAY_HOST:localhost}
+    relay-port: ${WS_RELAY_PORT:61613}
+    client-login: ${WS_RELAY_CLIENT_LOGIN:guest}
+    client-passcode: ${WS_RELAY_CLIENT_PASSCODE:guest}
+    system-login: ${WS_RELAY_SYSTEM_LOGIN:guest}
+    system-passcode: ${WS_RELAY_SYSTEM_PASSCODE:guest}
+    heartbeat-seconds: ${WS_HEARTBEAT_SECONDS:10}
   mail:
     # Email flows stay disabled until SMTP is configured. Never log or return tokens.
     enabled: ${MAIL_ENABLED:false}

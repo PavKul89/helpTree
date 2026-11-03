@@ -149,11 +149,18 @@ export interface CreateMessageRequest {
 }
 
 export interface WsMessageEnvelope {
-  type: 'NEW_MESSAGE' | 'MESSAGE_DELETED' | 'MESSAGES_READ' | 'CHAT_DELETED' | 'CHAT_UPDATED';
+  type: 'NEW_MESSAGE' | 'MESSAGE_DELETED' | 'MESSAGES_READ' | 'CHAT_DELETED' | 'CHAT_UPDATED' | 'ERROR';
   message?: Message;
   chat?: Chat;
   chatId?: number;
+  lastReadMessageId?: number;
+  error?: string;
   timestamp?: string;
+}
+
+export interface WsTicket {
+  ticket: string;
+  expiresInSeconds: number;
 }
 
 export interface Help {

@@ -222,6 +222,11 @@ public class AuthService {
         return userService.getUserById(userId);
     }
 
+    @Transactional(readOnly = true)
+    public AuthSessionService.WsTicket issueWsTicket(Long userId, UUID sessionId) {
+        return authSessionService.issueWsTicket(userId, sessionId);
+    }
+
     @Scheduled(cron = "0 */10 * * * *")
     public void cleanupFailedLoginTrackers() {
         Instant now = Instant.now();
