@@ -1,6 +1,5 @@
 package org.example.helptreeservice.dto.posts;
 
-import org.example.helptreeservice.enums.PostStatus;
 import lombok.Data;
 import jakarta.validation.constraints.Size;
 
@@ -17,8 +16,6 @@ public class UpdatePostRequest {
 
     @Size(min = 2, max = 100, message = "Имя должно быть от 2 до 100 символов")
     private String authorName;
-
-    private PostStatus status;
 
     private List<String> imageUrls;
 }

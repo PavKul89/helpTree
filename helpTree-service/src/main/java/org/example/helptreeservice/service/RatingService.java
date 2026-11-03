@@ -16,6 +16,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -109,36 +110,42 @@ public class RatingService {
         return historyRepository.findByUserIdOrderByCalculatedAtDesc(userId, pageable);
     }
 
-    public void updateStatsAfterHelp(Long helperId, Long receiverId, boolean completed) {
-        log.info("Обновление статистики рейтинга: helper={}, receiver={}, completed={}", helperId, receiverId, completed);
+    @Transactional
+    public void recordSuccessfulHelp(Long helperId, Long receiverId) {
+        log.info("Фиксация успешной помощи в статистике: helper={}, receiver={}", helperId, receiverId);
 
-        UserRatingStats helperStats = statsRepository.findByUserId(helperId)
-                .orElseGet(() -> createDefaultStats(helperId));
+        UserRatingStats helperStats = getStatsForUpdate(helperId);
         helperStats.setTotalHelpsGiven(helperStats.getTotalHelpsGiven() + 1);
-        if (completed) {
-            helperStats.setSuccessfulHelps(helperStats.getSuccessfulHelps() + 1);
-        } else {
-            helperStats.setCancelledHelps(helperStats.getCancelledHelps() + 1);
-        }
+        helperStats.setSuccessfulHelps(helperStats.getSuccessfulHelps() + 1);
+        helperStats.setLastCalculated(LocalDateTime.now());
         statsRepository.save(helperStats);
 
-        UserRatingStats receiverStats = statsRepository.findByUserId(receiverId)
-                .orElseGet(() -> createDefaultStats(receiverId));
+        UserRatingStats receiverStats = getStatsForUpdate(receiverId);
         receiverStats.setTotalHelpsReceived(receiverStats.getTotalHelpsReceived() + 1);
+        receiverStats.setLastCalculated(LocalDateTime.now());
         statsRepository.save(receiverStats);
     }
 
-    private UserRatingStats createDefaultStats(Long userId) {
-        return UserRatingStats.builder()
-                .userId(userId)
-                .totalHelpsGiven(0L)
-                .totalHelpsReceived(0L)
-                .successfulHelps(0L)
-                .cancelledHelps(0L)
-                .currentRating(3.0)
-                .ratingTrend("STABLE")
-                .lastCalculated(LocalDateTime.now())
-                .build();
+    /**
+     * A cancellation is not a successful help: the helper's attempt is counted,
+     * but the receiver is not credited with a received help.
+     */
+    @Transactional
+    public void recordCancelledHelp(Long helperId) {
+        log.info("Фиксация отменённой помощи в статистике: helper={}", helperId);
+
+        UserRatingStats helperStats = getStatsForUpdate(helperId);
+        helperStats.setTotalHelpsGiven(helperStats.getTotalHelpsGiven() + 1);
+        helperStats.setCancelledHelps(helperStats.getCancelledHelps() + 1);
+        helperStats.setLastCalculated(LocalDateTime.now());
+        statsRepository.save(helperStats);
+    }
+
+    private UserRatingStats getStatsForUpdate(Long userId) {
+        statsRepository.insertIfAbsent(userId);
+        return statsRepository.findByUserIdForUpdate(userId)
+                .orElseThrow(() -> new IllegalStateException(
+                        "Не удалось создать статистику рейтинга для пользователя " + userId));
     }
 
     private RatingResponse buildRatingResponse(User user, UserRatingStats stats) {

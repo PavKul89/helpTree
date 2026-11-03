@@ -162,11 +162,11 @@ public class AchievementService {
     }
 
     private void awardAchievement(User user, AchievementType type) {
-        Achievement achievement = new Achievement();
-        achievement.setUser(user);
-        achievement.setType(type);
-        achievement.setEarnedAt(LocalDateTime.now());
-        achievementRepository.save(achievement);
+        int inserted = achievementRepository.insertIfAbsent(user.getId(), type.name(), LocalDateTime.now());
+        if (inserted == 0) {
+            log.debug("Достижение {} уже было у пользователя {}, повторная выдача пропущена",
+                    type, user.getId());
+        }
     }
 
     public List<AchievementDto> getUserAchievements(Long userId) {

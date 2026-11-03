@@ -18,5 +18,9 @@ public class HelpResponse {
     private LocalDateTime acceptedAt;
     private LocalDateTime completedAt;
     private LocalDateTime confirmedAt;
+    private String cancelReason;
+    private LocalDateTime cancelledAt;
+    private Long cancelledById;
+    private String cancelInitiator;
     private LocalDateTime createdAt;
 }

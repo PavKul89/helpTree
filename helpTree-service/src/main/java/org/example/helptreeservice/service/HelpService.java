@@ -1,29 +1,36 @@
 package org.example.helptreeservice.service;
 
 
+import org.example.helptreeservice.config.EconomyConfig;
+import org.example.helptreeservice.dto.helps.HelpHistoryEntryDto;
 import org.example.helptreeservice.dto.helps.HelpRequest;
 import org.example.helptreeservice.dto.helps.HelpResponse;
 import org.example.helptreeservice.entity.Help;
+import org.example.helptreeservice.entity.HelpStatusHistory;
 import org.example.helptreeservice.entity.Post;
 import org.example.helptreeservice.entity.User;
+import org.example.helptreeservice.enums.HelpActorRole;
 import org.example.helptreeservice.enums.HelpStatus;
 import org.example.helptreeservice.enums.PostStatus;
 import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.ConflictException;
+import org.example.helptreeservice.exception.ForbiddenException;
 import org.example.helptreeservice.exception.NotFoundException;
 import org.example.helptreeservice.mapper.HelpMapper;
 import org.example.helptreeservice.repository.HelpRepository;
+import org.example.helptreeservice.repository.HelpStatusHistoryRepository;
 import org.example.helptreeservice.repository.PostRepository;
 import org.example.helptreeservice.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -42,303 +49,401 @@ public class HelpService {
     private final AchievementService achievementService;
     private final WalletService walletService;
     private final ImageService imageService;
+    private final EconomyConfig economyConfig;
+    private final HelpStatusHistoryRepository statusHistoryRepository;
+
+    private static final List<HelpStatus> ACTIVE_HELP_STATUSES =
+            List.of(HelpStatus.ACCEPTED, HelpStatus.COMPLETED);
+    private static final int MAX_SLA_BATCH_SIZE = 500;
 
     /**
-     * 1. Помощник откликается на пост
+     * 1. Помощник откликается на пост.
+     *
+     * Блокировка строки поста сериализует конкурентные отклики: только один
+     * помощник увидит пост в статусе OPEN и создаст активную помощь. Частичный
+     * уникальный индекс uq_helps_active_post служит вторым рубежом.
      */
     public HelpResponse acceptHelp(HelpRequest request, Long helperId) {
         log.info("Принятие помощи: helperId={} откликается на postId={}",
                 helperId, request.getPostId());
 
-        try {
-            Post post = postRepository.findById(request.getPostId())
-                    .orElseThrow(() -> new NotFoundException("Пост не найден с id: " + request.getPostId()));
+        Post post = postRepository.findByIdForUpdate(request.getPostId())
+                .orElseThrow(() -> new NotFoundException("Пост не найден с id: " + request.getPostId()));
 
-            if (post.getDeleted() != null && post.getDeleted()) {
-                log.warn("Попытка откликнуться на удаленный пост с ID: {}", request.getPostId());
-                throw new NotFoundException("Пост не найден");
-            }
-            log.debug("Найден пост: title={}, автор={}, статус={}",
-                    post.getTitle(), post.getUser().getEmail(), post.getStatus());
-
-            User helper = userRepository.findById(helperId)
-                    .orElseThrow(() -> new NotFoundException("Помощник не найден с id: " + helperId));
-
-            if (helper.getDeleted() != null && helper.getDeleted()) {
-                log.warn("Попытка откликнуться от удаленного пользователя с ID: {}", helperId);
-                throw new NotFoundException("Помощник не найден");
-            }
-            log.debug("Найден помощник: email={}, имя={}", helper.getEmail(), helper.getName());
-
-            User receiver = post.getUser();
-            log.debug("Автор поста (получатель): email={}, имя={}", receiver.getEmail(), receiver.getName());
-
-            if (receiver.getBlockedAt() != null) {
-                log.warn("Попытка откликнуться на пост заблокированного пользователя: receiverId={}", receiver.getId());
-                throw new BadRequestException("Автор поста заблокирован за долг. Нельзя откликнуться на его пост.");
-            }
-
-            // Проверки
-            if (helper.getId().equals(receiver.getId())) {
-                log.warn("Попытка помочь самому себе: helperId={}, receiverId={}",
-                        helper.getId(), receiver.getId());
-                throw new BadRequestException("Нельзя помочь самому себе");
-            }
-
-            if (receiver.getDebtCount() > 5) {
-                log.warn("Попытка откликнуться на пост пользователя с долгом: receiverId={}, debtCount={}",
-                        receiver.getId(), receiver.getDebtCount());
-                boolean isInGoodStanding = receiver.getHelpedCount() >= receiver.getDebtCount();
-                if (!isInGoodStanding) {
-                    throw new BadRequestException("Пользователь заблокирован за долг. Невозможно откликнуться на пост.");
-                }
-            }
-
-            if (helpRepository.existsByPostAndHelper(post, helper)) {
-                log.warn("Повторный отклик на пост: helperId={}, postId={}",
-                        helper.getId(), post.getId());
-                throw new ConflictException("Вы уже откликались на этот пост");
-            }
-
-            if (post.getHelper() != null) {
-                log.warn("На пост уже есть помощник: postId={}, существующий helperId={}",
-                        post.getId(), post.getHelper().getId());
-                throw new ConflictException("На этот пост уже кто-то откликнулся");
-            }
-
-            // Создаем запись о помощи
-            Help help = new Help();
-            help.setPost(post);
-            help.setHelper(helper);
-            help.setReceiver(receiver);
-            help.setStatus(HelpStatus.ACCEPTED);
-            help.setAcceptedAt(LocalDateTime.now());
-            help.setCreatedAt(LocalDateTime.now());
-            help.setUpdatedAt(LocalDateTime.now());
-
-            // Обновляем статус поста и помощника
-            post.setStatus(PostStatus.IN_PROGRESS);
-            post.setHelper(helper);
-            postRepository.save(post);
-            log.debug("Статус поста обновлен на IN_PROGRESS, назначен помощник ID: {}", helper.getId());
-
-            Help savedHelp = helpRepository.save(help);
-
-            log.info("Помощь успешно принята: helpId={}, helperId={}, receiverId={}, postId={}",
-                    savedHelp.getId(), helper.getId(), receiver.getId(), post.getId());
-
-            return helpMapper.toResponse(savedHelp);
-
-        } catch (NotFoundException e) {
-            log.warn("Не удалось принять помощь: {}", e.getMessage());
-            throw e;
-        } catch (BadRequestException | ConflictException e) {
-            log.warn("Ошибка валидации при принятии помощи: {}", e.getMessage());
-            throw e;
-        } catch (Exception e) {
-            log.error("Ошибка при принятии помощи: helperId={}, postId={}",
-                    helperId, request.getPostId(), e);
-            throw e;
+        if (Boolean.TRUE.equals(post.getDeleted())) {
+            throw new NotFoundException("Пост не найден");
         }
+        if (post.getStatus() != PostStatus.OPEN) {
+            throw new ConflictException("Заявка уже не открыта для откликов");
+        }
+        if (post.getHelper() != null) {
+            throw new ConflictException("На этот пост уже кто-то откликнулся");
+        }
+
+        User helper = userRepository.findById(helperId)
+                .orElseThrow(() -> new NotFoundException("Помощник не найден с id: " + helperId));
+        if (Boolean.TRUE.equals(helper.getDeleted())) {
+            throw new NotFoundException("Помощник не найден");
+        }
+
+        User receiver = post.getUser();
+        if (receiver == null || Boolean.TRUE.equals(receiver.getDeleted())) {
+            throw new NotFoundException("Автор заявки не найден");
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+
+        if (helper.getId().equals(receiver.getId())) {
+            throw new BadRequestException("Нельзя помочь самому себе");
+        }
+
+        // Помощь — способ выйти из долга, поэтому для помощника ограничением
+        // является именно активная блокировка, а не размер долга.
+        if (isActivelyBlocked(helper, now)) {
+            throw new ForbiddenException("Ваш аккаунт заблокирован за долг. Помогите другим пользователям, чтобы разблокировать аккаунт.");
+        }
+        if (isActivelyBlocked(receiver, now)) {
+            throw new BadRequestException("Автор поста заблокирован за долг. Нельзя откликнуться на его пост.");
+        }
+        checkReceiverDebt(receiver);
+
+        if (helpRepository.existsByPostAndHelper(post, helper)) {
+            throw new ConflictException("Вы уже откликались на этот пост");
+        }
+        if (helpRepository.existsByPostIdAndStatusIn(post.getId(), ACTIVE_HELP_STATUSES)) {
+            throw new ConflictException("На этот пост уже кто-то откликнулся");
+        }
+
+        Help help = new Help();
+        help.setPost(post);
+        help.setHelper(helper);
+        help.setReceiver(receiver);
+        help.setStatus(HelpStatus.ACCEPTED);
+        help.setAcceptedAt(now);
+        help.setCreatedAt(now);
+        help.setUpdatedAt(now);
+
+        Help savedHelp;
+        try {
+            savedHelp = helpRepository.saveAndFlush(help);
+        } catch (DataIntegrityViolationException e) {
+            log.warn("Конкурентный отклик отклонён уникальным индексом: postId={}, helperId={}",
+                    post.getId(), helper.getId());
+            throw new ConflictException("На этот пост уже кто-то откликнулся");
+        }
+
+        post.setStatus(PostStatus.IN_PROGRESS);
+        post.setHelper(helper);
+        post.setUpdatedAt(now);
+        postRepository.save(post);
+
+        recordHistory(savedHelp, null, HelpStatus.ACCEPTED, helperId,
+                HelpActorRole.HELPER, null, now);
+
+        log.info("Помощь успешно принята: helpId={}, helperId={}, receiverId={}, postId={}",
+                savedHelp.getId(), helper.getId(), receiver.getId(), post.getId());
+
+        return helpMapper.toResponse(savedHelp);
     }
 
     /**
-     * 2. Помощник отмечает, что помощь выполнена
+     * 2. Помощник отмечает, что помощь выполнена.
+     *
+     * Это только переход ACCEPTED -> COMPLETED. Награды, статистика и статус
+     * заявки фиксируются позже, ровно один раз, в confirmHelp.
      */
-    public HelpResponse completeHelp(Long helpId) {
-        log.info("Завершение помощи: helpId={}", helpId);
+    public HelpResponse completeHelp(Long helpId, Long actorId, boolean admin) {
+        log.info("Завершение помощи: helpId={}, actorId={}, admin={}", helpId, actorId, admin);
 
-        try {
-            Help help = getHelpById(helpId);
-            log.debug("Текущее состояние помощи: status={}, helperId={}, receiverId={}",
-                    help.getStatus(), help.getHelper().getId(), help.getReceiver().getId());
+        Help help = getHelpByIdForUpdate(helpId);
+        Long helperId = help.getHelper().getId();
 
-            // Сохраняем время принятия для расчета длительности
-            LocalDateTime acceptedAt = help.getAcceptedAt();
-
-            // Проверки
-            if (help.getStatus() == HelpStatus.COMPLETED) {
-                log.warn("Попытка завершить уже выполненную помощь: helpId={}", helpId);
-                throw new ConflictException("Помощь уже отмечена как выполненная");
-            }
-
-            if (help.getStatus() == HelpStatus.CANCELLED) {
-                log.warn("Попытка завершить отмененную помощь: helpId={}", helpId);
-                throw new ConflictException("Нельзя завершить отмененную помощь");
-            }
-
-            if (help.getStatus() == HelpStatus.CONFIRMED) {
-                log.warn("Попытка завершить подтвержденную помощь: helpId={}", helpId);
-                throw new ConflictException("Помощь уже подтверждена");
-            }
-
-            if (help.getStatus() != HelpStatus.ACCEPTED) {
-                log.warn("Попытка завершить помощь в неверном статусе: helpId={}, currentStatus={}",
-                        helpId, help.getStatus());
-                throw new BadRequestException("Помощь не в статусе ACCEPTED");
-            }
-
-            help.setStatus(HelpStatus.COMPLETED);
-            help.setCompletedAt(LocalDateTime.now());
-            help.setUpdatedAt(LocalDateTime.now());
-
-            Help updatedHelp = helpRepository.save(help);
-
-            // Рассчитываем длительность (в минутах)
-            long duration = 0;
-            if (acceptedAt != null) {
-                duration = ChronoUnit.MINUTES.between(acceptedAt, LocalDateTime.now());
-            }
-
-            ratingService.updateStatsAfterHelp(help.getHelper().getId(), help.getReceiver().getId(), true);
-
-            log.info("Помощь успешно отмечена как выполненная: helpId={}", helpId);
-            log.debug("Обновленный статус помощи: {}", updatedHelp.getStatus());
-
-            return helpMapper.toResponse(updatedHelp);
-
-        } catch (NotFoundException e) {
-            log.warn("Не удалось завершить помощь: helpId={} не найден", helpId);
-            throw e;
-        } catch (BadRequestException | ConflictException e) {
-            log.warn("Ошибка валидации при завершении помощи: {}", e.getMessage());
-            throw e;
-        } catch (Exception e) {
-            log.error("Ошибка при завершении помощи: helpId={}", helpId, e);
-            throw e;
+        if (!admin && !helperId.equals(actorId)) {
+            throw new ForbiddenException("Завершить помощь может только помощник");
         }
+
+        if (help.getStatus() == HelpStatus.CANCELLED) {
+            throw new ConflictException("Нельзя завершить отменённую помощь");
+        }
+        if (help.getStatus() == HelpStatus.CONFIRMED) {
+            throw new ConflictException("Помощь уже подтверждена");
+        }
+        if (help.getStatus() == HelpStatus.COMPLETED) {
+            // Идемпотентный повтор: возвращаем актуальное состояние без наград.
+            return helpMapper.toResponse(help);
+        }
+        if (help.getStatus() != HelpStatus.ACCEPTED) {
+            throw new ConflictException("Помощь не в статусе ACCEPTED");
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        help.setStatus(HelpStatus.COMPLETED);
+        help.setCompletedAt(now);
+        help.setUpdatedAt(now);
+        Help updatedHelp = helpRepository.saveAndFlush(help);
+
+        recordHistory(updatedHelp, HelpStatus.ACCEPTED, HelpStatus.COMPLETED, actorId,
+                admin ? HelpActorRole.ADMIN : HelpActorRole.HELPER, null, now);
+
+        log.info("Помощь отмечена как выполненная: helpId={}", helpId);
+        return helpMapper.toResponse(updatedHelp);
     }
 
     /**
-     * 3. Автор подтверждает, что помощь получена
+     * 3. Получатель подтверждает, что помощь получена.
+     *
+     * Единственная точка фиксации успешной помощи: финальный статус, статус
+     * заявки, статистика, монеты, достижения и история обновляются здесь и
+     * только при переходе COMPLETED -> CONFIRMED под блокировкой строки помощи.
+     * Повторный вызов возвращает текущее состояние и ничего не начисляет.
      */
-    public HelpResponse confirmHelp(Long helpId) {
-        log.info("Подтверждение получения помощи: helpId={}", helpId);
+    public HelpResponse confirmHelp(Long helpId, Long actorId, boolean admin) {
+        log.info("Подтверждение получения помощи: helpId={}, actorId={}, admin={}",
+                helpId, actorId, admin);
 
-        try {
-            // Блокируем строку помощи на время транзакции: второй конкурентный
-            // confirmHelp будет ждать коммита и увидит уже подтверждённый статус.
-            Help help = getHelpByIdForUpdate(helpId);
-            log.debug("Текущее состояние помощи: status={}, helperId={}, receiverId={}",
-                    help.getStatus(), help.getHelper().getId(), help.getReceiver().getId());
+        Help help = getHelpByIdForUpdate(helpId);
+        Long helperId = help.getHelper().getId();
+        Long receiverId = help.getReceiver().getId();
 
-            // Проверки
-            if (help.getStatus() == HelpStatus.CONFIRMED) {
-                log.warn("Попытка подтвердить уже подтвержденную помощь: helpId={}", helpId);
-                throw new ConflictException("Помощь уже подтверждена");
-            }
-
-            if (help.getStatus() == HelpStatus.CANCELLED) {
-                log.warn("Попытка подтвердить отмененную помощь: helpId={}", helpId);
-                throw new ConflictException("Нельзя подтвердить отмененную помощь");
-            }
-
-            if (help.getStatus() != HelpStatus.COMPLETED) {
-                log.warn("Попытка подтвердить помощь в неверном статусе: helpId={}, currentStatus={}",
-                        helpId, help.getStatus());
-                throw new BadRequestException("Помощь не в статусе COMPLETED");
-            }
-
-            // Проверяем, не заблокирован ли получатель помощи
-            if (userService.isUserBlocked(help.getReceiver().getId())) {
-                log.warn("Попытка подтвердить помощь заблокированному пользователю: receiverId={}", 
-                        help.getReceiver().getId());
-                throw new BadRequestException("Нельзя подтвердить помощь заблокированному пользователю");
-            }
-
-            help.setStatus(HelpStatus.CONFIRMED);
-            help.setConfirmedAt(LocalDateTime.now());
-            help.setUpdatedAt(LocalDateTime.now());
-
-            // Обновляем статус поста
-            Post post = help.getPost();
-            post.setStatus(PostStatus.COMPLETED);
-            postRepository.save(post);
-            log.debug("Статус поста ID={} обновлен на COMPLETED", post.getId());
-
-            // Правило пирамиды
-            log.info("Применение правила пирамиды: helperId={}, receiverId={}",
-                    help.getHelper().getId(), help.getReceiver().getId());
-
-            userService.incrementHelpedCount(help.getReceiver().getId());
-            userService.userHelpedSomeone(help.getHelper().getId());
-
-            // Начисляем HelpCoins за помощь
-            walletService.addCoinsForHelp(help.getHelper().getId(), help.getReceiver().getId(), post.getId());
-            walletService.addCoinsForReceivedHelp(help.getReceiver().getId(), help.getHelper().getId(), post.getId());
-
-            achievementService.checkAndAwardAchievements(help.getHelper(), help);
-
-            Help updatedHelp = helpRepository.save(help);
-
-            ratingService.updateStatsAfterHelp(help.getHelper().getId(), help.getReceiver().getId(), true);
-
-            log.info("Помощь успешно подтверждена: helpId={}", helpId);
-            log.debug("Итоговое состояние помощи: {}", updatedHelp.getStatus());
-
-            return helpMapper.toResponse(updatedHelp);
-
-        } catch (NotFoundException e) {
-            log.warn("Не удалось подтвердить помощь: helpId={} не найден", helpId);
-            throw e;
-        } catch (BadRequestException | ConflictException e) {
-            log.warn("Ошибка валидации при подтверждении помощи: {}", e.getMessage());
-            throw e;
-        } catch (Exception e) {
-            log.error("Ошибка при подтверждении помощи: helpId={}", helpId, e);
-            throw e;
+        if (!admin && !receiverId.equals(actorId)) {
+            throw new ForbiddenException("Подтвердить помощь может только получатель");
         }
+
+        if (help.getStatus() == HelpStatus.CANCELLED) {
+            throw new ConflictException("Нельзя подтвердить отменённую помощь");
+        }
+        if (help.getStatus() == HelpStatus.CONFIRMED) {
+            // Идемпотентный повтор: награды уже начислены, повторно не начисляем.
+            return helpMapper.toResponse(help);
+        }
+        if (help.getStatus() != HelpStatus.COMPLETED) {
+            throw new ConflictException("Подтвердить можно только помощь, отмеченную как выполненная");
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+
+        // Блокируем обоих участников в детерминированном порядке: балансы и
+        // счётчики долга не должны потерять параллельные изменения.
+        List<Long> userIds = helperId < receiverId
+                ? List.of(helperId, receiverId)
+                : List.of(receiverId, helperId);
+        List<User> lockedUsers = userRepository.findAllByIdInForUpdate(userIds);
+        User receiver = lockedUsers.stream()
+                .filter(u -> u.getId().equals(receiverId))
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException("Получатель не найден"));
+
+        if (isActivelyBlocked(receiver, now)) {
+            throw new BadRequestException("Нельзя подтвердить помощь заблокированному пользователю");
+        }
+
+        help.setStatus(HelpStatus.CONFIRMED);
+        help.setConfirmedAt(now);
+        help.setUpdatedAt(now);
+        helpRepository.saveAndFlush(help);
+
+        Post post = help.getPost();
+        post.setStatus(PostStatus.COMPLETED);
+        post.setUpdatedAt(now);
+        postRepository.save(post);
+
+        userService.incrementHelpedCount(receiverId);
+        userService.userHelpedSomeone(helperId);
+
+        walletService.addCoinsForHelp(helperId, receiverId, post.getId());
+        walletService.addCoinsForReceivedHelp(receiverId, helperId, post.getId());
+
+        achievementService.checkAndAwardAchievements(help.getHelper(), help);
+        ratingService.recordSuccessfulHelp(helperId, receiverId);
+
+        recordHistory(help, HelpStatus.COMPLETED, HelpStatus.CONFIRMED, actorId,
+                admin ? HelpActorRole.ADMIN : HelpActorRole.RECEIVER, null, now);
+
+        log.info("Помощь успешно подтверждена: helpId={}", helpId);
+        return helpMapper.toResponse(help);
     }
 
     /**
-     * 4. Отмена помощи
+     * 4. Отмена помощи по утверждённой политике.
+     *
+     * Помощник: ACCEPTED или COMPLETED. Получатель: только ACCEPTED.
+     * ADMIN: любой не-CONFIRMED статус, обязательно с причиной.
+     * SYSTEM: SLA-отмена зависших ACCEPTED.
      */
-    public HelpResponse cancelHelp(Long helpId) {
-        log.info("Отмена помощи: helpId={}", helpId);
+    public HelpResponse cancelHelp(Long helpId, Long actorId, boolean admin, String reason) {
+        log.info("Отмена помощи: helpId={}, actorId={}, admin={}", helpId, actorId, admin);
 
-        try {
-            Help help = getHelpById(helpId);
-            log.debug("Текущее состояние помощи: status={}, helperId={}, receiverId={}",
-                    help.getStatus(), help.getHelper().getId(), help.getReceiver().getId());
+        Help help = getHelpByIdForUpdate(helpId);
+        Long helperId = help.getHelper().getId();
+        Long receiverId = help.getReceiver().getId();
 
-            if (help.getStatus() == HelpStatus.CANCELLED) {
-                log.warn("Попытка отменить уже отмененную помощь: helpId={}", helpId);
-                throw new ConflictException("Помощь уже отменена");
+        HelpActorRole initiator;
+        if (admin) {
+            initiator = HelpActorRole.ADMIN;
+        } else if (helperId.equals(actorId)) {
+            initiator = HelpActorRole.HELPER;
+        } else if (receiverId.equals(actorId)) {
+            initiator = HelpActorRole.RECEIVER;
+        } else {
+            throw new ForbiddenException("Вы не являетесь участником этой помощи");
+        }
+
+        if (help.getStatus() == HelpStatus.CANCELLED) {
+            // Идемпотентный повтор: состояние уже актуально, повторных записей нет.
+            return helpMapper.toResponse(help);
+        }
+        if (help.getStatus() == HelpStatus.CONFIRMED) {
+            throw new ConflictException("Нельзя отменить подтверждённую помощь");
+        }
+
+        if (!admin) {
+            if (initiator == HelpActorRole.RECEIVER && help.getStatus() != HelpStatus.ACCEPTED) {
+                throw new ForbiddenException("Получатель может отменить помощь только до отметки выполнения");
             }
-
-            if (help.getStatus() == HelpStatus.CONFIRMED) {
-                log.warn("Попытка отменить подтвержденную помощь: helpId={}", helpId);
-                throw new ConflictException("Нельзя отменить подтвержденную помощь");
+            if (initiator == HelpActorRole.HELPER
+                    && help.getStatus() != HelpStatus.ACCEPTED
+                    && help.getStatus() != HelpStatus.COMPLETED) {
+                throw new ConflictException("Помощь нельзя отменить в текущем статусе");
             }
+        }
 
-            HelpStatus oldStatus = help.getStatus();
-            help.setStatus(HelpStatus.CANCELLED);
-            help.setUpdatedAt(LocalDateTime.now());
-            log.debug("Статус помощи изменен с {} на CANCELLED", oldStatus);
+        String normalizedReason = normalizeReason(reason);
+        if (initiator == HelpActorRole.ADMIN && normalizedReason == null) {
+            throw new BadRequestException("Администратор должен указать причину отмены");
+        }
 
-            Post post = help.getPost();
-            post.setStatus(PostStatus.OPEN);
-            post.setHelper(null);
-            postRepository.save(post);
-            log.debug("Статус поста ID={} возвращен на OPEN, помощник удален", post.getId());
+        applyCancellation(help, initiator, actorId, normalizedReason);
+        log.info("Помощь отменена: helpId={}, initiator={}", helpId, initiator);
+        return helpMapper.toResponse(help);
+    }
 
-            Help updatedHelp = helpRepository.save(help);
+    @Transactional(readOnly = true)
+    public List<HelpHistoryEntryDto> getHelpHistory(Long helpId, Long actorId, boolean admin) {
+        Help help = getHelpById(helpId);
+        boolean participant = actorId != null
+                && (actorId.equals(help.getHelper().getId()) || actorId.equals(help.getReceiver().getId()));
+        if (!admin && !participant) {
+            throw new ForbiddenException("История доступна только участникам помощи");
+        }
 
-            ratingService.updateStatsAfterHelp(help.getHelper().getId(), help.getReceiver().getId(), false);
+        return statusHistoryRepository.findByHelpIdOrderByCreatedAtAsc(helpId).stream()
+                .map(entry -> HelpHistoryEntryDto.builder()
+                        .id(entry.getId())
+                        .fromStatus(entry.getFromStatus() != null ? entry.getFromStatus().name() : null)
+                        .toStatus(entry.getToStatus().name())
+                        .actorId(entry.getActorId())
+                        .actorRole(entry.getActorRole().name())
+                        .reason(entry.getReason())
+                        .createdAt(entry.getCreatedAt())
+                        .build())
+                .collect(Collectors.toList());
+    }
 
-            log.info("Помощь успешно отменена: helpId={}", helpId);
+    @Transactional(readOnly = true)
+    public List<Long> findStaleAcceptedHelpIds(LocalDateTime cutoff, int limit) {
+        int batchSize = Math.max(1, Math.min(limit, MAX_SLA_BATCH_SIZE));
+        return helpRepository.findIdsByStatusAndAcceptedAtBefore(
+                HelpStatus.ACCEPTED, cutoff, PageRequest.of(0, batchSize));
+    }
 
-            return helpMapper.toResponse(updatedHelp);
+    /**
+     * Per-help transaction invoked by the SLA scheduler through the Spring proxy.
+     * Rechecks the status under a row lock so a help completed at the same time
+     * as the sweep is never cancelled.
+     */
+    public boolean cancelStaleAcceptedHelp(Long helpId, LocalDateTime cutoff) {
+        Help help = helpRepository.findByIdForUpdate(helpId).orElse(null);
+        if (help == null || Boolean.TRUE.equals(help.getDeleted())) {
+            return false;
+        }
+        if (help.getStatus() != HelpStatus.ACCEPTED) {
+            return false;
+        }
+        if (help.getAcceptedAt() == null || !help.getAcceptedAt().isBefore(cutoff)) {
+            return false;
+        }
 
-        } catch (NotFoundException e) {
-            log.warn("Не удалось отменить помощь: helpId={} не найден", helpId);
-            throw e;
-        } catch (BadRequestException | ConflictException e) {
-            log.warn("Ошибка валидации при отмене помощи: {}", e.getMessage());
-            throw e;
-        } catch (Exception e) {
-            log.error("Ошибка при отмене помощи: helpId={}", helpId, e);
-            throw e;
+        String reason = "Автоматическая отмена: помощь не завершена в установленный срок";
+        applyCancellation(help, HelpActorRole.SYSTEM, null, reason);
+        log.info("SLA: помощь автоматически отменена helpId={}", helpId);
+        return true;
+    }
+
+    private void applyCancellation(Help help, HelpActorRole initiator, Long actorId, String reason) {
+        LocalDateTime now = LocalDateTime.now();
+        HelpStatus fromStatus = help.getStatus();
+        Long helperId = help.getHelper().getId();
+
+        help.setStatus(HelpStatus.CANCELLED);
+        help.setCancelledAt(now);
+        help.setCancelledById(initiator == HelpActorRole.SYSTEM ? null : actorId);
+        help.setCancelInitiator(initiator);
+        help.setCancelReason(reason != null ? reason : defaultCancelReason(initiator));
+        help.setUpdatedAt(now);
+
+        Post post = help.getPost();
+        if (post != null && post.getStatus() == PostStatus.IN_PROGRESS) {
+            boolean ownsHelper = post.getHelper() == null
+                    || post.getHelper().getId().equals(helperId);
+            if (ownsHelper) {
+                post.setStatus(PostStatus.OPEN);
+                post.setHelper(null);
+                post.setUpdatedAt(now);
+                postRepository.save(post);
+            }
+        }
+
+        ratingService.recordCancelledHelp(helperId);
+
+        recordHistory(help, fromStatus, HelpStatus.CANCELLED, actorId, initiator,
+                help.getCancelReason(), now);
+
+        helpRepository.saveAndFlush(help);
+    }
+
+    private void recordHistory(Help help, HelpStatus fromStatus, HelpStatus toStatus,
+                               Long actorId, HelpActorRole actorRole, String reason,
+                               LocalDateTime createdAt) {
+        HelpStatusHistory history = new HelpStatusHistory();
+        history.setHelp(help);
+        history.setFromStatus(fromStatus);
+        history.setToStatus(toStatus);
+        history.setActorId(actorId);
+        history.setActorRole(actorRole);
+        history.setReason(reason);
+        history.setCreatedAt(createdAt);
+        statusHistoryRepository.save(history);
+    }
+
+    private String normalizeReason(String reason) {
+        if (reason == null) {
+            return null;
+        }
+        String trimmed = reason.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private String defaultCancelReason(HelpActorRole initiator) {
+        return switch (initiator) {
+            case HELPER -> "Отменено помощником";
+            case RECEIVER -> "Отменено получателем";
+            case ADMIN -> "Отменено администратором";
+            case SYSTEM -> "Автоматическая отмена системой";
+        };
+    }
+
+    private boolean isActivelyBlocked(User user, LocalDateTime now) {
+        if (user.getBlockedUntil() != null) {
+            return user.getBlockedUntil().isAfter(now);
+        }
+        return user.getBlockedAt() != null;
+    }
+
+    private void checkReceiverDebt(User receiver) {
+        int debt = receiver.getDebtCount() != null ? receiver.getDebtCount() : 0;
+        int helped = receiver.getHelpedCount() != null ? receiver.getHelpedCount() : 0;
+        if (debt > economyConfig.getDebtBlockThreshold() && helped < debt) {
+            throw new BadRequestException("Пользователь заблокирован за долг. Невозможно откликнуться на пост.");
         }
     }
 

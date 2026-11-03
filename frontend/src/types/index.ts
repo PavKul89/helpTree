@@ -131,7 +131,6 @@ export interface UpdatePostRequest {
   title?: string;
   description?: string;
   authorName?: string;
-  status?: Post['status'];
   imageUrls?: string[];
 }
 

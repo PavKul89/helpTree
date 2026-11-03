@@ -394,14 +394,25 @@ public class UserService {
 
     public void incrementHelpedCount(Long receiverId) {
         log.info("Увеличение счетчика долгов для получателя помощи с ID: {}", receiverId);
-        userRepository.updateDebtCount(receiverId, 2);
+
+        // Mutate the managed row instead of issuing a bulk UPDATE: the receiver is
+        // already locked by confirmHelp, and a later save of the same entity (for
+        // example the coin balance update) would otherwise write back the stale
+        // pre-increment debt value and silently lose this increment.
+        User receiver = userRepository.findByIdForUpdate(receiverId)
+                .orElseThrow(() -> new NotFoundException("Пользователь не найден с id: " + receiverId));
+        int debt = receiver.getDebtCount() != null ? receiver.getDebtCount() : 0;
+        receiver.setDebtCount(debt + 2);
+        receiver.setUpdatedAt(LocalDateTime.now());
+        userRepository.save(receiver);
+
         log.info("Счетчик долгов для получателя ID {} успешно обновлен", receiverId);
     }
 
     public void userHelpedSomeone(Long helperId) {
         log.info("Обработка помощи от пользователя с ID: {}", helperId);
         try {
-            User user = userRepository.findById(helperId).orElse(null);
+            User user = userRepository.findByIdForUpdate(helperId).orElse(null);
             if (user != null) {
                 user.setHelpedCount(user.getHelpedCount() + 1);
                 if (user.getDebtCount() > 0) {
@@ -441,26 +452,6 @@ public class UserService {
             return false;
         }
         return user.getDebtCount() <= 3;
-    }
-
-    @Transactional
-    public void processHelp(Long helperId, Long receiverId) {
-        log.info("Начало процесса помощи: helperId={}, receiverId={}", helperId, receiverId);
-        try {
-            log.debug("Шаг 1: Обработка помощи от пользователя {}", helperId);
-            userHelpedSomeone(helperId);
-
-            log.debug("Шаг 2: Обновление счетчика получателя {}", receiverId);
-            incrementHelpedCount(receiverId);
-
-            log.info("Процесс помощи между helperId={} и receiverId={} успешно завершен",
-                    helperId, receiverId);
-
-        } catch (Exception e) {
-            log.error("Ошибка в процессе помощи: helperId={}, receiverId={}",
-                    helperId, receiverId, e);
-            throw e;
-        }
     }
 
     public UserPublicDto getUserPublicById(Long id) {

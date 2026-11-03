@@ -126,6 +126,12 @@ app:
     # Legacy /topic destinations remain authorized for older frontend builds.
     # Disable after the frontend has fully moved to /user/queue destinations.
     legacy-topics-enabled: ${CHAT_LEGACY_TOPICS_ENABLED:true}
+  help:
+    # Stale ACCEPTED helps are cancelled after this many hours (default 7 days).
+    sla-enabled: ${HELP_SLA_ENABLED:true}
+    accepted-timeout-hours: ${HELP_ACCEPTED_TIMEOUT_HOURS:168}
+    sla-cron: "${HELP_SLA_CRON:0 0 * * * *}"
+    sla-batch-size: ${HELP_SLA_BATCH_SIZE:100}
   websocket:
     allowed-origins: ${WS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:3001,http://localhost:5173}
     relay-enabled: ${WS_RELAY_ENABLED:false}

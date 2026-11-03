@@ -1,12 +1,12 @@
 package org.example.helptreeservice.controller;
 
+import org.example.helptreeservice.dto.helps.CancelHelpRequest;
+import org.example.helptreeservice.dto.helps.HelpHistoryEntryDto;
 import org.example.helptreeservice.dto.helps.HelpRequest;
 import org.example.helptreeservice.dto.helps.HelpResponse;
-import org.example.helptreeservice.entity.Help;
 import org.example.helptreeservice.exception.ForbiddenException;
 import org.example.helptreeservice.service.AuthorizationService;
 import org.example.helptreeservice.service.HelpService;
-import org.example.helptreeservice.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,18 +27,11 @@ public class HelpController {
 
     private final HelpService helpService;
     private final AuthorizationService authService;
-    private final UserService userService;
 
     @PostMapping("/accept")
     public ResponseEntity<HelpResponse> acceptHelp(@Valid @RequestBody HelpRequest request) {
-        var currentUser = authService.getCurrentUser();
-        if (currentUser == null) {
-            throw new ForbiddenException("Для отклика на пост необходимо войти в систему");
-        }
-        if (userService.isUserBlocked(currentUser.getUserId())) {
-            throw new ForbiddenException("Ваш аккаунт заблокирован за долг. Помогите другим пользователям, чтобы разблокировать аккаунт.");
-        }
-        HelpResponse response = helpService.acceptHelp(request, currentUser.getUserId());
+        Long actorId = requireCurrentUserId("Для отклика на пост необходимо войти в систему");
+        HelpResponse response = helpService.acceptHelp(request, actorId);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
@@ -49,35 +42,30 @@ public class HelpController {
 
     @PostMapping("/{helpId}/complete")
     public ResponseEntity<HelpResponse> completeHelp(@PathVariable Long helpId) {
-        Help help = helpService.getHelpById(helpId);
-        Long helperId = help.getHelper().getId();
-        Long receiverId = help.getReceiver().getId();
-        if (!authService.canAccessHelp(helperId, receiverId)) {
-            throw new ForbiddenException("Вы можете завершить только свою помощь");
-        }
-        return ResponseEntity.ok(helpService.completeHelp(helpId));
+        Long actorId = requireCurrentUserId("Для завершения помощи необходимо войти в систему");
+        return ResponseEntity.ok(helpService.completeHelp(helpId, actorId, authService.isAdmin()));
     }
 
     @PostMapping("/{helpId}/confirm")
     public ResponseEntity<HelpResponse> confirmHelp(@PathVariable Long helpId) {
-        Help help = helpService.getHelpById(helpId);
-        Long helperId = help.getHelper().getId();
-        Long receiverId = help.getReceiver().getId();
-        if (!authService.canAccessHelp(helperId, receiverId)) {
-            throw new ForbiddenException("Вы можете подтвердить только полученную вами помощь");
-        }
-        return ResponseEntity.ok(helpService.confirmHelp(helpId));
+        Long actorId = requireCurrentUserId("Для подтверждения помощи необходимо войти в систему");
+        return ResponseEntity.ok(helpService.confirmHelp(helpId, actorId, authService.isAdmin()));
     }
 
     @PostMapping("/{helpId}/cancel")
-    public ResponseEntity<HelpResponse> cancelHelp(@PathVariable Long helpId) {
-        Help help = helpService.getHelpById(helpId);
-        Long helperId = help.getHelper().getId();
-        Long receiverId = help.getReceiver().getId();
-        if (!authService.canAccessHelp(helperId, receiverId)) {
-            throw new ForbiddenException("Вы можете отменить только свою помощь");
-        }
-        return ResponseEntity.ok(helpService.cancelHelp(helpId));
+    public ResponseEntity<HelpResponse> cancelHelp(
+            @PathVariable Long helpId,
+            @RequestBody(required = false) @Valid CancelHelpRequest request) {
+        Long actorId = requireCurrentUserId("Для отмены помощи необходимо войти в систему");
+        String reason = request != null ? request.getReason() : null;
+        return ResponseEntity.ok(helpService.cancelHelp(
+                helpId, actorId, authService.isAdmin(), reason));
+    }
+
+    @GetMapping("/{helpId}/history")
+    public ResponseEntity<List<HelpHistoryEntryDto>> getHelpHistory(@PathVariable Long helpId) {
+        Long actorId = requireCurrentUserId("Для просмотра истории помощи необходимо войти в систему");
+        return ResponseEntity.ok(helpService.getHelpHistory(helpId, actorId, authService.isAdmin()));
     }
 
     @GetMapping("/helper/{helperId}")
@@ -113,19 +101,22 @@ public class HelpController {
 
     @GetMapping("/new-responses/count")
     public ResponseEntity<Long> getNewResponsesCount(@RequestParam(required = false) String since) {
-        var currentUser = authService.getCurrentUser();
-        if (currentUser == null) {
-            throw new ForbiddenException("Необходимо войти в систему");
-        }
-        return ResponseEntity.ok(helpService.getNewResponsesCount(currentUser.getUserId(), since));
+        Long actorId = requireCurrentUserId("Необходимо войти в систему");
+        return ResponseEntity.ok(helpService.getNewResponsesCount(actorId, since));
     }
 
     @GetMapping("/new-responses")
-    public ResponseEntity<List<org.example.helptreeservice.dto.helps.NewResponseDto>> getNewResponses(@RequestParam(required = false) String since) {
+    public ResponseEntity<List<org.example.helptreeservice.dto.helps.NewResponseDto>> getNewResponses(
+            @RequestParam(required = false) String since) {
+        Long actorId = requireCurrentUserId("Необходимо войти в систему");
+        return ResponseEntity.ok(helpService.getNewResponses(actorId, since));
+    }
+
+    private Long requireCurrentUserId(String message) {
         var currentUser = authService.getCurrentUser();
         if (currentUser == null) {
-            throw new ForbiddenException("Необходимо войти в систему");
+            throw new ForbiddenException(message);
         }
-        return ResponseEntity.ok(helpService.getNewResponses(currentUser.getUserId(), since));
+        return currentUser.getUserId();
     }
 }

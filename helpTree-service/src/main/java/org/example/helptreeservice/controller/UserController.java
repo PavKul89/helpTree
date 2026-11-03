@@ -162,44 +162,6 @@ public class UserController {
         return ResponseEntity.noContent().build();
     }
 
-    @PostMapping("/{id}/increment-help")
-    public ResponseEntity<Void> incrementHelpedCount(@PathVariable Long id) {
-        if (!authService.isAdmin()) {
-            throw new ForbiddenException("Эта операция доступна только администратору");
-        }
-        userService.incrementHelpedCount(id);
-        return ResponseEntity.ok().build();
-    }
-
-    @PostMapping("/help/{helperId}/to/{receiverId}")
-    public ResponseEntity<String> helpUser(
-            @PathVariable Long helperId,
-            @PathVariable Long receiverId) {
-        if (!authService.isAdmin()) {
-            throw new ForbiddenException("Эта операция доступна только администратору");
-        }
-        userService.processHelp(helperId, receiverId);
-        return ResponseEntity.ok("Помощь зафиксирована");
-    }
-
-    @PostMapping("/increment-debt/{receiverId}")
-    public ResponseEntity<String> incrementDebt(@PathVariable Long receiverId) {
-        if (!authService.isAdmin()) {
-            throw new ForbiddenException("Эта операция доступна только администратору");
-        }
-        userService.incrementHelpedCount(receiverId);
-        return ResponseEntity.ok("Долг увеличен");
-    }
-
-    @PostMapping("/helped/{helperId}")
-    public ResponseEntity<String> helped(@PathVariable Long helperId) {
-        if (!authService.isAdmin()) {
-            throw new ForbiddenException("Эта операция доступна только администратору");
-        }
-        userService.userHelpedSomeone(helperId);
-        return ResponseEntity.ok("Помощь оказана");
-    }
-
     @GetMapping("/{id}/telegram-chat-id")
     public ResponseEntity<String> getTelegramChatId(@PathVariable Long id) {
         requireOwnerOrAdmin(id, "Telegram chat ID доступен только владельцу аккаунта");

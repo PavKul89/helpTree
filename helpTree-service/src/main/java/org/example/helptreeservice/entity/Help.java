@@ -1,5 +1,6 @@
 package org.example.helptreeservice.entity;
 
+import org.example.helptreeservice.enums.HelpActorRole;
 import org.example.helptreeservice.enums.HelpStatus;
 import jakarta.persistence.*;
 import lombok.Data;
@@ -48,6 +49,19 @@ public class Help {
 
     @Column(name = "confirmed_at")
     private LocalDateTime confirmedAt;     // Когда подтвердили
+
+    @Column(name = "cancel_reason", length = 500)
+    private String cancelReason;           // Причина отмены
+
+    @Column(name = "cancelled_at")
+    private LocalDateTime cancelledAt;     // Когда отменили
+
+    @Column(name = "cancelled_by_id")
+    private Long cancelledById;            // Кто отменил (null для SYSTEM)
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "cancel_initiator", length = 20)
+    private HelpActorRole cancelInitiator; // HELPER / RECEIVER / ADMIN / SYSTEM
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;

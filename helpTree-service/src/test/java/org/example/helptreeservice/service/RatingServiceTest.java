@@ -117,4 +117,35 @@ class RatingServiceTest {
 
         assertTrue(result.getContent().isEmpty());
     }
+
+    @Test
+    void recordSuccessfulHelp_shouldCountGivenAndReceivedOnce() {
+        UserRatingStats helper = stats(1L, 3.0);
+        UserRatingStats receiver = stats(2L, 3.0);
+        when(statsRepository.findByUserIdForUpdate(1L)).thenReturn(Optional.of(helper));
+        when(statsRepository.findByUserIdForUpdate(2L)).thenReturn(Optional.of(receiver));
+
+        ratingService.recordSuccessfulHelp(1L, 2L);
+
+        assertEquals(2L, helper.getTotalHelpsGiven());
+        assertEquals(2L, helper.getSuccessfulHelps());
+        assertEquals(0L, helper.getCancelledHelps());
+        assertEquals(2L, receiver.getTotalHelpsReceived());
+        verify(statsRepository).save(helper);
+        verify(statsRepository).save(receiver);
+    }
+
+    @Test
+    void recordCancelledHelp_shouldNotCreditReceiver() {
+        UserRatingStats helper = stats(1L, 3.0);
+        when(statsRepository.findByUserIdForUpdate(1L)).thenReturn(Optional.of(helper));
+
+        ratingService.recordCancelledHelp(1L);
+
+        assertEquals(2L, helper.getTotalHelpsGiven());
+        assertEquals(1L, helper.getCancelledHelps());
+        assertEquals(1L, helper.getSuccessfulHelps());
+        verify(statsRepository, never()).findByUserIdForUpdate(2L);
+        verify(statsRepository).save(helper);
+    }
 }

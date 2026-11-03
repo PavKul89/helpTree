@@ -222,8 +222,8 @@ public class PostService {
 
     public PostDto updatePost(Long id, UpdatePostRequest request) {
         log.info("Обновление поста с ID: {}", id);
-        log.debug("Данные для обновления: title={}, description={}, authorName={}, status={}",
-                request.getTitle(), request.getDescription(), request.getAuthorName(), request.getStatus());
+        log.debug("Данные для обновления: title={}, description={}, authorName={}",
+                request.getTitle(), request.getDescription(), request.getAuthorName());
 
         try {
             Post post = getPostEntityById(id);
@@ -247,13 +247,6 @@ public class PostService {
                 post.setAuthorName(request.getAuthorName());
                 changed = true;
                 log.debug("Изменено имя автора на: {}", request.getAuthorName());
-            }
-
-            if (request.getStatus() != null && request.getStatus() != post.getStatus()) {
-                PostStatus oldStatus = post.getStatus();
-                post.setStatus(request.getStatus());
-                changed = true;
-                log.debug("Изменен статус поста с {} на {}", oldStatus, request.getStatus());
             }
 
             if (request.getImageUrls() != null) {

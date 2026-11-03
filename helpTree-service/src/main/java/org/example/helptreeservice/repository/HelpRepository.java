@@ -14,6 +14,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -44,6 +45,20 @@ public interface HelpRepository extends JpaRepository<Help, Long> {
     Optional<Help> findByPostAndStatusNot(Post post, HelpStatus status);
 
     boolean existsByPostAndHelper(Post post, User helper);
+
+    @Query("SELECT COUNT(h) > 0 FROM Help h " +
+           "WHERE h.post.id = :postId AND h.status IN :statuses " +
+           "AND (h.deleted = false OR h.deleted IS NULL)")
+    boolean existsByPostIdAndStatusIn(@Param("postId") Long postId,
+                                      @Param("statuses") Collection<HelpStatus> statuses);
+
+    @Query("SELECT h.id FROM Help h " +
+           "WHERE h.status = :status AND h.acceptedAt IS NOT NULL AND h.acceptedAt < :cutoff " +
+           "AND (h.deleted = false OR h.deleted IS NULL) " +
+           "ORDER BY h.acceptedAt ASC")
+    List<Long> findIdsByStatusAndAcceptedAtBefore(@Param("status") HelpStatus status,
+                                                  @Param("cutoff") LocalDateTime cutoff,
+                                                  Pageable pageable);
 
     @Query("SELECT h FROM Help h JOIN FETCH h.post JOIN FETCH h.helper JOIN FETCH h.receiver WHERE h.status = :status AND (h.deleted = false OR h.deleted IS NULL)")
     List<Help> findByStatusAndDeletedFalse(@Param("status") HelpStatus status);

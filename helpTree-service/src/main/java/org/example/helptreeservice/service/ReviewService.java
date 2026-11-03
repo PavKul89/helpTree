@@ -40,9 +40,17 @@ public class ReviewService {
 
         User fromUser = userRepository.findById(currentUserId)
                 .orElseThrow(() -> new NotFoundException("Пользователь не найден"));
+        if (Boolean.TRUE.equals(fromUser.getDeleted())) {
+            throw new NotFoundException("Пользователь не найден");
+        }
 
-        Help help = helpRepository.findById(request.getHelpId())
+        // Lock the help fact: status and participant checks stay stable while the
+        // review (and its one-time bonus) is created.
+        Help help = helpRepository.findByIdForUpdate(request.getHelpId())
                 .orElseThrow(() -> new NotFoundException("Помощь не найдена"));
+        if (Boolean.TRUE.equals(help.getDeleted())) {
+            throw new NotFoundException("Помощь не найдена");
+        }
 
         if (help.getStatus() != HelpStatus.CONFIRMED) {
             throw new BadRequestException("Отзыв можно оставить только после подтверждения помощи");
