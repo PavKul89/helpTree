@@ -40,7 +40,7 @@ public class AdminInitializer implements CommandLineRunner {
             admin.setTokenVersion(0L);
             admin.setHelpedCount(0);
             admin.setDebtCount(0);
-            admin.setRating(0.0);
+            admin.setRating(3.0);
             admin.setCreatedAt(LocalDateTime.now());
             admin.setUpdatedAt(LocalDateTime.now());
 

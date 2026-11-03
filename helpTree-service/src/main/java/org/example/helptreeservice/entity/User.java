@@ -56,10 +56,11 @@ public class User {
     @Column(name = "helped_count")
     private Integer helpedCount = 0;
 
-    @Column(name = "debt_count")
+    @Column(name = "debt_count", nullable = false)
     private Integer debtCount = 0;
 
-    private Double rating = 0.0;
+    @Column(nullable = false)
+    private Double rating = 3.0;
 
     @Column(name = "birth_date")
     private LocalDateTime birthDate;
