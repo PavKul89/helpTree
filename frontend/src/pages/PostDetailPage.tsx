@@ -436,6 +436,7 @@ export const PostDetailPage = () => {
             {user && user.id !== post.userId && (
               <Button
                 variant="outline"
+                className="post-detail-message-button"
                 onClick={() => void handleStartChat()}
                 disableRipple
               >
@@ -513,6 +514,7 @@ export const PostDetailPage = () => {
         title="Нельзя добавить в избранное"
         message={'В избранное можно добавлять только\nоткрытые заявки.'}
         confirmText="Понятно"
+        confirmClassName="post-detail-favorite-modal-confirm"
         cancelText={null}
       />
 

@@ -334,6 +334,26 @@
   transform: none;
 }
 
+.post-detail-message-button {
+  gap: 8px;
+  border: 1px solid var(--forest-border) !important;
+  background: rgba(233, 239, 226, 0.04) !important;
+  box-shadow: none !important;
+  color: var(--forest-text-secondary) !important;
+  transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease !important;
+}
+
+.post-detail-message-button:hover:not(:disabled) {
+  border-color: rgba(200, 245, 106, 0.34) !important;
+  background: rgba(200, 245, 106, 0.08) !important;
+  color: var(--forest-lime) !important;
+  transform: none;
+}
+
+.post-detail-message-button svg {
+  color: var(--forest-lime);
+}
+
 .post-detail-notice {
   display: flex;
   align-items: flex-start;
@@ -395,6 +415,19 @@
 }
 
 .post-detail-owner-buttons .ripple-danger:hover:not(:disabled) {
+  border-color: rgba(255, 119, 119, 0.45) !important;
+  background: rgba(255, 119, 119, 0.12) !important;
+  color: var(--forest-error) !important;
+}
+
+.post-detail-favorite-modal-confirm {
+  border: 1px solid rgba(255, 119, 119, 0.25) !important;
+  background: rgba(255, 119, 119, 0.07) !important;
+  box-shadow: none !important;
+  color: #e9aaa2 !important;
+}
+
+.post-detail-favorite-modal-confirm:hover:not(:disabled) {
   border-color: rgba(255, 119, 119, 0.45) !important;
   background: rgba(255, 119, 119, 0.12) !important;
   color: var(--forest-error) !important;

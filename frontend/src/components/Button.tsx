@@ -19,6 +19,7 @@ export const Button: React.FC<ButtonProps> = ({
   disableRipple = false,
   children, 
   style,
+  className,
   onClick,
   ...props 
 }) => {
@@ -49,7 +50,7 @@ export const Button: React.FC<ButtonProps> = ({
   
   return (
     <button 
-      className={`ripple-button ripple-${variant}`}
+      className={`ripple-button ripple-${variant}${className ? ` ${className}` : ''}`}
       style={{ 
         ...styles.button, 
         ...variantStyles,

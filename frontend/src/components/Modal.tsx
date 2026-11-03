@@ -9,6 +9,7 @@ interface ModalProps {
   title: string;
   message: string;
   confirmText?: string;
+  confirmClassName?: string;
   cancelText?: string | null;
   variant?: 'danger' | 'primary';
 }
@@ -20,6 +21,7 @@ export const Modal: React.FC<ModalProps> = ({
   title, 
   message,
   confirmText = 'Подтвердить',
+  confirmClassName,
   cancelText = 'Отмена',
   variant = 'danger'
 }) => {
@@ -125,6 +127,7 @@ export const Modal: React.FC<ModalProps> = ({
             variant={variant} 
             onClick={handleConfirm}
             style={styles.confirmButton}
+            className={confirmClassName}
           >
             {confirmText}
           </Button>
