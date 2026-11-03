@@ -179,6 +179,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             return true;
         }
 
+        // The SPA reads the current profile on startup and needs the blocked
+        // flags, otherwise it would log the user out before they reach /wallet.
+        if ("GET".equals(method) && "/api/users/me".equals(path)) {
+            return true;
+        }
+
         String walletPrefix = "/api/users/" + userId + "/wallet";
         if (!path.startsWith(walletPrefix)) {
             return false;

@@ -11,6 +11,10 @@ export interface WalletDto {
   vipUntil?: string;
   vipActive?: boolean;
   nicknameColor?: string;
+  blocked?: boolean;
+  blockedAt?: string;
+  blockedUntil?: string;
+  debtCount?: number;
 }
 
 export interface CoinTransactionDto {
@@ -52,6 +56,7 @@ export interface WalletPricingDto {
   nicknameColorPrice: number;
   accountUnblockPrice: number;
   accountUnblockDebtReduction: number;
+  debtBlockThreshold: number;
   dailyBonusCoins: number;
 }
 

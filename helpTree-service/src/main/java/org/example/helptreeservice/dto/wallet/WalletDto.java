@@ -19,4 +19,8 @@ public class WalletDto {
     private LocalDateTime vipUntil;
     private Boolean vipActive;
     private String nicknameColor;
+    private Boolean blocked;
+    private LocalDateTime blockedAt;
+    private LocalDateTime blockedUntil;
+    private Integer debtCount;
 }

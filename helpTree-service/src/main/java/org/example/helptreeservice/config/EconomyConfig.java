@@ -26,7 +26,7 @@ public class EconomyConfig {
 
     private long nicknameColorPrice = 20L;
 
-    private long accountUnblockPrice = 30L;
+    private long accountUnblockPrice = 100L;
     private int accountUnblockDebtReduction = 5;
 
     private ZoneId dailyBonusZone = ZoneId.of("Europe/Moscow");

@@ -293,6 +293,27 @@ class JwtAuthFilterTest {
     }
 
     @Test
+    void filter_shouldAllowBlockedUserToReadOwnProfile() throws Exception {
+        Claims claims = mock(Claims.class);
+        when(jwtService.parseAccessClaims(TOKEN)).thenReturn(claims);
+        when(claims.get(JwtService.CLAIM_USER_ID)).thenReturn(USER_ID);
+        when(claims.get(JwtService.CLAIM_ROLE, String.class)).thenReturn("USER");
+        when(claims.get(JwtService.CLAIM_SESSION_ID, String.class)).thenReturn(SESSION_ID);
+        when(claims.get(JwtService.CLAIM_TOKEN_VERSION)).thenReturn(TOKEN_VERSION);
+        when(authSessionService.validateAccessToken(USER_ID, SESSION_ID, TOKEN_VERSION, "USER", true))
+                .thenReturn(new AuthenticatedUser(USER_ID, EMAIL, "USER",
+                        UUID.fromString(SESSION_ID), TOKEN_VERSION));
+
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/users/me");
+        request.addHeader("Authorization", "Bearer " + TOKEN);
+
+        MockHttpServletResponse response = invoke(request);
+
+        assertEquals(200, response.getStatus());
+        verify(filterChain).doFilter(request, response);
+    }
+
+    @Test
     void filter_shouldStillRejectBlockedUserForOtherPurchases() throws Exception {
         Claims claims = mock(Claims.class);
         when(jwtService.parseAccessClaims(TOKEN)).thenReturn(claims);

@@ -167,7 +167,7 @@ app:
     vip-price: ${ECONOMY_VIP_PRICE:50}
     vip-days: ${ECONOMY_VIP_DAYS:30}
     nickname-color-price: ${ECONOMY_NICKNAME_COLOR_PRICE:20}
-    account-unblock-price: ${ECONOMY_ACCOUNT_UNBLOCK_PRICE:30}
+    account-unblock-price: ${ECONOMY_ACCOUNT_UNBLOCK_PRICE:100}
     account-unblock-debt-reduction: ${ECONOMY_ACCOUNT_UNBLOCK_DEBT_REDUCTION:5}
     # Daily bonus resets at 00:00 in this zone.
     daily-bonus-zone: ${ECONOMY_DAILY_BONUS_ZONE:Europe/Moscow}

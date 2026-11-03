@@ -80,6 +80,10 @@ public class WalletService {
                 .vipUntil(user.getVipUntil())
                 .vipActive(user.isVip())
                 .nicknameColor(user.getNicknameColor())
+                .blocked(isActivelyBlocked(user, LocalDateTime.now()))
+                .blockedAt(user.getBlockedAt())
+                .blockedUntil(user.getBlockedUntil())
+                .debtCount(nvl(user.getDebtCount()))
                 .build();
     }
 
@@ -93,6 +97,7 @@ public class WalletService {
                 .nicknameColorPrice(economyConfig.getNicknameColorPrice())
                 .accountUnblockPrice(economyConfig.getAccountUnblockPrice())
                 .accountUnblockDebtReduction(economyConfig.getAccountUnblockDebtReduction())
+                .debtBlockThreshold(economyConfig.getDebtBlockThreshold())
                 .dailyBonusCoins(economyConfig.getCoinsPerDailyLogin())
                 .build();
     }

@@ -21,5 +21,7 @@ public class WalletPricingDto {
     private Long nicknameColorPrice;
     private Long accountUnblockPrice;
     private Integer accountUnblockDebtReduction;
+    /** Debt above this threshold blocks the account again, so it limits unblock eligibility. */
+    private Integer debtBlockThreshold;
     private Long dailyBonusCoins;
 }

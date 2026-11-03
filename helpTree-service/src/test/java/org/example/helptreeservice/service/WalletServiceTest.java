@@ -419,5 +419,8 @@ class WalletServiceTest {
         assertEquals(economyConfig.getVipDays(), pricing.getVipDays());
         assertEquals(economyConfig.getNicknameColorPrice(), pricing.getNicknameColorPrice());
         assertEquals(economyConfig.getAccountUnblockPrice(), pricing.getAccountUnblockPrice());
+        assertEquals(economyConfig.getAccountUnblockDebtReduction(),
+                pricing.getAccountUnblockDebtReduction());
+        assertEquals(economyConfig.getDebtBlockThreshold(), pricing.getDebtBlockThreshold());
     }
 }

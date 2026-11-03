@@ -24,6 +24,7 @@ import {
   X,
   Zap,
 } from 'lucide-react';
+import { authApi } from '../api/authApi';
 import { useAuth } from '../context/AuthContext';
 import {
   walletApi,
@@ -157,7 +158,7 @@ const dedupeTransactions = (transactions: CoinTransactionDto[]): CoinTransaction
 };
 
 export const WalletPage: React.FC = () => {
-  const { user } = useAuth();
+  const { user, setUser } = useAuth();
   const { showToast } = useToast();
 
   const [wallet, setWallet] = useState<WalletDto | null>(null);
@@ -187,6 +188,14 @@ export const WalletPage: React.FC = () => {
   const boostingRef = useRef(false);
   // Kept between failed attempts of the same action so a retry cannot charge twice.
   const boostKeyRef = useRef<string | null>(null);
+
+  const [vipBusy, setVipBusy] = useState(false);
+  const [vipError, setVipError] = useState<string | null>(null);
+  const vipKeyRef = useRef<string | null>(null);
+
+  const [unblockBusy, setUnblockBusy] = useState(false);
+  const [unblockError, setUnblockError] = useState<string | null>(null);
+  const unblockKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -386,6 +395,83 @@ export const WalletPage: React.FC = () => {
     } finally {
       boostingRef.current = false;
       setBoosting(false);
+    }
+  };
+
+  const refreshCurrentUser = () => {
+    authApi
+      .getCurrentUser()
+      .then((freshUser) => setUser(freshUser))
+      .catch(() => {
+        // The wallet itself already refreshed; a stale navbar badge is not critical.
+      });
+  };
+
+  const handleVipPurchase = async () => {
+    if (!user || vipBusy) return;
+    if (!vipKeyRef.current) {
+      vipKeyRef.current = createIdempotencyKey('vip');
+    }
+
+    setVipBusy(true);
+    setVipError(null);
+    try {
+      const result = await walletApi.purchase(user.id, 'VIP', {
+        idempotencyKey: vipKeyRef.current,
+      });
+      vipKeyRef.current = null;
+
+      if (result.applied) {
+        showToast(
+          result.expiresAt
+            ? `VIP активирован до ${formatFullDate(result.expiresAt)}`
+            : 'VIP активирован',
+          'success'
+        );
+      } else {
+        showToast('Эта покупка VIP уже была применена ранее.', 'info');
+      }
+
+      notifyWalletUpdated(result.newBalance);
+      refreshWalletData();
+      refreshCurrentUser();
+    } catch (error) {
+      setVipError(getErrorMessage(error, 'Не удалось купить VIP'));
+    } finally {
+      setVipBusy(false);
+    }
+  };
+
+  const handleUnblockPurchase = async () => {
+    if (!user || unblockBusy) return;
+    if (!unblockKeyRef.current) {
+      unblockKeyRef.current = createIdempotencyKey('unblock');
+    }
+
+    setUnblockBusy(true);
+    setUnblockError(null);
+    try {
+      const result = await walletApi.purchase(user.id, 'ACCOUNT_UNBLOCK', {
+        idempotencyKey: unblockKeyRef.current,
+      });
+      unblockKeyRef.current = null;
+
+      if (result.applied) {
+        showToast(
+          `Аккаунт разблокирован. Текущий долг: ${formatNumber(result.debtCount ?? 0)}.`,
+          'success'
+        );
+      } else {
+        showToast('Эта разблокировка уже была применена ранее.', 'info');
+      }
+
+      notifyWalletUpdated(result.newBalance);
+      refreshWalletData();
+      refreshCurrentUser();
+    } catch (error) {
+      setUnblockError(getErrorMessage(error, 'Не удалось разблокировать аккаунт'));
+    } finally {
+      setUnblockBusy(false);
     }
   };
 
@@ -611,6 +697,23 @@ export const WalletPage: React.FC = () => {
   const boostPriceLabel = pricing ? formatCoins(pricing.boostPrice) : null;
   const boostDurationLabel = pricing ? `${pricing.boostHours} ч` : null;
 
+  const vipActive = Boolean(wallet?.vipActive);
+  const vipPriceLabel = pricing ? formatCoins(pricing.vipPrice) : null;
+  const canAffordVip = Boolean(wallet && pricing && wallet.balance >= pricing.vipPrice);
+
+  const blocked = Boolean(wallet?.blocked);
+  const debtCount = wallet?.debtCount ?? 0;
+  const unblockPriceLabel = pricing ? formatCoins(pricing.accountUnblockPrice) : null;
+  const debtAfterUnblock = pricing
+    ? Math.max(0, debtCount - pricing.accountUnblockDebtReduction)
+    : debtCount;
+  const unblockDebtTooHigh = Boolean(
+    pricing && blocked && debtCount - pricing.accountUnblockDebtReduction > pricing.debtBlockThreshold
+  );
+  const canAffordUnblock = Boolean(
+    wallet && pricing && wallet.balance >= pricing.accountUnblockPrice
+  );
+
   return (
     <main className="wallet-page">
       <header className="wallet-heading">
@@ -671,6 +774,125 @@ export const WalletPage: React.FC = () => {
               </span>
             </aside>
           </section>
+
+          {wallet && pricing && (
+            <section className="wallet-services" aria-labelledby="wallet-services-title">
+              <header className="wallet-services-header">
+                <div>
+                  <span className="wallet-section-eyebrow">Платные возможности</span>
+                  <h2 id="wallet-services-title">Статус и восстановление доступа</h2>
+                </div>
+              </header>
+
+              <div className="wallet-services-grid">
+                {!blocked && (
+                  <article className="wallet-service-card wallet-service-card--vip">
+                    <span className="wallet-service-icon" aria-hidden="true">
+                      <Crown size={20} />
+                    </span>
+                    <div className="wallet-service-copy">
+                      <h3>{vipActive ? 'Продлить VIP-статус' : 'Купить VIP-статус'}</h3>
+                      <p>
+                        Звёздочка в профиле и отметка VIP в кошельке. Покупка во время активного
+                        статуса добавляет срок к текущему.
+                      </p>
+                      <span className="wallet-service-meta">
+                        {vipActive && wallet.vipUntil
+                          ? `Активен до ${formatFullDate(wallet.vipUntil)}`
+                          : `${pricing.vipDays} дней статуса`}
+                      </span>
+                    </div>
+                    <div className="wallet-service-footer">
+                      <span className="wallet-service-price">
+                        {vipPriceLabel}
+                        <small> / {pricing.vipDays} дн.</small>
+                      </span>
+                      <button
+                        type="button"
+                        className="wallet-primary-button"
+                        onClick={handleVipPurchase}
+                        disabled={vipBusy || !canAffordVip}
+                      >
+                        {vipBusy ? (
+                          <Loader2 className="wallet-spinner" size={16} aria-hidden="true" />
+                        ) : (
+                          <Crown size={16} aria-hidden="true" />
+                        )}
+                        {vipBusy ? 'Покупаем…' : vipActive ? 'Продлить' : 'Купить'}
+                      </button>
+                    </div>
+                    {!canAffordVip && (
+                      <p className="wallet-service-note">
+                        Недостаточно HC: для покупки нужно {vipPriceLabel}.
+                      </p>
+                    )}
+                    {vipError && (
+                      <p className="wallet-service-error" role="alert">
+                        {vipError}
+                      </p>
+                    )}
+                  </article>
+                )}
+
+                {blocked && (
+                  <article className="wallet-service-card wallet-service-card--unblock">
+                    <span className="wallet-service-icon" aria-hidden="true">
+                      <Unlock size={20} />
+                    </span>
+                    <div className="wallet-service-copy">
+                      <h3>Разблокировать аккаунт</h3>
+                      <p>
+                        Снимает блокировку за долг и уменьшает долг на{' '}
+                        {pricing.accountUnblockDebtReduction} из {formatNumber(debtCount)}.
+                      </p>
+                      <span className="wallet-service-meta">
+                        После оплаты долг: {formatNumber(debtAfterUnblock)}
+                        {wallet.blockedUntil
+                          ? ` · блокировка до ${formatFullDate(wallet.blockedUntil)}`
+                          : ''}
+                      </span>
+                    </div>
+                    <div className="wallet-service-footer">
+                      <span className="wallet-service-price">{unblockPriceLabel}</span>
+                      <button
+                        type="button"
+                        className="wallet-primary-button"
+                        onClick={handleUnblockPurchase}
+                        disabled={unblockBusy || !canAffordUnblock || unblockDebtTooHigh}
+                      >
+                        {unblockBusy ? (
+                          <Loader2 className="wallet-spinner" size={16} aria-hidden="true" />
+                        ) : (
+                          <Unlock size={16} aria-hidden="true" />
+                        )}
+                        {unblockBusy ? 'Разблокируем…' : 'Разблокировать'}
+                      </button>
+                    </div>
+                    {unblockDebtTooHigh && (
+                      <p className="wallet-service-note">
+                        Долг слишком высок: сначала помогите другим участникам, чтобы он снизился
+                        до{' '}
+                        {formatNumber(
+                          pricing.debtBlockThreshold + pricing.accountUnblockDebtReduction
+                        )}
+                        .
+                      </p>
+                    )}
+                    {!unblockDebtTooHigh && !canAffordUnblock && (
+                      <p className="wallet-service-note">
+                        Недостаточно HC: для разблокировки нужно {unblockPriceLabel}.
+                      </p>
+                    )}
+                    {unblockError && (
+                      <p className="wallet-service-error" role="alert">
+                        {unblockError}
+                      </p>
+                    )}
+                  </article>
+                )}
+              </div>
+            </section>
+          )}
 
           <div className="wallet-content">
             <section className="wallet-history-card" aria-labelledby="wallet-history-title">
