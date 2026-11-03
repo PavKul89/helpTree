@@ -73,7 +73,10 @@ public class AuthSessionService {
     @Transactional
     public IssuedTokens createSession(User user, String ipAddress, String userAgent) {
         LocalDateTime now = LocalDateTime.now();
-        assertUserCanAuthenticate(user, now);
+        // Debt-blocked accounts may sign in so they can reach the wallet
+        // self-service endpoints; the request filter still denies everything
+        // else until the block is paid off or expires.
+        assertUserNotDeleted(user);;
 
         AuthSession session = AuthSession.builder()
                 .id(UUID.randomUUID())
@@ -145,7 +148,7 @@ public class AuthSessionService {
             throw new UnauthorizedException("Refresh токен истёк");
         }
 
-        assertUserCanAuthenticate(user, now);
+        assertUserNotDeleted(user);
 
         revokeToken(token, now, "ROTATED");
         session.setLastUsedAt(now);
@@ -173,6 +176,22 @@ public class AuthSessionService {
                                                  String sessionIdValue,
                                                  Long tokenVersion,
                                                  String role) {
+        return validateAccessToken(userId, sessionIdValue, tokenVersion, role, false);
+    }
+
+    /**
+     * Same as {@link #validateAccessToken(Long, String, Long, String)} but lets
+     * callers opt in to authenticating a debt-blocked account. The HTTP filter
+     * uses this only for the wallet self-service paths that allow a blocked user
+     * to inspect the wallet and purchase ACCOUNT_UNBLOCK; every other endpoint
+     * still rejects blocked accounts.
+     */
+    @Transactional
+    public AuthenticatedUser validateAccessToken(Long userId,
+                                                 String sessionIdValue,
+                                                 Long tokenVersion,
+                                                 String role,
+                                                 boolean allowBlocked) {
         if (userId == null || sessionIdValue == null || tokenVersion == null || role == null) {
             throw new UnauthorizedException("Невалидный токен");
         }
@@ -193,7 +212,9 @@ public class AuthSessionService {
             throw new UnauthorizedException("Сессия недействительна");
         }
 
-        assertNotBlocked(user, now);
+        if (!allowBlocked) {
+            assertNotBlocked(user, now);
+        }
         if (safeTokenVersion(user) != tokenVersion || !user.getRole().name().equals(role)) {
             throw new UnauthorizedException("Права доступа изменились. Войдите снова.");
         }
@@ -375,10 +396,14 @@ public class AuthSessionService {
     }
 
     private void assertUserCanAuthenticate(User user, LocalDateTime now) {
+        assertUserNotDeleted(user);
+        assertNotBlocked(user, now);
+    }
+
+    private void assertUserNotDeleted(User user) {
         if (user == null || Boolean.TRUE.equals(user.getDeleted())) {
             throw new UnauthorizedException("Аккаунт удалён");
         }
-        assertNotBlocked(user, now);
     }
 
     private void assertNotBlocked(User user, LocalDateTime now) {

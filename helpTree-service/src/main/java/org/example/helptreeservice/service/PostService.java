@@ -2,12 +2,13 @@ package org.example.helptreeservice.service;
 
 import org.example.helptreeservice.config.EconomyConfig;
 import org.example.helptreeservice.dto.posts.CreatePostRequest;
+import org.example.helptreeservice.dto.posts.PostBoostResult;
 import org.example.helptreeservice.dto.posts.PostDto;
 import org.example.helptreeservice.dto.posts.UpdatePostRequest;
+import org.example.helptreeservice.dto.wallet.WalletOperationResult;
 import org.example.helptreeservice.entity.Post;
 import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.enums.PostStatus;
-import org.example.helptreeservice.enums.TransactionType;
 import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.ConflictException;
 import org.example.helptreeservice.exception.ForbiddenException;
@@ -195,8 +196,9 @@ public class PostService {
             Specification<Post> spec = PostSpecification.filter(userId, status, title, authorName, category, city, excludeCancelled);
             
             Specification<Post> boostedSpec = (root, query, cb) -> {
+                LocalDateTime now = LocalDateTime.now();
                 var boostedOrder = cb.selectCase()
-                    .when(cb.isNotNull(root.get("boostedUntil")), 1)
+                    .when(cb.greaterThan(root.get("boostedUntil"), now), 1)
                     .otherwise(0);
                 query.orderBy(
                     cb.desc(boostedOrder),
@@ -385,8 +387,14 @@ public class PostService {
         return posts.stream().map(this::toDto).collect(Collectors.toList());
     }
 
+    /**
+     * Boosts a post in the same transaction that debits the payer. The time
+     * update is a single atomic UPDATE, so concurrent boosts extend each other
+     * instead of overwriting the later expiry. A failed update rolls the debit
+     * back automatically (there is no separate refund step to forget).
+     */
     @Transactional
-    public PostDto boostPost(Long id, Long payerId, boolean privileged) {
+    public PostBoostResult boostPost(Long id, Long payerId, boolean privileged, String idempotencyKey) {
         log.info("Запрос на поднятие поста в топ, ID: {}, payerId: {}", id, payerId);
 
         Post post = getPostEntityById(id);
@@ -399,27 +407,51 @@ public class PostService {
             throw new BadRequestException("Можно поднять только открытый пост");
         }
 
-        // Списание и поднятие выполняются в одной транзакции: при ошибке монеты не теряются.
-        walletService.spendCoins(
-                payerId,
-                economyConfig.getBoostPrice(),
-                TransactionType.POST_BOOST,
-                "Поднятие поста #" + id
-        );
+        WalletOperationResult charge = walletService.chargeForPostBoost(payerId, id, idempotencyKey);
 
-        LocalDateTime now = LocalDateTime.now();
-        LocalDateTime newBoostTime = now.plusHours(economyConfig.getBoostHours());
-
-        if (post.getBoostedUntil() != null && post.getBoostedUntil().isAfter(now)) {
-            post.setBoostedUntil(post.getBoostedUntil().plusHours(economyConfig.getBoostHours()));
-            log.info("Пост {} уже бустится, продлеваем до {}", id, post.getBoostedUntil());
-        } else {
-            post.setBoostedUntil(newBoostTime);
-            post.setCreatedAt(now);
-            log.info("Пост {} поднят в топ до {}, перемещён наверх", id, newBoostTime);
+        if (!Boolean.TRUE.equals(charge.getApplied())) {
+            // Idempotent retry: the first request already extended the boost.
+            Post current = getPostEntityById(id);
+            return new PostBoostResult(
+                    toDto(current),
+                    charge.getPrice() != null ? charge.getPrice() : 0L,
+                    charge.getBalance() != null ? charge.getBalance() : 0L,
+                    false,
+                    current.getBoostedUntil());
         }
 
-        Post saved = postRepository.save(post);
-        return toDto(saved);
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime newBoostUntil = now.plusHours(economyConfig.getBoostHours());
+        int updated = postRepository.applyBoost(
+                id,
+                payerId,
+                privileged,
+                now,
+                newBoostUntil,
+                economyConfig.getBoostHours());
+
+        if (updated == 0) {
+            // The post stopped being eligible after the initial check. Throwing
+            // rolls back the debit, so no coins are lost.
+            throw new BadRequestException("Пост больше нельзя поднять. Монеты не списаны.");
+        }
+
+        Post boosted = getPostEntityById(id);
+        log.info("Пост {} поднят в топ до {}", id, boosted.getBoostedUntil());
+        return new PostBoostResult(
+                toDto(boosted),
+                charge.getPrice() != null ? charge.getPrice() : 0L,
+                charge.getBalance() != null ? charge.getBalance() : 0L,
+                true,
+                boosted.getBoostedUntil());
+    }
+
+    @Transactional
+    public int clearExpiredBoosts() {
+        int cleared = postRepository.clearExpiredBoosts(LocalDateTime.now());
+        if (cleared > 0) {
+            log.info("Снято истёкших boost: {}", cleared);
+        }
+        return cleared;
     }
 }

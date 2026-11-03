@@ -33,6 +33,8 @@ class UserControllerOwnershipTest {
     private WalletService walletService;
     @Mock
     private PaginationConfig paginationConfig;
+    @Mock
+    private org.example.helptreeservice.config.EconomyConfig economyConfig;
 
     @InjectMocks
     private UserController userController;
@@ -111,8 +113,9 @@ class UserControllerOwnershipTest {
     @Test
     void getTransactions_shouldForbidForeignProfile() {
         assertThrows(ForbiddenException.class,
-                () -> userController.getTransactions(OTHER_ID, 0, 20));
-        verify(walletService, never()).getTransactions(anyLong(), anyInt(), anyInt());
+                () -> userController.getTransactions(OTHER_ID, 0, 20, null, null, null, null));
+        verify(walletService, never()).getTransactions(
+                anyLong(), anyInt(), anyInt(), any(), any(), any(), any());
     }
 
     @Test
@@ -124,16 +127,31 @@ class UserControllerOwnershipTest {
     @Test
     void spendCoins_shouldForbidForeignProfile() {
         assertThrows(ForbiddenException.class,
-                () -> userController.spendCoins(OTHER_ID, 10L,
-                        org.example.helptreeservice.enums.TransactionType.GIFT_SENT, "test"));
-        verify(walletService, never()).spendCoins(anyLong(), anyLong(), any(), anyString());
+                () -> userController.spendCoins(OTHER_ID,
+                        org.example.helptreeservice.enums.TransactionType.VIP, null, "test-key"));
+        verify(walletService, never()).purchaseVip(anyLong(), anyString());
+        verify(walletService, never()).purchaseAccountUnblock(anyLong(), anyString());
+        verify(walletService, never()).changeNicknameColor(anyLong(), anyString(), anyString());
     }
 
     @Test
     void changeNicknameColor_shouldForbidForeignProfile() {
         assertThrows(ForbiddenException.class,
-                () -> userController.changeNicknameColor(OTHER_ID, "#FFFFFF"));
-        verify(walletService, never()).changeNicknameColor(anyLong(), anyString());
+                () -> userController.changeNicknameColor(OTHER_ID, "#FFFFFF", "test-key"));
+        verify(walletService, never()).changeNicknameColor(anyLong(), anyString(), anyString());
+    }
+
+    @Test
+    void getPricing_shouldForbidForeignProfile() {
+        assertThrows(ForbiddenException.class, () -> userController.getPricing(OTHER_ID));
+        verify(walletService, never()).getPricing();
+    }
+
+    @Test
+    void adminAddCoins_shouldForbidNonAdmin() {
+        assertThrows(ForbiddenException.class,
+                () -> userController.adminAddCoins(OTHER_ID, 100L, "Gift", null, "admin-test-key"));
+        verify(walletService, never()).adminAddCoins(anyLong(), anyLong(), anyLong(), any(), anyString());
     }
 
     @Test

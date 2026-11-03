@@ -30,19 +30,41 @@ import {
   notifyWalletUpdated,
   type CoinTransactionDto,
   type PageResponse,
+  type TransactionDirection,
   type WalletDto,
+  type WalletPricingDto,
 } from '../api/walletApi';
 import { postsApi } from '../api/postsApi';
 import { useToast } from '../components/Toast';
 import { getRelativeTime } from '../utils/dateUtils';
+import { createIdempotencyKey } from '../utils/idempotency';
 import type { Post } from '../types';
 import './WalletPage.css';
 
 const HISTORY_PAGE_SIZE = 10;
-// Matches the app.economy.boost-price value used by POST /api/posts/{id}/boost.
-const BOOST_PRICE = 5;
 
 type Direction = 'in' | 'out';
+
+interface HistoryTypeOption {
+  value: string;
+  label: string;
+}
+
+const HISTORY_TYPE_OPTIONS: HistoryTypeOption[] = [
+  { value: '', label: 'Все операции' },
+  { value: 'HELP_GIVEN', label: 'Награда за помощь' },
+  { value: 'HELP_RECEIVED', label: 'Помощь получена' },
+  { value: 'REVIEW_BONUS', label: 'Бонус за отзыв' },
+  { value: 'DAILY_LOGIN', label: 'Ежедневный вход' },
+  { value: 'FIRST_HELP', label: 'Бонус новичка' },
+  { value: 'GIFT_RECEIVED', label: 'Подарок получен' },
+  { value: 'ADMIN_BONUS', label: 'Бонус от администратора' },
+  { value: 'POST_BOOST', label: 'Поднятие заявки' },
+  { value: 'VIP', label: 'VIP-статус' },
+  { value: 'ACCOUNT_UNBLOCK', label: 'Разблокировка аккаунта' },
+  { value: 'GIFT_SENT', label: 'Подарок отправлен' },
+  { value: 'NICKNAME_COLOR', label: 'Смена цвета ника' },
+];
 type TxIcon = React.ComponentType<{ size?: number | string; className?: string }>;
 
 interface TransactionMeta {
@@ -142,8 +164,12 @@ export const WalletPage: React.FC = () => {
   const [walletLoading, setWalletLoading] = useState(true);
   const [walletError, setWalletError] = useState<string | null>(null);
   const [forbidden, setForbidden] = useState(false);
+  const [pricing, setPricing] = useState<WalletPricingDto | null>(null);
+  const [pricingError, setPricingError] = useState<string | null>(null);
 
   const [page, setPage] = useState(0);
+  const [historyType, setHistoryType] = useState('');
+  const [historyDirection, setHistoryDirection] = useState<'' | TransactionDirection>('');
   const [history, setHistory] = useState<PageResponse<CoinTransactionDto> | null>(null);
   const [historyLoading, setHistoryLoading] = useState(true);
   const [historyError, setHistoryError] = useState<string | null>(null);
@@ -159,6 +185,8 @@ export const WalletPage: React.FC = () => {
   const [boostError, setBoostError] = useState<string | null>(null);
   const [boosting, setBoosting] = useState(false);
   const boostingRef = useRef(false);
+  // Kept between failed attempts of the same action so a retry cannot charge twice.
+  const boostKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -198,6 +226,34 @@ export const WalletPage: React.FC = () => {
   }, [user, refreshKey]);
 
   useEffect(() => {
+    if (!user) {
+      setPricing(null);
+      setPricingError(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    setPricingError(null);
+
+    walletApi
+      .getPricing(user.id, controller.signal)
+      .then((data) => {
+        if (!controller.signal.aborted) setPricing(data);
+      })
+      .catch((error) => {
+        if (controller.signal.aborted || isCanceled(error)) return;
+        if (getErrorStatus(error) === 403) {
+          setForbidden(true);
+          setPricing(null);
+          return;
+        }
+        setPricingError(getErrorMessage(error, 'Не удалось загрузить цены'));
+      });
+
+    return () => controller.abort();
+  }, [user, refreshKey]);
+
+  useEffect(() => {
     if (!user) return;
 
     const controller = new AbortController();
@@ -205,7 +261,16 @@ export const WalletPage: React.FC = () => {
     setHistoryError(null);
 
     walletApi
-      .getTransactions(user.id, page, HISTORY_PAGE_SIZE, controller.signal)
+      .getTransactions(
+        user.id,
+        {
+          page,
+          size: HISTORY_PAGE_SIZE,
+          type: historyType || undefined,
+          direction: historyDirection || undefined,
+        },
+        controller.signal
+      )
       .then((data) => {
         if (controller.signal.aborted) return;
         setHistory({ ...data, content: dedupeTransactions(data.content) });
@@ -226,7 +291,7 @@ export const WalletPage: React.FC = () => {
       });
 
     return () => controller.abort();
-  }, [user, page, refreshKey]);
+  }, [user, page, historyType, historyDirection, refreshKey]);
 
   useEffect(() => {
     const modalOpen = Boolean(selectedTransaction) || boostOpen;
@@ -256,6 +321,16 @@ export const WalletPage: React.FC = () => {
     setRefreshKey((key) => key + 1);
   };
 
+  const handleHistoryTypeChange = (value: string) => {
+    setHistoryType(value);
+    setPage(0);
+  };
+
+  const handleHistoryDirectionChange = (value: '' | TransactionDirection) => {
+    setHistoryDirection(value);
+    setPage(0);
+  };
+
   const openBoostModal = async () => {
     if (!user || boostingRef.current) return;
 
@@ -265,6 +340,7 @@ export const WalletPage: React.FC = () => {
     setPosts(null);
     setPostsError(null);
     setPostsLoading(true);
+    boostKeyRef.current = null;
 
     try {
       const userPosts = await postsApi.getByUser(user.id);
@@ -288,8 +364,15 @@ export const WalletPage: React.FC = () => {
     setBoosting(true);
     setBoostError(null);
 
+    // One key per intended action. It is reused when the user retries after a
+    // network or server failure, so the backend can replay instead of charging twice.
+    if (!boostKeyRef.current) {
+      boostKeyRef.current = createIdempotencyKey('boost');
+    }
+
     try {
-      const result = await postsApi.boost(selectedPostId);
+      const result = await postsApi.boost(selectedPostId, boostKeyRef.current);
+      boostKeyRef.current = null;
       showToast(result.message || 'Заявка поднята в топ', 'success');
       setBoostOpen(false);
       setSelectedPostId(null);
@@ -363,6 +446,15 @@ export const WalletPage: React.FC = () => {
             <strong className="wallet-balance-stat-out">−{formatCoins(wallet.totalSpent)}</strong>
           </div>
         </div>
+        {wallet.vipActive && (
+          <p className="wallet-vip-note">
+            <Crown size={14} aria-hidden="true" />
+            <span>
+              VIP активен
+              {wallet.vipUntil ? ` до ${formatFullDate(wallet.vipUntil)}` : ''}
+            </span>
+          </p>
+        )}
       </>
     );
   };
@@ -401,16 +493,35 @@ export const WalletPage: React.FC = () => {
     }
 
     if (!history || history.content.length === 0) {
+      const hasFilters = Boolean(historyType || historyDirection);
       return (
         <div className="wallet-state wallet-state--inside">
           <span className="wallet-state-icon" aria-hidden="true">
             <History size={25} />
           </span>
-          <h3>Пока нет операций</h3>
-          <p>Здесь появятся начисления и списания HC, когда вы начнёте помогать по заявкам.</p>
-          <Link className="wallet-ghost-button" to="/posts">
-            Перейти к заявкам
-          </Link>
+          <h3>{hasFilters ? 'Ничего не найдено' : 'Пока нет операций'}</h3>
+          <p>
+            {hasFilters
+              ? 'По выбранным фильтрам операций нет. Попробуйте изменить тип или направление.'
+              : 'Здесь появятся начисления и списания HC, когда вы начнёте помогать по заявкам.'}
+          </p>
+          {hasFilters ? (
+            <button
+              type="button"
+              className="wallet-ghost-button"
+              onClick={() => {
+                setHistoryType('');
+                setHistoryDirection('');
+                setPage(0);
+              }}
+            >
+              <RefreshCw size={15} /> Сбросить фильтры
+            </button>
+          ) : (
+            <Link className="wallet-ghost-button" to="/posts">
+              Перейти к заявкам
+            </Link>
+          )}
         </div>
       );
     }
@@ -497,6 +608,8 @@ export const WalletPage: React.FC = () => {
         'операций',
       ])}`
     : null;
+  const boostPriceLabel = pricing ? formatCoins(pricing.boostPrice) : null;
+  const boostDurationLabel = pricing ? `${pricing.boostHours} ч` : null;
 
   return (
     <main className="wallet-page">
@@ -537,12 +650,24 @@ export const WalletPage: React.FC = () => {
               </span>
               <span className="wallet-action-eyebrow">Финансовое действие</span>
               <h2>Поднять заявку</h2>
-              <p>Выберите свою открытую заявку — она окажется выше в ленте на 24 часа.</p>
-              <button type="button" className="wallet-primary-button" onClick={openBoostModal}>
+              <p>
+                Выберите свою открытую заявку — она окажется выше в ленте
+                {boostDurationLabel ? ` на ${boostDurationLabel}` : ''}.
+              </p>
+              <button
+                type="button"
+                className="wallet-primary-button"
+                onClick={openBoostModal}
+                disabled={!pricing}
+              >
                 <Zap size={16} aria-hidden="true" /> Выбрать заявку
               </button>
               <span className="wallet-action-note">
-                Стоимость {BOOST_PRICE} HC спишет сервер после подтверждения.
+                {pricingError
+                  ? 'Не удалось получить актуальную стоимость. Обновите страницу.'
+                  : boostPriceLabel
+                    ? `Стоимость ${boostPriceLabel} спишет сервер после подтверждения.`
+                    : 'Загружаем актуальную стоимость…'}
               </span>
             </aside>
           </section>
@@ -558,6 +683,37 @@ export const WalletPage: React.FC = () => {
                   <span className="wallet-history-count">{totalLabel}</span>
                 )}
               </header>
+
+              <div className="wallet-history-filters">
+                <label className="wallet-history-filter">
+                  <span>Тип</span>
+                  <select
+                    value={historyType}
+                    onChange={(event) => handleHistoryTypeChange(event.target.value)}
+                    disabled={historyLoading && !history}
+                  >
+                    {HISTORY_TYPE_OPTIONS.map((option) => (
+                      <option key={option.value || 'all'} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="wallet-history-filter">
+                  <span>Направление</span>
+                  <select
+                    value={historyDirection}
+                    onChange={(event) =>
+                      handleHistoryDirectionChange(event.target.value as '' | TransactionDirection)
+                    }
+                    disabled={historyLoading && !history}
+                  >
+                    <option value="">Все</option>
+                    <option value="IN">Начисления</option>
+                    <option value="OUT">Списания</option>
+                  </select>
+                </label>
+              </div>
 
               {renderHistoryBody()}
               {renderPagination()}
@@ -592,7 +748,7 @@ export const WalletPage: React.FC = () => {
                 <li>
                   <CalendarCheck size={16} aria-hidden="true" />
                   <span>Ежедневный вход</span>
-                  <strong>+1</strong>
+                  <strong>{pricing ? `+${formatNumber(pricing.dailyBonusCoins)}` : '—'}</strong>
                 </li>
                 <li>
                   <Award size={16} aria-hidden="true" />
@@ -775,7 +931,14 @@ export const WalletPage: React.FC = () => {
                         <button
                           type="button"
                           className={`wallet-boost-option${selected ? ' is-selected' : ''}`}
-                          onClick={() => setSelectedPostId(post.id)}
+                          onClick={() => {
+                            if (post.id !== selectedPostId) {
+                              // A new selection is a new intended purchase.
+                              boostKeyRef.current = null;
+                              setBoostError(null);
+                            }
+                            setSelectedPostId(post.id);
+                          }}
                           aria-pressed={selected}
                           disabled={boosting}
                         >
@@ -826,12 +989,16 @@ export const WalletPage: React.FC = () => {
                     </>
                   ) : (
                     <>
-                      <Zap size={16} aria-hidden="true" /> Поднять за {BOOST_PRICE} HC
+                      <Zap size={16} aria-hidden="true" />{' '}
+                      {boostPriceLabel ? `Поднять за ${boostPriceLabel}` : 'Поднять заявку'}
                     </>
                   )}
                 </button>
               </div>
               <p className="wallet-modal-note">
+                {boostDurationLabel
+                  ? `Заявка будет выше в ленте на ${boostDurationLabel}. `
+                  : ''}
                 Стоимость спишет сервер. Баланс и история обновятся после подтверждения операции.
               </p>
             </footer>

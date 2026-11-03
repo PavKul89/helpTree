@@ -59,7 +59,8 @@ class UserServiceTest {
                 imageService,
                 achievementService,
                 geocodingService,
-                authSessionService
+                authSessionService,
+                new org.example.helptreeservice.config.EconomyConfig()
         );
     }
 
@@ -329,7 +330,7 @@ class UserServiceTest {
     void blockUsersWithDebt_shouldRevokeSessionsOfBlockedUser() {
         User user = user(1L, false);
         user.setDebtCount(6);
-        when(userRepository.findUsersWithDebtToBlock(any(LocalDateTime.class)))
+        when(userRepository.findUsersWithDebtToBlock(any(LocalDateTime.class), anyInt()))
                 .thenReturn(List.of(user));
 
         userService.blockUsersWithDebt();

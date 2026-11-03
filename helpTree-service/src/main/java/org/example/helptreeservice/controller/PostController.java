@@ -131,20 +131,27 @@ public class PostController {
     }
 
     @PostMapping("/{id}/boost")
-    public ResponseEntity<Map<String, Object>> boostPost(@PathVariable Long id) {
+    public ResponseEntity<Map<String, Object>> boostPost(
+            @PathVariable Long id,
+            @RequestHeader("Idempotency-Key") String idempotencyKey) {
         var currentUser = authService.getCurrentUser();
         if (currentUser == null) {
             throw new ForbiddenException("Необходимо авторизоваться");
         }
         
-        PostDto boosted = postService.boostPost(
+        var result = postService.boostPost(
                 id,
                 currentUser.getUserId(),
-                "ADMIN".equals(currentUser.getRole())
+                "ADMIN".equals(currentUser.getRole()),
+                idempotencyKey
         );
         return ResponseEntity.ok(Map.of(
             "success", true,
-            "post", boosted,
+            "applied", result.applied(),
+            "post", result.post(),
+            "price", result.price(),
+            "balance", result.balance(),
+            "boostedUntil", result.boostedUntil(),
             "message", "Пост поднят в топ на " + economyConfig.getBoostHours() + " часов!"
         ));
     }

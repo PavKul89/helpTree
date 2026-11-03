@@ -8,7 +8,6 @@ import org.example.helptreeservice.dto.auth.SessionDto;
 import org.example.helptreeservice.dto.users.CreateUserRequest;
 import org.example.helptreeservice.dto.users.UserDto;
 import org.example.helptreeservice.entity.User;
-import org.example.helptreeservice.exception.AccountBlockedException;
 import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.ForbiddenException;
 import org.example.helptreeservice.exception.NotFoundException;
@@ -99,8 +98,11 @@ public class AuthService {
         }
 
         LocalDateTime now = LocalDateTime.now();
+        // Blocked accounts may still authenticate: the request filter only lets
+        // them reach the wallet self-service endpoints, including the paid
+        // ACCOUNT_UNBLOCK purchase. Every other protected path stays forbidden.
         if (user.getBlockedUntil() != null && user.getBlockedUntil().isAfter(now)) {
-            throw new AccountBlockedException("Аккаунт заблокирован до " + user.getBlockedUntil());
+            log.info("Пользователь {} вошёл в заблокированный аккаунт для разблокировки", user.getId());
         }
 
         failedAttempts.remove(email);

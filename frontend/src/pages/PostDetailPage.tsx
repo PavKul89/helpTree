@@ -29,6 +29,7 @@ import { Button } from '../components/Button';
 import { Modal } from '../components/Modal';
 import { Avatar } from '../components/Avatar';
 import { getRelativeTime } from '../utils/dateUtils';
+import { createIdempotencyKey } from '../utils/idempotency';
 import './PostDetailPage.css';
 
 const StatusBadge = ({ status, type = 'post' }: { status: string; type?: 'post' | 'help' }) => {
@@ -69,6 +70,7 @@ export const PostDetailPage = () => {
   const [showFavoriteModal, setShowFavoriteModal] = useState(false);
   const [isBoosting, setIsBoosting] = useState(false);
   const isStartingChatRef = useRef(false);
+  const boostKeyRef = useRef<string | null>(null);
   const [isCommenting, setIsCommenting] = useState(false);
   const [isReplying, setIsReplying] = useState(false);
   const [deletingCommentId, setDeletingCommentId] = useState<number | null>(null);
@@ -234,8 +236,13 @@ export const PostDetailPage = () => {
   const handleBoostPost = async () => {
     if (isBoosting) return;
     setIsBoosting(true);
+    // Keep the key across failed attempts so a retry replays instead of charging again.
+    if (!boostKeyRef.current) {
+      boostKeyRef.current = createIdempotencyKey('boost');
+    }
     try {
-      const result = await postsApi.boost(postId);
+      const result = await postsApi.boost(postId, boostKeyRef.current);
+      boostKeyRef.current = null;
       setPost(result.post);
       showToast(result.message, 'success');
     } catch (error: unknown) {

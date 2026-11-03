@@ -1,0 +1,25 @@
+package org.example.helptreeservice.dto.wallet;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+/**
+ * Server-side price and duration catalog. The frontend must render these values
+ * instead of keeping its own copy of economy constants.
+ */
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class WalletPricingDto {
+    private Long boostPrice;
+    private Integer boostHours;
+    private Long vipPrice;
+    private Integer vipDays;
+    private Long nicknameColorPrice;
+    private Long accountUnblockPrice;
+    private Integer accountUnblockDebtReduction;
+    private Long dailyBonusCoins;
+}

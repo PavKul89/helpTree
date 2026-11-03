@@ -86,8 +86,8 @@ public class ReviewService {
         Review savedReview = reviewRepository.save(review);
         log.info("Отзыв {} успешно создан", savedReview.getId());
 
-        walletService.addCoinsForReview(toUser.getId());
-        log.info("Начислено 2 HC пользователю {} за отзыв", toUser.getId());
+        walletService.addCoinsForReview(toUser.getId(), savedReview.getId());
+        log.info("Начислено 2 HC пользователю {} за отзыв {}", toUser.getId(), savedReview.getId());
 
         return reviewMapper.toResponse(savedReview);
     }

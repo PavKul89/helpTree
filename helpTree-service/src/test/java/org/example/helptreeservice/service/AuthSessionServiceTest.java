@@ -155,12 +155,18 @@ class AuthSessionServiceTest {
     }
 
     @Test
-    void createSession_shouldRejectBlockedUser() {
+    void createSession_shouldAllowBlockedUserForSelfServiceRecovery() {
         User user = user(1L);
         user.setBlockedUntil(LocalDateTime.now().plusDays(1));
+        when(authSessionRepository.save(any(AuthSession.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(refreshTokenRepository.save(any(RefreshToken.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
 
-        assertThrows(AccountBlockedException.class, () -> service.createSession(user, null, null));
-        verify(authSessionRepository, never()).save(any());
+        IssuedTokens tokens = service.createSession(user, null, null);
+
+        assertEquals(1L, tokens.userId());
+        verify(authSessionRepository).save(any(AuthSession.class));
     }
 
     // ---------------------------------------------------------------
@@ -354,7 +360,7 @@ class AuthSessionServiceTest {
     }
 
     @Test
-    void rotateRefreshToken_shouldRejectBlockedUser() {
+    void rotateRefreshToken_shouldAllowBlockedUserToRecoverSession() {
         User user = user(1L);
         user.setBlockedUntil(LocalDateTime.now().plusDays(1));
         AuthSession session = session(user);
@@ -363,11 +369,13 @@ class AuthSessionServiceTest {
                 .thenReturn(Optional.of(session.getId()));
         when(authSessionRepository.findByIdForUpdate(session.getId())).thenReturn(Optional.of(session));
         when(refreshTokenRepository.findByTokenHashForUpdate("hash:raw")).thenReturn(Optional.of(token));
+        when(refreshTokenRepository.save(any(RefreshToken.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
 
-        assertThrows(AccountBlockedException.class,
-                () -> service.rotateRefreshToken("raw", null, null));
+        IssuedTokens tokens = service.rotateRefreshToken("raw", null, null);
 
-        assertNull(token.getRevokedAt());
+        assertEquals("access-token", tokens.accessToken());
+        assertNotNull(token.getRevokedAt());
     }
 
     @Test

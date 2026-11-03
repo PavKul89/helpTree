@@ -1,5 +1,6 @@
 package org.example.helptreeservice.service;
 
+import org.example.helptreeservice.config.EconomyConfig;
 import org.example.helptreeservice.dto.users.CreateUserRequest;
 import org.example.helptreeservice.dto.users.UpdateUserRequest;
 import org.example.helptreeservice.dto.users.UserDto;
@@ -40,6 +41,7 @@ public class UserService {
     private final AchievementService achievementService;
     private final GeocodingService geocodingService;
     private final AuthSessionService authSessionService;
+    private final EconomyConfig economyConfig;
 
     public UserDto createUser(CreateUserRequest request) {
         return createUserWithRole(request, Role.USER);
@@ -402,7 +404,7 @@ public class UserService {
         User receiver = userRepository.findByIdForUpdate(receiverId)
                 .orElseThrow(() -> new NotFoundException("Пользователь не найден с id: " + receiverId));
         int debt = receiver.getDebtCount() != null ? receiver.getDebtCount() : 0;
-        receiver.setDebtCount(debt + 2);
+        receiver.setDebtCount(debt + economyConfig.getDebtPerReceivedHelp());
         receiver.setUpdatedAt(LocalDateTime.now());
         userRepository.save(receiver);
 
@@ -419,10 +421,12 @@ public class UserService {
                     user.setDebtCount(user.getDebtCount() - 1);
                 }
                 
-                if (user.getDebtCount() <= 2 && user.getDebtStartedAt() != null) {
+                if (user.getDebtCount() <= economyConfig.getDebtClearThreshold()
+                        && user.getDebtStartedAt() != null) {
                     user.setDebtStartedAt(null);
                 }
-                if (user.getDebtCount() <= 5 && user.getBlockedAt() != null) {
+                if (user.getDebtCount() <= economyConfig.getDebtBlockThreshold()
+                        && user.getBlockedAt() != null) {
                     user.setBlockedAt(null);
                     user.setBlockedUntil(null);
                     log.info("Пользователь {} автоматически разблокирован (debtCount: {})", helperId, user.getDebtCount());
@@ -442,7 +446,7 @@ public class UserService {
         if (isUserBlocked(userId)) {
             return false;
         }
-        return user.getDebtCount() <= 5;
+        return user.getDebtCount() <= economyConfig.getDebtBlockThreshold();
     }
 
     public boolean canCreatePost(Long userId) {
@@ -576,12 +580,13 @@ public class UserService {
     public void blockUsersWithDebt() {
         log.info("Запуск проверки блокировки пользователей за долг");
         LocalDateTime now = LocalDateTime.now();
-        List<User> usersToBlock = userRepository.findUsersWithDebtToBlock(now);
+        List<User> usersToBlock = userRepository.findUsersWithDebtToBlock(
+                now, economyConfig.getDebtBlockThreshold());
         
         for (User user : usersToBlock) {
             if (user.getBlockedUntil() == null || user.getBlockedUntil().isBefore(LocalDateTime.now())) {
                 user.setBlockedAt(LocalDateTime.now());
-                user.setBlockedUntil(LocalDateTime.now().plusDays(7));
+                user.setBlockedUntil(LocalDateTime.now().plusDays(economyConfig.getDebtBlockDays()));
                 userRepository.save(user);
                 // Debt blocking must immediately invalidate already issued tokens.
                 authSessionService.revokeAllSessionsForUser(user.getId(), "ACCOUNT_BLOCKED");

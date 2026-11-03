@@ -1,4 +1,5 @@
 import api from './axios';
+import { createIdempotencyKey } from '../utils/idempotency';
 import type {
   Post,
   CreatePostRequest,
@@ -81,8 +82,29 @@ export const postsApi = {
     return response.data;
   },
 
-  boost: async (postId: number): Promise<{ success: boolean; post: Post; message: string }> => {
-    const response = await api.post<{ success: boolean; post: Post; message: string }>(`/api/posts/${postId}/boost`);
+  boost: async (
+    postId: number,
+    idempotencyKey: string = createIdempotencyKey('boost')
+  ): Promise<{
+    success: boolean;
+    applied: boolean;
+    post: Post;
+    price: number;
+    balance: number;
+    boostedUntil: string;
+    message: string;
+  }> => {
+    const response = await api.post<{
+      success: boolean;
+      applied: boolean;
+      post: Post;
+      price: number;
+      balance: number;
+      boostedUntil: string;
+      message: string;
+    }>(`/api/posts/${postId}/boost`, null, {
+      headers: { 'Idempotency-Key': idempotencyKey },
+    });
     return response.data;
   },
 };

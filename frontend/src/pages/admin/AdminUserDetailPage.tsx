@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   Activity as ActivityIcon,
@@ -34,6 +34,7 @@ import {
   AdminLoadingBlock,
 } from '../../components/admin/AdminFeedback';
 import { Pagination } from '../../components/Pagination';
+import { createIdempotencyKey } from '../../utils/idempotency';
 import { useToast } from '../../components/Toast';
 import { EditUserDialog } from './EditUserDialog';
 import {
@@ -51,6 +52,8 @@ type SectionKey = 'wallet' | 'posts' | 'reviews' | 'achievements' | 'activities'
 type SectionErrors = Partial<Record<SectionKey, string>>;
 
 const TX_PAGE_SIZE = 10;
+const ADMIN_COINS_LIMIT = 1_000_000;
+const ADMIN_COINS_MAX_REASON = 500;
 
 const TRANSACTION_LABELS: Record<string, string> = {
   HELP_RECEIVED: 'Помощь получена',
@@ -122,9 +125,11 @@ export const AdminUserDetailPage: React.FC = () => {
   const [ratingError, setRatingError] = useState<string | null>(null);
 
   const [coinAmount, setCoinAmount] = useState('');
-  const [coinDescription, setCoinDescription] = useState('Начисление администратором');
+  const [coinReason, setCoinReason] = useState('');
   const [coinsBusy, setCoinsBusy] = useState(false);
   const [coinsError, setCoinsError] = useState<string | null>(null);
+  // Reused across retries of the same command; cleared whenever the command changes.
+  const coinsKeyRef = useRef<string | null>(null);
 
   const [recalcOpen, setRecalcOpen] = useState(false);
   const [recalcBusy, setRecalcBusy] = useState(false);
@@ -297,24 +302,48 @@ export const AdminUserDetailPage: React.FC = () => {
     if (coinsBusy) return;
 
     const amount = Number(coinAmount);
-    if (!Number.isInteger(amount) || amount <= 0 || amount > 1000000) {
-      setCoinsError('Укажите целое положительное число HC (не больше 1 000 000).');
+    if (!Number.isInteger(amount) || amount === 0 || Math.abs(amount) > ADMIN_COINS_LIMIT) {
+      setCoinsError(
+        `Укажите целое число HC от −${formatNumber(ADMIN_COINS_LIMIT)} до ${formatNumber(ADMIN_COINS_LIMIT)}, кроме нуля.`
+      );
       return;
+    }
+
+    const reason = coinReason.trim();
+    if (!reason) {
+      setCoinsError('Причина операции обязательна.');
+      return;
+    }
+    if (reason.length > ADMIN_COINS_MAX_REASON) {
+      setCoinsError(`Причина не должна превышать ${ADMIN_COINS_MAX_REASON} символов.`);
+      return;
+    }
+
+    if (!coinsKeyRef.current) {
+      coinsKeyRef.current = createIdempotencyKey('admin');
     }
 
     setCoinsBusy(true);
     setCoinsError(null);
     try {
-      const result = await adminApi.addCoins(
-        id,
-        amount,
-        coinDescription.trim() || undefined
-      );
-      showToast(`Начислено ${formatNumber(amount)} HC. Баланс: ${formatNumber(result.newBalance)} HC.`, 'success');
-      setCoinAmount('');
+      const result = await adminApi.addCoins(id, amount, reason, coinsKeyRef.current);
+      coinsKeyRef.current = null;
+      if (result.applied) {
+        const action = amount > 0 ? 'Начислено' : 'Списано';
+        showToast(
+          `${action} ${formatNumber(Math.abs(amount))} HC. Баланс: ${formatNumber(result.newBalance)} HC.`,
+          'success'
+        );
+        setCoinAmount('');
+      } else {
+        showToast(
+          `Эта операция уже была применена ранее. Баланс: ${formatNumber(result.newBalance)} HC.`,
+          'info'
+        );
+      }
       await refreshWallet();
     } catch (coinsFailure) {
-      setCoinsError(getApiErrorMessage(coinsFailure, 'Не удалось начислить HelpCoins.'));
+      setCoinsError(getApiErrorMessage(coinsFailure, 'Не удалось изменить HelpCoins.'));
     } finally {
       setCoinsBusy(false);
     }
@@ -602,31 +631,39 @@ export const AdminUserDetailPage: React.FC = () => {
           </div>
 
           <div className="admin-operation">
-            <h3>Начислить HelpCoins</h3>
+            <h3>Изменить HelpCoins</h3>
             <form className="admin-inline-form admin-inline-form--wrap" onSubmit={handleCoinsSubmit} noValidate>
               <label className="admin-field admin-field--amount">
                 <span>Сумма, HC</span>
                 <input
                   type="number"
-                  min={1}
+                  min={-ADMIN_COINS_LIMIT}
+                  max={ADMIN_COINS_LIMIT}
                   step={1}
                   value={coinAmount}
                   onChange={(event) => {
                     setCoinAmount(event.target.value);
+                    coinsKeyRef.current = null;
                     setCoinsError(null);
                   }}
-                  placeholder="Например, 50"
+                  placeholder="Например, 50 или −20"
                   aria-invalid={Boolean(coinsError)}
-                  aria-label="Сумма начисления HelpCoins"
+                  aria-label="Сумма изменения HelpCoins"
                 />
               </label>
               <label className="admin-field admin-field--grow">
-                <span>Описание (необязательно)</span>
+                <span>Причина (обязательно)</span>
                 <input
-                  value={coinDescription}
-                  onChange={(event) => setCoinDescription(event.target.value)}
-                  maxLength={200}
-                  aria-label="Описание начисления"
+                  value={coinReason}
+                  onChange={(event) => {
+                    setCoinReason(event.target.value);
+                    coinsKeyRef.current = null;
+                    setCoinsError(null);
+                  }}
+                  maxLength={ADMIN_COINS_MAX_REASON}
+                  required
+                  aria-invalid={Boolean(coinsError)}
+                  aria-label="Причина изменения HelpCoins"
                 />
               </label>
               <button type="submit" className="admin-button admin-button--primary" disabled={coinsBusy}>
@@ -635,7 +672,7 @@ export const AdminUserDetailPage: React.FC = () => {
                 ) : (
                   <Coins size={16} aria-hidden="true" />
                 )}
-                {coinsBusy ? 'Начисляем…' : 'Начислить'}
+                {coinsBusy ? 'Применяем…' : 'Применить'}
               </button>
             </form>
             {coinsError && (
@@ -644,8 +681,12 @@ export const AdminUserDetailPage: React.FC = () => {
               </div>
             )}
             <p className="admin-field-hint">
-              <code>POST /api/users/{user.id}/wallet/admin-add</code>. Начисление попадает в
-              историю транзакций кошелька.
+              Положительная сумма начисляет HC, отрицательная — списывает. Лимит одной операции —
+              {' '}{formatNumber(ADMIN_COINS_LIMIT)} HC, причина обязательна и попадает в аудит.
+            </p>
+            <p className="admin-field-hint">
+              <code>POST /api/users/{user.id}/wallet/admin-add</code>. Повторный запрос с тем же
+              ключом идемпотентности не спишет и не начислит HC второй раз.
             </p>
           </div>
 

@@ -81,13 +81,17 @@ class ReviewServiceTest {
         when(helpRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(help));
         when(reviewRepository.existsByHelpAndFromUser(help, receiver)).thenReturn(false);
         when(reviewRepository.save(any(Review.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
+                .thenAnswer(invocation -> {
+                    Review saved = invocation.getArgument(0);
+                    saved.setId(77L);
+                    return saved;
+                });
         when(reviewMapper.toResponse(any(Review.class))).thenReturn(ReviewResponse.builder().build());
 
         reviewService.createReview(request(10L), 2L);
 
         verify(reviewRepository).save(any(Review.class));
-        verify(walletService).addCoinsForReview(1L);
+        verify(walletService).addCoinsForReview(1L, 77L);
     }
 
     private CreateReviewRequest request(Long helpId) {

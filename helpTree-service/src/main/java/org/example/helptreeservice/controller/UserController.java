@@ -1,6 +1,7 @@
 package org.example.helptreeservice.controller;
 
 import lombok.extern.slf4j.Slf4j;
+import org.example.helptreeservice.config.EconomyConfig;
 import org.example.helptreeservice.config.PaginationConfig;
 import org.example.helptreeservice.dto.users.CreateUserRequest;
 import org.example.helptreeservice.dto.users.UpdateUserRequest;
@@ -9,6 +10,9 @@ import org.example.helptreeservice.dto.users.UserDto;
 import org.example.helptreeservice.dto.users.UserPublicDto;
 import org.example.helptreeservice.dto.wallet.CoinTransactionDto;
 import org.example.helptreeservice.dto.wallet.WalletDto;
+import org.example.helptreeservice.dto.wallet.WalletOperationResult;
+import org.example.helptreeservice.dto.wallet.WalletPricingDto;
+import org.example.helptreeservice.enums.TransactionDirection;
 import org.example.helptreeservice.enums.TransactionType;
 import org.example.helptreeservice.exception.ForbiddenException;
 import org.example.helptreeservice.exception.BadRequestException;
@@ -23,12 +27,14 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -42,6 +48,7 @@ public class UserController {
     private final AuthorizationService authService;
     private final WalletService walletService;
     private final PaginationConfig paginationConfig;
+    private final EconomyConfig economyConfig;
 
     @PostMapping
     public ResponseEntity<UserDto> createUser(@Valid @RequestBody CreateUserRequest request) {
@@ -226,9 +233,21 @@ public class UserController {
     public ResponseEntity<Page<CoinTransactionDto>> getTransactions(
             @PathVariable Long id,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) TransactionType type,
+            @RequestParam(required = false) TransactionDirection direction,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
         requireOwnerOrAdmin(id, "Вы можете просматривать только свои транзакции");
-        return ResponseEntity.ok(walletService.getTransactions(id, page, size));
+        return ResponseEntity.ok(walletService.getTransactions(id, page, size, type, from, to, direction));
+    }
+
+    @GetMapping("/{id}/wallet/pricing")
+    public ResponseEntity<WalletPricingDto> getPricing(@PathVariable Long id) {
+        requireOwnerOrAdmin(id, "Цены доступны только владельцу аккаунта или администратору");
+        return ResponseEntity.ok(walletService.getPricing());
     }
 
     @PostMapping("/{id}/wallet/daily-bonus")
@@ -240,7 +259,9 @@ public class UserController {
             "success", true,
             "claimed", claimed,
             "balance", wallet.getBalance(),
-            "message", claimed ? "+1 HC за ежедневный вход!" : "Ежедневный бонус уже получен"
+            "message", claimed
+                    ? "+" + economyConfig.getCoinsPerDailyLogin() + " HC за ежедневный вход!"
+                    : "Ежедневный бонус уже получен"
         ));
     }
 
@@ -248,49 +269,94 @@ public class UserController {
     public ResponseEntity<Map<String, Object>> adminAddCoins(
             @PathVariable Long id,
             @RequestParam long amount,
-            @RequestParam(required = false) String description) {
+            @RequestParam(required = false) String reason,
+            @RequestParam(required = false) String description,
+            @RequestHeader("Idempotency-Key") String idempotencyKey) {
         if (!authService.isAdmin()) {
             throw new ForbiddenException("Только администратор может начислять монеты");
         }
-        walletService.adminAddCoins(id, amount, description);
-        WalletDto wallet = walletService.getWallet(id);
+        UserContext admin = authService.getCurrentUser();
+        if (admin == null) {
+            throw new UnauthorizedException("Вы не авторизованы");
+        }
+        // description is kept as a legacy alias for reason.
+        String resolvedReason = reason != null && !reason.isBlank() ? reason : description;
+        WalletOperationResult result = walletService.adminAddCoins(
+                id, admin.getUserId(), amount, resolvedReason, idempotencyKey);
         return ResponseEntity.ok(Map.of(
             "success", true,
-            "newBalance", wallet.getBalance(),
-            "addedAmount", amount
+            "newBalance", result.getBalance(),
+            "addedAmount", amount,
+            "applied", result.getApplied()
         ));
     }
 
+    /**
+     * Server-priced purchase endpoint. The client chooses the operation, never
+     * the price or duration; amount/description parameters are intentionally not
+     * accepted anymore.
+     */
     @PostMapping("/{id}/wallet/spend")
     public ResponseEntity<Map<String, Object>> spendCoins(
             @PathVariable Long id,
-            @RequestParam long amount,
             @RequestParam TransactionType type,
-            @RequestParam String description) {
+            @RequestParam(required = false) String color,
+            @RequestHeader("Idempotency-Key") String idempotencyKey) {
         requireOwnerOrAdmin(id, "Вы можете тратить монеты только со своего аккаунта");
-        walletService.spendCoins(id, amount, type, description);
-        WalletDto wallet = walletService.getWallet(id);
-        return ResponseEntity.ok(Map.of(
-            "success", true,
-            "newBalance", wallet.getBalance(),
-            "spentAmount", amount
-        ));
+
+        WalletOperationResult result;
+        if (type == TransactionType.VIP || type == TransactionType.VIP_STATUS) {
+            result = walletService.purchaseVip(id, idempotencyKey);
+        } else if (type == TransactionType.ACCOUNT_UNBLOCK) {
+            result = walletService.purchaseAccountUnblock(id, idempotencyKey);
+        } else if (type == TransactionType.NICKNAME_COLOR) {
+            if (color == null || !color.matches("^#[0-9A-Fa-f]{6}$")) {
+                throw new BadRequestException("Цвет должен быть в формате #RRGGBB (например, #FF5733)");
+            }
+            result = walletService.changeNicknameColor(id, color, idempotencyKey);
+        } else if (type == TransactionType.POST_BOOST) {
+            throw new BadRequestException("Для поднятия заявки используйте POST /api/posts/{id}/boost");
+        } else {
+            throw new BadRequestException("Эта операция недоступна для покупки");
+        }
+
+        Map<String, Object> body = new java.util.LinkedHashMap<>();
+        body.put("success", true);
+        body.put("operation", result.getOperation());
+        body.put("applied", result.getApplied());
+        body.put("spentAmount", result.getPrice());
+        body.put("newBalance", result.getBalance());
+        if (result.getExpiresAt() != null) {
+            body.put("expiresAt", result.getExpiresAt());
+        }
+        if (result.getNicknameColor() != null) {
+            body.put("color", result.getNicknameColor());
+        }
+        if (result.getDebtCount() != null) {
+            body.put("debtCount", result.getDebtCount());
+        }
+        if (result.getBlocked() != null) {
+            body.put("blocked", result.getBlocked());
+        }
+        return ResponseEntity.ok(body);
     }
 
     @PostMapping("/{id}/wallet/nickname-color")
     public ResponseEntity<Map<String, Object>> changeNicknameColor(
             @PathVariable Long id,
-            @RequestParam String color) {
+            @RequestParam String color,
+            @RequestHeader("Idempotency-Key") String idempotencyKey) {
         requireOwnerOrAdmin(id, "Вы можете менять цвет ника только своего аккаунта");
         if (color == null || !color.matches("^#[0-9A-Fa-f]{6}$")) {
             throw new BadRequestException("Цвет должен быть в формате #RRGGBB (например, #FF5733)");
         }
-        walletService.changeNicknameColor(id, color);
-        WalletDto wallet = walletService.getWallet(id);
+        WalletOperationResult result = walletService.changeNicknameColor(id, color, idempotencyKey);
         return ResponseEntity.ok(Map.of(
             "success", true,
-            "newBalance", wallet.getBalance(),
-            "color", color
+            "applied", result.getApplied(),
+            "newBalance", result.getBalance(),
+            "spentAmount", result.getPrice(),
+            "color", result.getNicknameColor()
         ));
     }
 

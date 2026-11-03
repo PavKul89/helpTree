@@ -56,8 +56,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query(value = "SELECT post_id FROM user_favorites WHERE user_id = :userId", nativeQuery = true)
     List<Long> findFavoritePostIds(@Param("userId") Long userId);
 
-    @Query("SELECT u FROM User u WHERE u.deleted = false AND u.debtCount > 5 AND (u.blockedUntil IS NULL OR u.blockedUntil < :now)")
-    List<User> findUsersWithDebtToBlock(@Param("now") LocalDateTime now);
+    @Query("SELECT u FROM User u WHERE u.deleted = false AND u.debtCount > :threshold AND (u.blockedUntil IS NULL OR u.blockedUntil < :now)")
+    List<User> findUsersWithDebtToBlock(@Param("now") LocalDateTime now,
+                                        @Param("threshold") int threshold);
 
     @Query("SELECT COUNT(u) FROM User u WHERE u.deleted = false OR u.deleted IS NULL")
     long countActive();
@@ -73,9 +74,4 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query("UPDATE User u SET u.blockedAt = NULL, u.blockedUntil = NULL, u.updatedAt = CURRENT_TIMESTAMP " +
            "WHERE u.deleted = false AND u.blockedUntil IS NOT NULL AND u.blockedUntil < :now")
     int unblockExpiredUsers(@Param("now") LocalDateTime now);
-
-    @Modifying
-    @Query("UPDATE User u SET u.helpCoins = u.helpCoins - :amount, u.updatedAt = CURRENT_TIMESTAMP " +
-           "WHERE u.id = :userId AND u.helpCoins >= :amount")
-    int deductHelpCoins(@Param("userId") Long userId, @Param("amount") long amount);
 }

@@ -1,4 +1,5 @@
 import api from './axios';
+import { createIdempotencyKey } from '../utils/idempotency';
 import type { Post, Review } from '../types';
 import type { Achievement } from './achievementApi';
 import type { Activity } from './activityApi';
@@ -91,6 +92,7 @@ export interface AdminAddCoinsResponse {
   success: boolean;
   newBalance: number;
   addedAmount: number;
+  applied: boolean;
 }
 
 export interface AdminPostsQuery {
@@ -167,10 +169,20 @@ export const adminApi = {
     return response.data;
   },
 
-  addCoins: async (id: number, amount: number, description?: string): Promise<AdminAddCoinsResponse> => {
-    const response = await api.post<AdminAddCoinsResponse>(`/api/users/${id}/wallet/admin-add`, null, {
-      params: { amount, description },
-    });
+  addCoins: async (
+    id: number,
+    amount: number,
+    reason: string,
+    idempotencyKey: string = createIdempotencyKey('admin')
+  ): Promise<AdminAddCoinsResponse> => {
+    const response = await api.post<AdminAddCoinsResponse>(
+      `/api/users/${id}/wallet/admin-add`,
+      null,
+      {
+        params: { amount, reason },
+        headers: { 'Idempotency-Key': idempotencyKey },
+      }
+    );
     return response.data;
   },
 

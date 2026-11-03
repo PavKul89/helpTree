@@ -235,6 +235,17 @@
   color: var(--wallet-out);
 }
 
+.wallet-vip-note {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 12px 0 0;
+  color: var(--wallet-lime);
+  font-size: 11.5px;
+  font-weight: 650;
+  line-height: 1.4;
+}
+
 .wallet-balance-loading {
   display: flex;
   min-height: 210px;
@@ -484,6 +495,54 @@
   font-size: 10.5px;
   font-variant-numeric: tabular-nums;
   line-height: 1.3;
+}
+
+.wallet-history-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--wallet-border-soft);
+}
+
+.wallet-history-filter {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 170px;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.wallet-history-filter > span {
+  color: var(--wallet-subtle);
+  font-size: 9.5px;
+  font-weight: 650;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.wallet-history-filter select {
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid var(--wallet-border);
+  border-radius: 9px;
+  padding: 6px 9px;
+  background: rgba(7, 27, 19, 0.45);
+  color: var(--wallet-text);
+  font-size: 11.5px;
+  line-height: 1.3;
+  cursor: pointer;
+}
+
+.wallet-history-filter select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.wallet-history-filter select:focus-visible {
+  border-color: var(--wallet-lime);
+  outline: 2px solid rgba(200, 245, 106, 0.35);
+  outline-offset: 1px;
 }
 
 .wallet-transactions {

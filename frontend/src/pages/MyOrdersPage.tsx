@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowUpRight,
@@ -18,6 +18,7 @@ import { useToast } from '../components/Toast';
 import { Modal } from '../components/Modal';
 import { formatDate, getRelativeTime } from '../utils/dateUtils';
 import { getStatusColor, getStatusLabel } from '../utils/statusHelpers';
+import { createIdempotencyKey } from '../utils/idempotency';
 import type { Help, Post } from '../types';
 import './MyOrdersPage.css';
 
@@ -89,6 +90,7 @@ export const MyOrdersPage = () => {
   const [deletePostId, setDeletePostId] = useState<number | null>(null);
   const [deletingPostId, setDeletingPostId] = useState<number | null>(null);
   const [boostingPostId, setBoostingPostId] = useState<number | null>(null);
+  const boostKeyRef = useRef<{ postId: number; key: string } | null>(null);
 
   const loadData = useCallback(async () => {
     if (!user) return;
@@ -148,8 +150,13 @@ export const MyOrdersPage = () => {
 
   const handleBoostPost = async (postId: number) => {
     setBoostingPostId(postId);
+    // Reuse the same key if the same post is retried after a failure.
+    if (!boostKeyRef.current || boostKeyRef.current.postId !== postId) {
+      boostKeyRef.current = { postId, key: createIdempotencyKey('boost') };
+    }
     try {
-      const result = await postsApi.boost(postId);
+      const result = await postsApi.boost(postId, boostKeyRef.current.key);
+      boostKeyRef.current = null;
       showToast(result.message, 'success');
       setMyPosts((posts) => posts.map((post) => post.id === postId ? result.post : post));
     } catch (error: unknown) {

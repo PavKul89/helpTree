@@ -160,12 +160,28 @@ app:
     coins-per-review: 2
     coins-per-daily-login: 1
     first-help-bonus: 3
-    boost-price: 5
-    boost-hours: 24
+    # Server-side price catalog. Clients never send prices.
+    boost-price: ${ECONOMY_BOOST_PRICE:5}
+    boost-hours: ${ECONOMY_BOOST_HOURS:24}
+    boost-cleanup-cron: "${ECONOMY_BOOST_CLEANUP_CRON:0 15 * * * *}"
+    vip-price: ${ECONOMY_VIP_PRICE:50}
+    vip-days: ${ECONOMY_VIP_DAYS:30}
+    nickname-color-price: ${ECONOMY_NICKNAME_COLOR_PRICE:20}
+    account-unblock-price: ${ECONOMY_ACCOUNT_UNBLOCK_PRICE:30}
+    account-unblock-debt-reduction: ${ECONOMY_ACCOUNT_UNBLOCK_DEBT_REDUCTION:5}
+    # Daily bonus resets at 00:00 in this zone.
+    daily-bonus-zone: ${ECONOMY_DAILY_BONUS_ZONE:Europe/Moscow}
+    admin-max-coins-per-operation: ${ECONOMY_ADMIN_MAX_COINS:1000000}
+    idempotency-key-max-length: ${ECONOMY_IDEMPOTENCY_KEY_MAX_LENGTH:100}
+    reconciliation-enabled: ${ECONOMY_RECONCILIATION_ENABLED:true}
+    reconciliation-cron: "${ECONOMY_RECONCILIATION_CRON:0 0 4 * * *}"
     refresh-token-days: 7
-    debt-block-threshold: 5
-    debt-warning-threshold: 3
-    debt-create-post-threshold: 2
+    debt-block-threshold: ${ECONOMY_DEBT_BLOCK_THRESHOLD:5}
+    debt-warning-threshold: ${ECONOMY_DEBT_WARNING_THRESHOLD:3}
+    debt-create-post-threshold: ${ECONOMY_DEBT_CREATE_POST_THRESHOLD:2}
+    debt-per-received-help: ${ECONOMY_DEBT_PER_HELP:2}
+    debt-clear-threshold: ${ECONOMY_DEBT_CLEAR_THRESHOLD:2}
+    debt-block-days: ${ECONOMY_DEBT_BLOCK_DAYS:7}
   rate-limit:
     enabled: true
     default-limit: 1000

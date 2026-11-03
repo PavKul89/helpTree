@@ -7,7 +7,6 @@ import org.example.helptreeservice.dto.users.CreateUserRequest;
 import org.example.helptreeservice.dto.users.UserDto;
 import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.enums.Role;
-import org.example.helptreeservice.exception.AccountBlockedException;
 import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.ForbiddenException;
 import org.example.helptreeservice.exception.UnauthorizedException;
@@ -181,17 +180,21 @@ class AuthServiceTest {
     }
 
     @Test
-    void login_shouldRejectBlockedAccountWith403Signal() {
+    void login_shouldAllowBlockedAccountSoItCanBuyUnblock() {
         LoginRequest request = new LoginRequest();
         request.setEmail("user1@test.com");
         request.setPassword("Current1");
         User user = user(1L);
         user.setBlockedUntil(LocalDateTime.now().plusDays(1));
+        IssuedTokens issued = tokens(user);
         when(userRepository.findByEmailIgnoreCase("user1@test.com")).thenReturn(Optional.of(user));
         when(passwordService.matches("Current1", "stored-password")).thenReturn(true);
+        when(authSessionService.createSession(user, null, null)).thenReturn(issued);
 
-        assertThrows(AccountBlockedException.class,
-                () -> service.login(request, null, null));
+        AuthResponse response = service.login(request, null, null);
+
+        assertEquals("access-token", response.getAccessToken());
+        verify(authSessionService).createSession(user, null, null);
     }
 
     @Test

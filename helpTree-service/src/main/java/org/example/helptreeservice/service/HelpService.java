@@ -252,7 +252,6 @@ public class HelpService {
 
         walletService.addCoinsForHelp(helperId, receiverId, post.getId());
         walletService.addCoinsForReceivedHelp(receiverId, helperId, post.getId());
-
         achievementService.checkAndAwardAchievements(help.getHelper(), help);
         ratingService.recordSuccessfulHelp(helperId, receiverId);
 

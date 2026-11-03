@@ -43,6 +43,13 @@ public class CoinTransaction {
     @Column(name = "related_post_id")
     private Long relatedPostId;
 
+    /**
+     * Deterministic business reference or client Idempotency-Key.
+     * Unique together with (user_id, type) by uq_coin_user_type_reference.
+     */
+    @Column(name = "reference_id", length = 120)
+    private String referenceId;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 

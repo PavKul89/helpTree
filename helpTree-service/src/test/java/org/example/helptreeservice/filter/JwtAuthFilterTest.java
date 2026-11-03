@@ -50,7 +50,7 @@ class JwtAuthFilterTest {
         when(claims.get(JwtService.CLAIM_ROLE, String.class)).thenReturn(role);
         when(claims.get(JwtService.CLAIM_SESSION_ID, String.class)).thenReturn(SESSION_ID);
         when(claims.get(JwtService.CLAIM_TOKEN_VERSION)).thenReturn(TOKEN_VERSION);
-        when(authSessionService.validateAccessToken(USER_ID, SESSION_ID, TOKEN_VERSION, role))
+        when(authSessionService.validateAccessToken(USER_ID, SESSION_ID, TOKEN_VERSION, role, false))
                 .thenReturn(new AuthenticatedUser(USER_ID, email, role,
                         UUID.fromString(SESSION_ID), TOKEN_VERSION));
     }
@@ -154,7 +154,7 @@ class JwtAuthFilterTest {
         when(claims.get(JwtService.CLAIM_ROLE, String.class)).thenReturn("USER");
         when(claims.get(JwtService.CLAIM_SESSION_ID, String.class)).thenReturn(SESSION_ID);
         when(claims.get(JwtService.CLAIM_TOKEN_VERSION)).thenReturn(TOKEN_VERSION);
-        when(authSessionService.validateAccessToken(USER_ID, SESSION_ID, TOKEN_VERSION, "USER"))
+        when(authSessionService.validateAccessToken(USER_ID, SESSION_ID, TOKEN_VERSION, "USER", false))
                 .thenThrow(new UnauthorizedException("revoked"));
 
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/posts/1");
@@ -209,7 +209,7 @@ class JwtAuthFilterTest {
         assertEquals("USER", request.getAttribute("X-User-Role"));
         assertEquals(EMAIL, request.getAttribute("X-User-Email"));
         assertEquals(SESSION_ID, request.getAttribute("X-Session-Id"));
-        verify(authSessionService).validateAccessToken(USER_ID, SESSION_ID, TOKEN_VERSION, "USER");
+        verify(authSessionService).validateAccessToken(USER_ID, SESSION_ID, TOKEN_VERSION, "USER", false);
         verify(filterChain).doFilter(request, response);
     }
 
@@ -257,7 +257,7 @@ class JwtAuthFilterTest {
         when(claims.get(JwtService.CLAIM_ROLE, String.class)).thenReturn("USER");
         when(claims.get(JwtService.CLAIM_SESSION_ID, String.class)).thenReturn(SESSION_ID);
         when(claims.get(JwtService.CLAIM_TOKEN_VERSION)).thenReturn(TOKEN_VERSION);
-        when(authSessionService.validateAccessToken(USER_ID, SESSION_ID, TOKEN_VERSION, "USER"))
+        when(authSessionService.validateAccessToken(USER_ID, SESSION_ID, TOKEN_VERSION, "USER", false))
                 .thenThrow(new AccountBlockedException("blocked"));
 
         MockHttpServletRequest request = new MockHttpServletRequest("PUT", "/api/posts/1");
@@ -270,22 +270,47 @@ class JwtAuthFilterTest {
     }
 
     @Test
-    void filter_shouldReturn401ForRevokedSessionOnProtectedPath() throws Exception {
+    void filter_shouldAllowBlockedUserToBuyAccountUnblock() throws Exception {
         Claims claims = mock(Claims.class);
         when(jwtService.parseAccessClaims(TOKEN)).thenReturn(claims);
         when(claims.get(JwtService.CLAIM_USER_ID)).thenReturn(USER_ID);
         when(claims.get(JwtService.CLAIM_ROLE, String.class)).thenReturn("USER");
         when(claims.get(JwtService.CLAIM_SESSION_ID, String.class)).thenReturn(SESSION_ID);
         when(claims.get(JwtService.CLAIM_TOKEN_VERSION)).thenReturn(TOKEN_VERSION);
-        when(authSessionService.validateAccessToken(USER_ID, SESSION_ID, TOKEN_VERSION, "USER"))
-                .thenThrow(new UnauthorizedException("revoked"));
+        when(authSessionService.validateAccessToken(USER_ID, SESSION_ID, TOKEN_VERSION, "USER", true))
+                .thenReturn(new AuthenticatedUser(USER_ID, EMAIL, "USER",
+                        UUID.fromString(SESSION_ID), TOKEN_VERSION));
 
-        MockHttpServletRequest request = new MockHttpServletRequest("PUT", "/api/posts/1");
+        MockHttpServletRequest request = new MockHttpServletRequest(
+                "POST", "/api/users/" + USER_ID + "/wallet/spend");
+        request.setParameter("type", "ACCOUNT_UNBLOCK");
         request.addHeader("Authorization", "Bearer " + TOKEN);
 
         MockHttpServletResponse response = invoke(request);
 
-        assertEquals(401, response.getStatus());
+        assertEquals(200, response.getStatus());
+        verify(filterChain).doFilter(request, response);
+    }
+
+    @Test
+    void filter_shouldStillRejectBlockedUserForOtherPurchases() throws Exception {
+        Claims claims = mock(Claims.class);
+        when(jwtService.parseAccessClaims(TOKEN)).thenReturn(claims);
+        when(claims.get(JwtService.CLAIM_USER_ID)).thenReturn(USER_ID);
+        when(claims.get(JwtService.CLAIM_ROLE, String.class)).thenReturn("USER");
+        when(claims.get(JwtService.CLAIM_SESSION_ID, String.class)).thenReturn(SESSION_ID);
+        when(claims.get(JwtService.CLAIM_TOKEN_VERSION)).thenReturn(TOKEN_VERSION);
+        when(authSessionService.validateAccessToken(USER_ID, SESSION_ID, TOKEN_VERSION, "USER", false))
+                .thenThrow(new AccountBlockedException("blocked"));
+
+        MockHttpServletRequest request = new MockHttpServletRequest(
+                "POST", "/api/users/" + USER_ID + "/wallet/spend");
+        request.setParameter("type", "VIP");
+        request.addHeader("Authorization", "Bearer " + TOKEN);
+
+        MockHttpServletResponse response = invoke(request);
+
+        assertEquals(403, response.getStatus());
         verifyNoInteractions(filterChain);
     }
 }

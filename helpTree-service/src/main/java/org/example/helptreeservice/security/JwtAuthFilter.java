@@ -101,7 +101,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             }
 
             AuthSessionService.AuthenticatedUser authenticatedUser =
-                    authSessionService.validateAccessToken(userId, sessionId, tokenVersion, role);
+                    authSessionService.validateAccessToken(userId, sessionId, tokenVersion, role,
+                            isBlockedSelfServicePath(request, userId));
 
             if (path.startsWith("/internal/") && !"ADMIN".equals(authenticatedUser.role())) {
                 sendError(response, HttpStatus.FORBIDDEN,
@@ -159,6 +160,37 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             }
         }
         return null;
+    }
+
+    /**
+     * A debt-blocked account is normally rejected on every protected path. The
+     * only exceptions are its own wallet read endpoints and the paid
+     * ACCOUNT_UNBLOCK purchase, otherwise the documented recovery flow could
+     * never be used. Logout stays available so a blocked session can be ended.
+     */
+    private boolean isBlockedSelfServicePath(HttpServletRequest request, Long userId) {
+        if (userId == null) {
+            return false;
+        }
+        String path = request.getRequestURI();
+        String method = request.getMethod();
+
+        if ("POST".equals(method) && "/api/auth/logout".equals(path)) {
+            return true;
+        }
+
+        String walletPrefix = "/api/users/" + userId + "/wallet";
+        if (!path.startsWith(walletPrefix)) {
+            return false;
+        }
+        if ("GET".equals(method)) {
+            return path.equals(walletPrefix)
+                    || path.equals(walletPrefix + "/pricing")
+                    || path.equals(walletPrefix + "/transactions");
+        }
+        return "POST".equals(method)
+                && path.equals(walletPrefix + "/spend")
+                && "ACCOUNT_UNBLOCK".equalsIgnoreCase(request.getParameter("type"));
     }
 
     private boolean isPublicPath(String path, String method) {
