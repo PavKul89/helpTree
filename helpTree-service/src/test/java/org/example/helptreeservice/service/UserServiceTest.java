@@ -5,12 +5,14 @@ import org.example.helptreeservice.dto.users.UpdateUserRequest;
 import org.example.helptreeservice.dto.users.UserDto;
 import org.example.helptreeservice.dto.users.UserPublicDto;
 import org.example.helptreeservice.entity.User;
+import org.example.helptreeservice.entity.UserRatingStats;
 import org.example.helptreeservice.enums.Role;
 import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.ConflictException;
 import org.example.helptreeservice.exception.NotFoundException;
 import org.example.helptreeservice.mapper.UserMapper;
 import org.example.helptreeservice.repository.PostRepository;
+import org.example.helptreeservice.repository.UserRatingStatsRepository;
 import org.example.helptreeservice.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,6 +37,8 @@ class UserServiceTest {
     @Mock
     private PostRepository postRepository;
     @Mock
+    private UserRatingStatsRepository ratingStatsRepository;
+    @Mock
     private UserMapper userMapper;
     @Mock
     private PasswordService passwordService;
@@ -54,6 +58,7 @@ class UserServiceTest {
         userService = new UserService(
                 userRepository,
                 postRepository,
+                ratingStatsRepository,
                 userMapper,
                 passwordService,
                 imageService,
@@ -338,5 +343,27 @@ class UserServiceTest {
         assertNotNull(user.getBlockedUntil());
         assertTrue(user.getBlockedUntil().isAfter(LocalDateTime.now()));
         verify(authSessionService).revokeAllSessionsForUser(1L, "ACCOUNT_BLOCKED");
+    }
+
+    @Test
+    void updateUserRating_shouldKeepProjectionInSync() {
+        User user = user(1L, false);
+        user.setRating(3.0);
+        UserRatingStats stats = UserRatingStats.builder()
+                .id(9L)
+                .userId(1L)
+                .currentRating(3.0)
+                .lastCalculated(LocalDateTime.now().minusDays(1))
+                .build();
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(ratingStatsRepository.findByUserId(1L)).thenReturn(Optional.of(stats));
+
+        userService.updateUserRating(1L, 4.2);
+
+        assertEquals(4.2, user.getRating());
+        assertEquals(4.2, stats.getCurrentRating());
+        assertTrue(stats.getLastCalculated().isAfter(LocalDateTime.now().minusMinutes(1)));
+        verify(userRepository).save(user);
+        verify(ratingStatsRepository).save(stats);
     }
 }

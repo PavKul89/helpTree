@@ -19,7 +19,19 @@ public class RatingResponse {
     private Map<String, Double> ratingComponents;
     private String level;
     private LocalDateTime calculatedAt;
+
+    /** Confirmed help acts given by this user. */
     private Long totalHelps;
+
+    /** Every non-deleted help record where this user was the helper. */
+    private Long totalHelpRecords;
+
+    /** ACCEPTED or COMPLETED help records given by this user. */
+    private Long activeHelps;
+
+    private Long cancelledHelps;
     private Long totalReceivedHelps;
+    private Long reviewCount;
+    private Double averageReviewRating;
     private Double successRate;
 }

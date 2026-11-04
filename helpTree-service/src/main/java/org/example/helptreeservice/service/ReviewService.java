@@ -15,6 +15,8 @@ import org.example.helptreeservice.mapper.ReviewMapper;
 import org.example.helptreeservice.repository.HelpRepository;
 import org.example.helptreeservice.repository.ReviewRepository;
 import org.example.helptreeservice.repository.UserRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,6 +35,7 @@ public class ReviewService {
     private final ReviewMapper reviewMapper;
     private final UserService userService;
     private final WalletService walletService;
+    private final RatingService ratingService;
 
     @Transactional
     public ReviewResponse createReview(CreateReviewRequest request, Long currentUserId) {
@@ -89,6 +92,10 @@ public class ReviewService {
         walletService.addCoinsForReview(toUser.getId(), savedReview.getId());
         log.info("Начислено 2 HC пользователю {} за отзыв {}", toUser.getId(), savedReview.getId());
 
+        // The review is part of the rating only after it is actually stored.
+        reviewRepository.flush();
+        ratingService.recalculateUsers(List.of(toUser.getId()));
+
         return reviewMapper.toResponse(savedReview);
     }
 
@@ -135,5 +142,20 @@ public class ReviewService {
         review.setDeletedAt(LocalDateTime.now());
         reviewRepository.save(review);
         log.info("Отзыв {} помечен как удалённый", reviewId);
+
+        // Soft-delete is a moderation action: the recipient's rating must stop
+        // counting the review immediately.
+        reviewRepository.flush();
+        ratingService.recalculateUsers(List.of(review.getToUser().getId()));
+    }
+
+    @Transactional(readOnly = true)
+    public Page<ReviewResponse> getAdminReviews(Long userId,
+                                                Integer rating,
+                                                LocalDateTime from,
+                                                LocalDateTime to,
+                                                Pageable pageable) {
+        return reviewRepository.findForAdmin(userId, rating, from, to, pageable)
+                .map(reviewMapper::toResponse);
     }
 }

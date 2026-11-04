@@ -23,6 +23,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -119,33 +120,21 @@ class RatingServiceTest {
     }
 
     @Test
-    void recordSuccessfulHelp_shouldCountGivenAndReceivedOnce() {
-        UserRatingStats helper = stats(1L, 3.0);
-        UserRatingStats receiver = stats(2L, 3.0);
-        when(statsRepository.findByUserIdForUpdate(1L)).thenReturn(Optional.of(helper));
-        when(statsRepository.findByUserIdForUpdate(2L)).thenReturn(Optional.of(receiver));
+    void recalculateUsers_shouldRebuildEachAffectedUserOnceInDeterministicOrder() {
+        ratingService.recalculateUsers(List.of(3L, 1L, 2L, 1L));
 
-        ratingService.recordSuccessfulHelp(1L, 2L);
-
-        assertEquals(2L, helper.getTotalHelpsGiven());
-        assertEquals(2L, helper.getSuccessfulHelps());
-        assertEquals(0L, helper.getCancelledHelps());
-        assertEquals(2L, receiver.getTotalHelpsReceived());
-        verify(statsRepository).save(helper);
-        verify(statsRepository).save(receiver);
+        org.mockito.InOrder inOrder = inOrder(calculationService);
+        inOrder.verify(calculationService).calculateUserRating(1L);
+        inOrder.verify(calculationService).calculateUserRating(2L);
+        inOrder.verify(calculationService).calculateUserRating(3L);
+        verify(calculationService, times(3)).calculateUserRating(anyLong());
     }
 
     @Test
-    void recordCancelledHelp_shouldNotCreditReceiver() {
-        UserRatingStats helper = stats(1L, 3.0);
-        when(statsRepository.findByUserIdForUpdate(1L)).thenReturn(Optional.of(helper));
+    void recalculateUsers_shouldIgnoreNullOrEmptyInput() {
+        ratingService.recalculateUsers(null);
+        ratingService.recalculateUsers(List.of());
 
-        ratingService.recordCancelledHelp(1L);
-
-        assertEquals(2L, helper.getTotalHelpsGiven());
-        assertEquals(1L, helper.getCancelledHelps());
-        assertEquals(1L, helper.getSuccessfulHelps());
-        verify(statsRepository, never()).findByUserIdForUpdate(2L);
-        verify(statsRepository).save(helper);
+        verifyNoInteractions(calculationService);
     }
 }

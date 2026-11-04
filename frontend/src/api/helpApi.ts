@@ -2,7 +2,13 @@ import api from './axios';
 import type { Help, HelpRequest, HelpGraph } from '../types';
 
 export interface HelpStats {
+  /** Confirmed help acts: the same set used by the graph and achievements. */
   totalHelps: number;
+  /** Every non-deleted help record, independent of status. */
+  totalHelpRecords: number;
+  /** ACCEPTED or COMPLETED help records. */
+  activeHelps: number;
+  cancelledHelps: number;
   byMonth: Record<string, number>;
   byCategory: Record<string, number>;
   topHelpers: Array<{
@@ -48,9 +54,15 @@ export const helpApi = {
     return response.data;
   },
 
-  getHelpGraph: async (userId?: number): Promise<HelpGraph> => {
-    const params = userId ? `?userId=${userId}` : '';
-    const response = await api.get<HelpGraph>(`/api/helps/graph${params}`);
+  getHelpGraph: async (
+    userId?: number,
+    options?: { depth?: number; maxEdges?: number }
+  ): Promise<HelpGraph> => {
+    const params: Record<string, number> = {};
+    if (userId) params.userId = userId;
+    if (options?.depth !== undefined) params.depth = options.depth;
+    if (options?.maxEdges !== undefined) params.maxEdges = options.maxEdges;
+    const response = await api.get<HelpGraph>('/api/helps/graph', { params });
     return response.data;
   },
 

@@ -109,8 +109,11 @@ class HelpLifecycleIntegrationTest {
         assertEquals("COMPLETED", completed.getStatus());
         assertEquals(0, countTransactions(helper.getId(), "HELP_GIVEN", post.getId()),
                 "Completing a help must not award coins yet");
-        assertNull(statsRepository.findByUserId(helper.getId()).orElse(null),
-                "Completing a help must not create rating stats");
+        UserRatingStats afterComplete = statsRepository.findByUserId(helper.getId()).orElseThrow();
+        assertEquals(1L, afterComplete.getActiveHelpsGiven(),
+                "An accepted/completed help is an active projection record");
+        assertEquals(0L, afterComplete.getSuccessfulHelps(),
+                "Completing a help must not count it as confirmed");
 
         // Idempotent retry of complete.
         assertEquals("COMPLETED",

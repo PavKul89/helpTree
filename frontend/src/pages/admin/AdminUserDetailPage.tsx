@@ -702,12 +702,29 @@ export const AdminUserDetailPage: React.FC = () => {
                   <dd>{recalcResult.level}</dd>
                 </div>
                 <div>
-                  <dt>Помощей оказано</dt>
+                  <dt>Подтверждённые акты</dt>
                   <dd>{formatNumber(recalcResult.totalHelps)}</dd>
+                </div>
+                <div>
+                  <dt>Все записи о помощи</dt>
+                  <dd>{formatNumber(recalcResult.totalHelpRecords)}</dd>
+                </div>
+                <div>
+                  <dt>Активные / отменённые</dt>
+                  <dd>{formatNumber(recalcResult.activeHelps)} / {formatNumber(recalcResult.cancelledHelps)}</dd>
                 </div>
                 <div>
                   <dt>Помощей получено</dt>
                   <dd>{formatNumber(recalcResult.totalReceivedHelps)}</dd>
+                </div>
+                <div>
+                  <dt>Отзывы</dt>
+                  <dd>
+                    {formatNumber(recalcResult.reviewCount)}
+                    {recalcResult.averageReviewRating != null
+                      ? ` · ${recalcResult.averageReviewRating.toFixed(2)}`
+                      : ''}
+                  </dd>
                 </div>
                 <div>
                   <dt>Успешность</dt>
@@ -715,8 +732,8 @@ export const AdminUserDetailPage: React.FC = () => {
                 </div>
               </dl>
               <p className="admin-field-hint">
-                Пересчёт обновляет статистику рейтинга; поле <code>UserDto.rating</code> не
-                перезаписывается.
+                Пересчёт заново строит рейтинг и статистику из подтверждённых помощи и
+                отзывов; <code>UserDto.rating</code> синхронизируется с результатом.
               </p>
             </div>
           )}

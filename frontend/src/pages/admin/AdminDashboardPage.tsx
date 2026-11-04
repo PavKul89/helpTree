@@ -165,9 +165,21 @@ export const AdminDashboardPage: React.FC = () => {
       icon: Users,
     },
     {
-      label: 'Записи о помощи',
+      label: 'Подтверждённые акты',
       value: formatNumber(data.stats?.totalHelps),
+      hint: 'CONFIRMED помощи — та же база, что у графа и достижений',
+      icon: Handshake,
+    },
+    {
+      label: 'Записи о помощи',
+      value: formatNumber(data.stats?.helpRecords),
       hint: 'Все неудалённые записи, независимо от статуса',
+      icon: Handshake,
+    },
+    {
+      label: 'Активные / отменённые',
+      value: `${formatNumber(data.stats?.activeHelps)} / ${formatNumber(data.stats?.cancelledHelps)}`,
+      hint: 'ACCEPTED + COMPLETED / CANCELLED',
       icon: Handshake,
     },
     {

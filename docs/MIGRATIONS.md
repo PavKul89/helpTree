@@ -1,13 +1,15 @@
-# Миграции базы данных (Block 6)
+# Миграции базы данных (Block 6–7)
 
 Документ описывает политику миграций, восстановление схемы после V33,
-безопасную стратегию для V3 и порядок проверки/отката.
+безопасную стратегию для V3, порядок проверки/отката и проекцию статистики
+рейтинга (V43).
 
 ## 1. Политика
 
 1. Уже применённые миграции считаются неизменяемыми: любое изменение файла
    меняет Flyway checksum и ломает `flyway:validate` на существующих базах.
-2. Исправления выполняются только вперёд, новыми версиями (`V41`, `V42`, ...).
+2. Исправления выполняются только вперёд, новыми версиями (`V41`, `V42`,
+   `V43`, ...).
 3. Перед destructive-миграцией обязателен backup (см. раздел 6).
 4. Каждая миграция проверяется минимум дважды:
    - на пустой базе;
@@ -109,9 +111,41 @@ ORDER BY id;
 `chat_user_state` уже создана в V37; V42 добавляет недостающий FK
 `last_read_message_id → messages(id)`.
 
-## 5. Проверка миграций
+## 5. Проекция статистики рейтинга (V43)
 
-### 5.1 Чистая база
+V43 не меняет существующие значения вручную: она превращает
+`user_rating_stats` в проекцию фактов из `helps` и `reviews` и помечает все
+строки к пересчёту (`last_calculated = NULL`).
+
+Добавленные колонки:
+
+- `active_helps_given` — `ACCEPTED` или `COMPLETED` записи помощи;
+- `review_count` — неудалённые отзывы, полученные пользователем;
+- `average_review_rating` — средняя оценка по этим отзывам.
+
+Семантика существующих колонок закреплена явно:
+
+- `total_helps_given` — все неудалённые записи помощи помощника;
+- `successful_helps` — `CONFIRMED` акты;
+- `cancelled_helps` — `CANCELLED` записи;
+- `total_helps_received` — `CONFIRMED` акты, полученные пользователем.
+
+Миграция пересчитывает эти значения из фактов и создаёт индексы для
+агрегатов рейтинга и глобального admin-списка отзывов:
+
+- `idx_helps_helper_status_active`, `idx_helps_receiver_status_active`
+  (partial `deleted = false`);
+- `idx_helps_status_confirmed_at` (partial `deleted = false`);
+- `idx_reviews_to_user_created`, `idx_reviews_rating_created`,
+  `idx_reviews_created_at` (partial `deleted = false`);
+- `idx_user_rating_stats_last_calculated`.
+
+Проверка: `scripts/fixtures/verify_block7_schema.sql` проверяет колонки,
+partial-индексы и совпадение проекции с `helps`/`reviews`.
+
+## 6. Проверка миграций
+
+### 6.1 Чистая база
 
 ```powershell
 docker exec postgres psql -U helpTree -d postgres -c "CREATE DATABASE helptree_clean_test;"
@@ -126,9 +160,13 @@ $env:DB_PASS='helpTree'
 docker cp scripts/fixtures/verify_block6_schema.sql postgres:/tmp/verify_block6_schema.sql
 docker exec postgres psql -U helpTree -d helptree_clean_test `
   -v ON_ERROR_STOP=1 -f /tmp/verify_block6_schema.sql
+
+docker cp scripts/fixtures/verify_block7_schema.sql postgres:/tmp/verify_block7_schema.sql
+docker exec postgres psql -U helpTree -d helptree_clean_test `
+  -v ON_ERROR_STOP=1 -f /tmp/verify_block7_schema.sql
 ```
 
-### 5.2 Копия существующей базы
+### 6.2 Копия существующей базы
 
 ```powershell
 docker exec postgres pg_dump -U helpTree -d helpTree_db -Fc -f /tmp/helpTree_db.dump
@@ -146,19 +184,24 @@ $env:DB_PASS='helpTree'
 docker cp scripts/fixtures/verify_block6_schema.sql postgres:/tmp/verify_block6_schema.sql
 docker exec postgres psql -U helpTree -d helptree_copy_test `
   -v ON_ERROR_STOP=1 -f /tmp/verify_block6_schema.sql
+
+docker cp scripts/fixtures/verify_block7_schema.sql postgres:/tmp/verify_block7_schema.sql
+docker exec postgres psql -U helpTree -d helptree_copy_test `
+  -v ON_ERROR_STOP=1 -f /tmp/verify_block7_schema.sql
 ```
 
 Проверьте, что количество строк в `users`, `posts`, `helps`, `chats`,
 `messages`, `comments`, `achievements`, `reviews`, `coin_transactions`
 совпадает с исходной базой.
 
-### 5.3 CI / повторяемый fixture
+### 6.3 CI / повторяемый fixture
 
 `scripts/fixtures/legacy_v40_data.sql` создаёт репрезентативные данные V40,
 `verify_block6_schema.sql` проверяет схему, `verify_block6_legacy.sql` —
 сохранность строк и нормализацию, `verify_block6_constraints.sql` — что
-невалидные записи действительно отклоняются. Эти же файлы используются в
-GitHub Actions:
+невалидные записи действительно отклоняются, `verify_block7_schema.sql` —
+колонки/индексы V43 и совпадение проекции с фактами. Эти же файлы
+используются в GitHub Actions:
 
 ```bash
 ./mvnw -B -pl helpTree-service flyway:migrate -Dflyway.target=40
@@ -168,9 +211,10 @@ psql -v ON_ERROR_STOP=1 -f scripts/fixtures/legacy_v40_data.sql
 psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block6_schema.sql
 psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block6_legacy.sql
 psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block6_constraints.sql
+psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block7_schema.sql
 ```
 
-## 6. Backup перед миграцией
+## 7. Backup перед миграцией
 
 Для локального docker-окружения:
 
@@ -180,10 +224,10 @@ docker cp postgres:/tmp/helpTree_db_pre_v41.dump .\helpTree_db_pre_v41.dump
 ```
 
 Для production используйте штатный backup PostgreSQL (`pg_basebackup` или
-`pg_dump -Fc`) и проверяйте restore на отдельной базе. Не запускайте V41/V42
-без проверенной точки восстановления.
+`pg_dump -Fc`) и проверяйте restore на отдельной базе. Не запускайте
+V41/V42/V43 без проверенной точки восстановления.
 
-## 7. Rollback / recovery
+## 8. Rollback / recovery
 
 Flyway не поддерживает автоматический down-migration. Основной план
 восстановления — restore из backup. Emergency-скрипт для V41/V42:
@@ -206,7 +250,12 @@ rollback-скрипта сделайте backup текущего состоян�
 verify-скрипта» проверен на копии fixture-базы: скрипт возвращает схему к
 V40, а V41/V42 затем применяются повторно без ошибок.
 
-## 8. Ограничения и замечания
+V43 — аддитивная миграция (колонки, backfill, partial-индексы), отдельного
+rollback-скрипта не имеет. Оставленные после отката кода колонки безопасны:
+они заполнены и не используются старой версией приложения. Для точного
+состояния до V43 восстановите backup.
+
+## 9. Ограничения и замечания
 
 - `V9`, `V21`, `V22` отсутствуют в истории; это существовавшая нумерация,
   Flyway её принимает.
@@ -214,5 +263,8 @@ V40, а V41/V42 затем применяются повторно без оши
   V41 — компенсирующая миграция.
 - Пользователь с legacy `rating = 0` (например, admin) после V41 получит
   `3.0`. Это документированная нормализация, а не потеря данных.
-- Все новые таблицы пока не используются кодом; они подготовлены для
-  следующих доменных блоков.
+- Новые таблицы V42 пока не используются кодом; Block 7 использует только
+  `user_rating_stats`, `helps` и `reviews`.
+- После V43 все строки `user_rating_stats` помечены `last_calculated = NULL`.
+  Периодический пересчёт и первые операции confirm/cancel/review пересоберут
+  их из фактов; до этого колонки уже содержат корректный backfill.

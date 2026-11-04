@@ -35,7 +35,10 @@ public class AchievementService {
     public void checkAndAwardAchievements(User user, Help help) {
         List<AchievementType> newAchievements = new ArrayList<>();
 
-        int helpedCount = user.getHelpedCount();
+        // Achievements are derived from confirmed help facts, not from the
+        // operational users.helped_count counter (which also drives debt).
+        long helpedCount = helpRepository.countByHelperIdAndStatus(
+                user.getId(), HelpStatus.CONFIRMED);
 
         Set<AchievementType> existingTypes = achievementRepository.findAchievementTypesByUserId(user.getId());
 
@@ -98,11 +101,12 @@ public class AchievementService {
             newAchievements.add(AchievementType.WINTER_HELPER);
         }
 
-        if (helpedCount >= 5 && user.getDebtCount() == 0 && !existingTypes.contains(AchievementType.DEBT_FREE)) {
+        int debtCount = user.getDebtCount() != null ? user.getDebtCount() : 0;
+        if (helpedCount >= 5 && debtCount == 0 && !existingTypes.contains(AchievementType.DEBT_FREE)) {
             newAchievements.add(AchievementType.DEBT_FREE);
         }
 
-        if (user.getHelpedCount() > user.getDebtCount() && helpedCount >= 3 && !existingTypes.contains(AchievementType.BALANCED)) {
+        if (helpedCount > debtCount && helpedCount >= 3 && !existingTypes.contains(AchievementType.BALANCED)) {
             newAchievements.add(AchievementType.BALANCED);
         }
 
@@ -220,6 +224,8 @@ public class AchievementService {
 
             long currentProgress = 0;
             int targetValue = getTargetValue(type);
+            long confirmedHelpCount = helpRepository.countByHelperIdAndStatus(
+                    user.getId(), HelpStatus.CONFIRMED);
 
             switch (type) {
                 case SEEDLING:
@@ -231,7 +237,7 @@ public class AchievementService {
                 case HELPER_25:
                 case HELPER_50:
                 case HELPER_100:
-                    currentProgress = user.getHelpedCount() != null ? user.getHelpedCount() : 0;
+                    currentProgress = confirmedHelpCount;
                     break;
                 case FAST_HELP:
                 case NIGHT_OWL:
@@ -279,11 +285,11 @@ public class AchievementService {
                     currentProgress = (int) messageRepository.countBySenderId(user.getId());
                     break;
                 case DEBT_FREE:
-                    currentProgress = user.getHelpedCount() != null ? user.getHelpedCount() : 0;
+                    currentProgress = confirmedHelpCount;
                     targetValue = 5;
                     break;
                 case BALANCED:
-                    currentProgress = user.getHelpedCount() != null ? user.getHelpedCount() : 0;
+                    currentProgress = confirmedHelpCount;
                     targetValue = 3;
                     break;
                 case VARIETY:

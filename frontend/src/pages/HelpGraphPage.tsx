@@ -280,8 +280,12 @@ export const HelpGraphPage = () => {
 
       <section className="help-graph-metrics" aria-label="Показатели графа">
         <div><span className="help-graph-metric-icon"><Users size={17} /></span><strong>{graph.totalUsers.toLocaleString('ru-RU')}</strong><span>участников</span></div>
-        <div><span className="help-graph-metric-icon"><TreeDeciduous size={17} /></span><strong>{graph.totalHelps.toLocaleString('ru-RU')}</strong><span>подтверждённых актов помощи</span></div>
-        <span className="help-graph-scope-note">Граф строится от вашего участия</span>
+        <div><span className="help-graph-metric-icon"><TreeDeciduous size={17} /></span><strong>{graph.returnedHelps.toLocaleString('ru-RU')}</strong><span>подтверждённых актов в ответе</span></div>
+        <span className="help-graph-scope-note">
+          {graph.truncated
+            ? `Показаны ${graph.returnedHelps.toLocaleString('ru-RU')} из ${graph.totalHelps.toLocaleString('ru-RU')} связей — лимит рёбер`
+            : `Граф строится от вашего участия · ${graph.buildTimeMs} мс`}
+        </span>
       </section>
 
       {showStats && (
@@ -293,6 +297,13 @@ export const HelpGraphPage = () => {
             </div>
           ) : stats ? (
             <>
+              <div className="help-graph-stats-column">
+                <h2>Подтверждённые акты</h2>
+                <div className="help-graph-category-row"><span>Подтверждено</span><strong>{stats.totalHelps}</strong></div>
+                <div className="help-graph-category-row"><span>Записи о помощи</span><strong>{stats.totalHelpRecords}</strong></div>
+                <div className="help-graph-category-row"><span>Активные</span><strong>{stats.activeHelps}</strong></div>
+                <div className="help-graph-category-row"><span>Отменённые</span><strong>{stats.cancelledHelps}</strong></div>
+              </div>
               <div className="help-graph-stats-column">
                 <h2>Помощь по месяцам</h2>
                 <div className="help-graph-month-bars">

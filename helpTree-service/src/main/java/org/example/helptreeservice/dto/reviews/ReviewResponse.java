@@ -9,6 +9,7 @@ import java.time.LocalDateTime;
 public class ReviewResponse {
     private Long id;
     private Long helpId;
+    private Long postId;
     private Long fromUserId;
     private String fromUserName;
     private Long toUserId;

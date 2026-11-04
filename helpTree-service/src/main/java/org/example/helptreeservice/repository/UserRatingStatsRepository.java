@@ -41,6 +41,19 @@ public interface UserRatingStatsRepository extends JpaRepository<UserRatingStats
             "WHERE u.deleted = false ORDER BY s.currentRating DESC")
     Page<UserRatingStats> findTopRated(Pageable pageable);
     
-    @Query("SELECT u FROM UserRatingStats u WHERE u.lastCalculated < :threshold")
-    List<UserRatingStats> findStaleStats(LocalDateTime threshold, Pageable pageable);
+    /**
+     * {@code lastCalculated IS NULL} is a deliberate "recalculate me" marker
+     * written by V43 and by the projection code when facts change.
+     *
+     * <p>Pagination uses an id cursor instead of an offset: recalculating a row
+     * moves it out of the result set, so an advancing offset would silently
+     * skip rows. The cursor also guarantees forward progress even when a single
+     * row keeps failing.</p>
+     */
+    @Query("SELECT u FROM UserRatingStats u "
+            + "WHERE (u.lastCalculated IS NULL OR u.lastCalculated < :threshold) "
+            + "AND u.id > :afterId ORDER BY u.id ASC")
+    List<UserRatingStats> findStaleStatsAfter(@Param("threshold") LocalDateTime threshold,
+                                              @Param("afterId") Long afterId,
+                                              Pageable pageable);
 }

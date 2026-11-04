@@ -19,6 +19,7 @@ import org.example.helptreeservice.repository.HelpRepository;
 import org.example.helptreeservice.repository.HelpStatusHistoryRepository;
 import org.example.helptreeservice.repository.PostRepository;
 import org.example.helptreeservice.repository.UserRepository;
+import org.example.helptreeservice.repository.projection.ConfirmedHelpGraphProjection;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -50,6 +51,7 @@ class HelpServiceTest {
     @Mock private WalletService walletService;
     @Mock private ImageService imageService;
     @Mock private HelpStatusHistoryRepository statusHistoryRepository;
+    @Mock private HelpGraphMetrics helpGraphMetrics;
 
     private HelpService helpService;
 
@@ -67,7 +69,8 @@ class HelpServiceTest {
                 walletService,
                 imageService,
                 economyConfig,
-                statusHistoryRepository
+                statusHistoryRepository,
+                helpGraphMetrics
         );
 
         lenient().when(helpMapper.toResponse(any(Help.class))).thenAnswer(invocation -> {
@@ -109,6 +112,7 @@ class HelpServiceTest {
         verify(statusHistoryRepository).save(history.capture());
         assertEquals(HelpStatus.ACCEPTED, history.getValue().getToStatus());
         assertEquals(HelpActorRole.HELPER, history.getValue().getActorRole());
+        verify(ratingService).recalculateUsers(List.of(1L));
     }
 
     @Test
@@ -188,7 +192,7 @@ class HelpServiceTest {
     }
 
     @Test
-    void completeHelp_shouldOnlyTransitionStatusWithoutAwards() {
+    void completeHelp_shouldTransitionStatusAndRefreshProjectionWithoutAwards() {
         Help help = help(5L, HelpStatus.ACCEPTED, user(1L), user(2L));
         when(helpRepository.findByIdForUpdate(5L)).thenReturn(Optional.of(help));
 
@@ -196,7 +200,8 @@ class HelpServiceTest {
 
         assertEquals("COMPLETED", response.getStatus());
         assertNotNull(help.getCompletedAt());
-        verifyNoInteractions(ratingService, walletService, achievementService);
+        verify(ratingService).recalculateUsers(List.of(1L));
+        verifyNoInteractions(walletService, achievementService);
         verify(statusHistoryRepository).save(any(HelpStatusHistory.class));
     }
 
@@ -210,6 +215,7 @@ class HelpServiceTest {
         assertEquals("COMPLETED", response.getStatus());
         verify(helpRepository, never()).saveAndFlush(any(Help.class));
         verify(statusHistoryRepository, never()).save(any(HelpStatusHistory.class));
+        verifyNoInteractions(ratingService);
     }
 
     @Test
@@ -240,7 +246,7 @@ class HelpServiceTest {
         verify(userService).incrementHelpedCount(2L);
         verify(userService).userHelpedSomeone(1L);
         verify(achievementService).checkAndAwardAchievements(helper, help);
-        verify(ratingService, times(1)).recordSuccessfulHelp(1L, 2L);
+        verify(ratingService, times(1)).recalculateUsers(List.of(1L, 2L));
         verify(statusHistoryRepository).save(any(HelpStatusHistory.class));
     }
 
@@ -297,7 +303,7 @@ class HelpServiceTest {
         assertEquals(HelpActorRole.HELPER, help.getCancelInitiator());
         assertEquals(PostStatus.OPEN, help.getPost().getStatus());
         assertNull(help.getPost().getHelper());
-        verify(ratingService).recordCancelledHelp(1L);
+        verify(ratingService).recalculateUsers(List.of(1L));
         verifyNoInteractions(walletService, achievementService);
         verify(statusHistoryRepository).save(any(HelpStatusHistory.class));
     }
@@ -348,7 +354,7 @@ class HelpServiceTest {
         assertEquals(HelpStatus.CANCELLED, help.getStatus());
         assertEquals(HelpActorRole.SYSTEM, help.getCancelInitiator());
         assertNull(help.getCancelledById());
-        verify(ratingService).recordCancelledHelp(1L);
+        verify(ratingService).recalculateUsers(List.of(1L));
     }
 
     @Test
@@ -393,6 +399,87 @@ class HelpServiceTest {
         assertEquals(1, history.size());
         assertEquals("COMPLETED", history.get(0).getFromStatus());
         assertEquals("CONFIRMED", history.get(0).getToStatus());
+    }
+
+    @Test
+    void getHelpGraph_shouldUseHelpIdAsEdgeIdentityAndKeepDirectionAndPost() {
+        ConfirmedHelpGraphProjection act = graphAct(100L, 1L, "Helper", 2L, "Receiver", 10L, "Post");
+        when(helpRepository.findConfirmedHelpGraphProjection()).thenReturn(List.of(act));
+        when(userRepository.findAllById(any())).thenReturn(List.of(user(1L), user(2L)));
+
+        org.example.helptreeservice.dto.graph.HelpGraphDto graph =
+                helpService.getHelpGraph(1L, null, null);
+
+        assertEquals(1, graph.getEdges().size());
+        var edge = graph.getEdges().get(0);
+        assertEquals(100L, edge.getId());
+        assertEquals(1L, edge.getFromUserId());
+        assertEquals(2L, edge.getToUserId());
+        assertEquals(10L, edge.getPostId());
+        assertEquals("CONFIRMED", edge.getStatus());
+        assertEquals(1, graph.getTotalHelps());
+        assertEquals(1, graph.getReturnedHelps());
+        assertFalse(graph.isTruncated());
+        verify(helpGraphMetrics).record(eq(false), anyLong(), eq(2), eq(1), eq(1), eq(false));
+    }
+
+    @Test
+    void getHelpGraph_shouldKeepTotalHelpsWhenMaxEdgesTruncatesResponse() {
+        ConfirmedHelpGraphProjection first =
+                graphAct(100L, 1L, "Helper", 2L, "Receiver", 10L, "Post");
+        ConfirmedHelpGraphProjection second =
+                graphAct(101L, 1L, "Helper", 2L, "Receiver", 11L, "Other post");
+        when(helpRepository.findConfirmedHelpGraphProjection()).thenReturn(List.of(first, second));
+        when(userRepository.findAllById(any())).thenReturn(List.of(user(1L), user(2L)));
+
+        org.example.helptreeservice.dto.graph.HelpGraphDto graph =
+                helpService.getHelpGraph(1L, null, 1);
+
+        assertEquals(2, graph.getTotalHelps());
+        assertEquals(1, graph.getReturnedHelps());
+        assertTrue(graph.isTruncated());
+        verify(helpGraphMetrics).record(eq(false), anyLong(), eq(2), eq(2), eq(1), eq(true));
+    }
+
+    @Test
+    void getHelpGraph_shouldRespectDepthFromSelectedUser() {
+        ConfirmedHelpGraphProjection first =
+                graphAct(1L, 1L, "One", 2L, "Two", 10L, "P1");
+        ConfirmedHelpGraphProjection second =
+                graphAct(2L, 2L, "Two", 3L, "Three", 11L, "P2");
+        ConfirmedHelpGraphProjection third =
+                graphAct(3L, 3L, "Three", 4L, "Four", 12L, "P3");
+        when(helpRepository.findConfirmedHelpGraphProjection())
+                .thenReturn(List.of(first, second, third));
+        when(userRepository.findAllById(any()))
+                .thenReturn(List.of(user(1L), user(2L)));
+
+        org.example.helptreeservice.dto.graph.HelpGraphDto graph =
+                helpService.getHelpGraph(1L, 1, null);
+
+        assertEquals(2, graph.getNodes().size());
+        assertEquals(1, graph.getTotalHelps());
+        assertEquals(1L, graph.getEdges().get(0).getId());
+    }
+
+    private ConfirmedHelpGraphProjection graphAct(Long helpId,
+                                                  Long helperId,
+                                                  String helperName,
+                                                  Long receiverId,
+                                                  String receiverName,
+                                                  Long postId,
+                                                  String postTitle) {
+        ConfirmedHelpGraphProjection act = mock(ConfirmedHelpGraphProjection.class);
+        lenient().when(act.getHelpId()).thenReturn(helpId);
+        lenient().when(act.getHelperId()).thenReturn(helperId);
+        lenient().when(act.getHelperName()).thenReturn(helperName);
+        lenient().when(act.getReceiverId()).thenReturn(receiverId);
+        lenient().when(act.getReceiverName()).thenReturn(receiverName);
+        lenient().when(act.getPostId()).thenReturn(postId);
+        lenient().when(act.getPostTitle()).thenReturn(postTitle);
+        lenient().when(act.getStatus()).thenReturn(HelpStatus.CONFIRMED);
+        lenient().when(act.getConfirmedAt()).thenReturn(LocalDateTime.now());
+        return act;
     }
 
     private HelpRequest request(Long postId) {

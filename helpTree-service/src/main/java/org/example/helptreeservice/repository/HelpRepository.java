@@ -5,6 +5,7 @@ import org.example.helptreeservice.entity.Help;
 import org.example.helptreeservice.entity.Post;
 import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.enums.HelpStatus;
+import org.example.helptreeservice.repository.projection.ConfirmedHelpGraphProjection;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
@@ -72,6 +73,33 @@ public interface HelpRepository extends JpaRepository<Help, Long> {
     @Query("SELECT COUNT(h) FROM Help h WHERE h.deleted = false OR h.deleted IS NULL")
     long countActive();
 
+    @Query("SELECT COUNT(h) FROM Help h WHERE h.status = :status "
+            + "AND (h.deleted = false OR h.deleted IS NULL)")
+    long countByStatus(@Param("status") HelpStatus status);
+
+    @Query("SELECT COUNT(h) FROM Help h WHERE h.status IN :statuses "
+            + "AND (h.deleted = false OR h.deleted IS NULL)")
+    long countByStatusIn(@Param("statuses") Collection<HelpStatus> statuses);
+
+    @Query("SELECT COUNT(h) FROM Help h WHERE h.helper.id = :userId "
+            + "AND (h.deleted = false OR h.deleted IS NULL)")
+    long countAllByHelperId(@Param("userId") Long userId);
+
+    @Query("SELECT COUNT(h) FROM Help h WHERE h.helper.id = :userId AND h.status = :status "
+            + "AND (h.deleted = false OR h.deleted IS NULL)")
+    long countByHelperIdAndStatus(@Param("userId") Long userId,
+                                  @Param("status") HelpStatus status);
+
+    @Query("SELECT COUNT(h) FROM Help h WHERE h.helper.id = :userId AND h.status IN :statuses "
+            + "AND (h.deleted = false OR h.deleted IS NULL)")
+    long countByHelperIdAndStatusIn(@Param("userId") Long userId,
+                                    @Param("statuses") Collection<HelpStatus> statuses);
+
+    @Query("SELECT COUNT(h) FROM Help h WHERE h.receiver.id = :userId AND h.status = :status "
+            + "AND (h.deleted = false OR h.deleted IS NULL)")
+    long countByReceiverIdAndStatus(@Param("userId") Long userId,
+                                    @Param("status") HelpStatus status);
+
     @Query("SELECT FUNCTION('TO_CHAR', h.confirmedAt, 'MM/YYYY') AS monthKey, COUNT(h) " +
            "FROM Help h WHERE h.status = 'CONFIRMED' AND h.confirmedAt IS NOT NULL " +
            "AND (h.deleted = false OR h.deleted IS NULL) " +
@@ -89,10 +117,20 @@ public interface HelpRepository extends JpaRepository<Help, Long> {
            "GROUP BY h.helper.id ORDER BY COUNT(h) DESC")
     List<Object[]> countHelpsByHelper();
 
-    @Query("SELECT h.helper.id, h.helper.name, h.receiver.id, h.receiver.name, " +
-           "h.post.id, h.post.title, h.status, h.confirmedAt " +
-           "FROM Help h WHERE h.status = 'CONFIRMED' AND (h.deleted = false OR h.deleted IS NULL)")
-    List<Object[]> findConfirmedHelpGraphData();
+    /**
+     * Typed projection of the graph source of truth: confirmed, non-deleted
+     * help acts. One row is one help act, therefore {@code helpId} is the only
+     * valid edge identity. A user id can repeat for the same helper and must
+     * never be used as the edge id.
+     */
+    @Query("SELECT h.id AS helpId, h.helper.id AS helperId, h.helper.name AS helperName, " +
+           "h.receiver.id AS receiverId, h.receiver.name AS receiverName, " +
+           "h.post.id AS postId, h.post.title AS postTitle, h.status AS status, " +
+           "h.confirmedAt AS confirmedAt " +
+           "FROM Help h WHERE h.status = 'CONFIRMED' " +
+           "AND (h.deleted = false OR h.deleted IS NULL) " +
+           "ORDER BY h.confirmedAt ASC, h.id ASC")
+    List<ConfirmedHelpGraphProjection> findConfirmedHelpGraphProjection();
 
     @Query("SELECT COUNT(h) FROM Help h " +
            "WHERE h.post.user.id = :userId AND h.createdAt > :since " +

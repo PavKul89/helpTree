@@ -13,7 +13,13 @@ import java.util.Map;
 @NoArgsConstructor
 @AllArgsConstructor
 public class HelpStatsDto {
+    /** Confirmed help acts: the same set used by the graph and achievements. */
     private int totalHelps;
+
+    private int totalHelpRecords;
+    private int activeHelps;
+    private int cancelledHelps;
+
     private Map<String, Long> byMonth;
     private Map<String, Long> byCategory;
     private List<TopHelper> topHelpers;

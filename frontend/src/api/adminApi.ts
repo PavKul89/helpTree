@@ -43,12 +43,22 @@ export interface AdminUser {
 
 export interface AdminStats {
   totalUsers: number;
+  /** Confirmed help acts (same source of truth as graph and achievements). */
   totalHelps: number;
+  helpRecords: number;
+  activeHelps: number;
+  confirmedHelps: number;
+  cancelledHelps: number;
+  successfulReceipts: number;
   activePosts: number;
 }
 
 export interface AdminHelpStats {
+  /** Confirmed help acts: the same set used by the graph and achievements. */
   totalHelps: number;
+  totalHelpRecords: number;
+  activeHelps: number;
+  cancelledHelps: number;
   byMonth: Record<string, number>;
   byCategory: Record<string, number>;
   topHelpers: Array<{
@@ -83,9 +93,28 @@ export interface RatingResponse {
   ratingComponents: Record<string, number>;
   level: string;
   calculatedAt: string;
+  /** Confirmed help acts given by this user. */
   totalHelps: number;
+  /** Every non-deleted help record where this user was the helper. */
+  totalHelpRecords: number;
+  /** ACCEPTED or COMPLETED help records given by this user. */
+  activeHelps: number;
+  cancelledHelps: number;
   totalReceivedHelps: number;
+  reviewCount: number;
+  averageReviewRating?: number;
   successRate: number;
+}
+
+export interface AdminReviewsQuery {
+  page?: number;
+  size?: number;
+  userId?: number;
+  rating?: number;
+  /** ISO date-time, inclusive lower bound on review creation. */
+  from?: string;
+  /** ISO date-time, inclusive upper bound on review creation. */
+  to?: string;
 }
 
 export interface AdminAddCoinsResponse {
@@ -238,6 +267,17 @@ export const adminApi = {
   },
 
   // ----------------------------------------------------------------- reviews
+  getAdminReviews: async (
+    params: AdminReviewsQuery,
+    signal?: AbortSignal
+  ): Promise<PageResponse<Review>> => {
+    const response = await api.get<PageResponse<Review>>('/api/admin/reviews', {
+      params,
+      signal,
+    });
+    return response.data;
+  },
+
   deleteReview: async (id: number): Promise<void> => {
     await api.delete(`/api/reviews/${id}`);
   },

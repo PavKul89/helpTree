@@ -58,6 +58,7 @@ export interface Post {
 export interface Review {
   id: number;
   helpId: number;
+  postId?: number;
   fromUserId: number;
   fromUserName: string;
   toUserId: number;
@@ -185,8 +186,14 @@ export interface HelpRequest {
 export interface HelpGraph {
   nodes: GraphNode[];
   edges: GraphEdge[];
+  /** Confirmed help acts in the selected subgraph, before edge limiting. */
   totalHelps: number;
+  /** Edges actually returned in `edges`. */
+  returnedHelps: number;
   totalUsers: number;
+  /** True when `maxEdges` limited the response. */
+  truncated: boolean;
+  buildTimeMs: number;
 }
 
 export interface GraphNode {

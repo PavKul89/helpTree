@@ -21,6 +21,7 @@ import org.example.helptreeservice.repository.HelpRepository;
 import org.example.helptreeservice.repository.HelpStatusHistoryRepository;
 import org.example.helptreeservice.repository.PostRepository;
 import org.example.helptreeservice.repository.UserRepository;
+import org.example.helptreeservice.repository.projection.ConfirmedHelpGraphProjection;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -30,6 +31,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -51,6 +53,7 @@ public class HelpService {
     private final ImageService imageService;
     private final EconomyConfig economyConfig;
     private final HelpStatusHistoryRepository statusHistoryRepository;
+    private final HelpGraphMetrics helpGraphMetrics;
 
     private static final List<HelpStatus> ACTIVE_HELP_STATUSES =
             List.of(HelpStatus.ACCEPTED, HelpStatus.COMPLETED);
@@ -140,6 +143,11 @@ public class HelpService {
         recordHistory(savedHelp, null, HelpStatus.ACCEPTED, helperId,
                 HelpActorRole.HELPER, null, now);
 
+        // The new ACCEPTED record changes the user's help projection
+        // (totalHelpRecords / activeHelps). Rebuild it from the flushed fact so
+        // the rating response never reports a stale active-help count.
+        ratingService.recalculateUsers(List.of(helperId));
+
         log.info("Помощь успешно принята: helpId={}, helperId={}, receiverId={}, postId={}",
                 savedHelp.getId(), helper.getId(), receiver.getId(), post.getId());
 
@@ -149,8 +157,9 @@ public class HelpService {
     /**
      * 2. Помощник отмечает, что помощь выполнена.
      *
-     * Это только переход ACCEPTED -> COMPLETED. Награды, статистика и статус
-     * заявки фиксируются позже, ровно один раз, в confirmHelp.
+     * Это только переход ACCEPTED -> COMPLETED. Награды и подтверждённая
+     * статистика фиксируются позже, ровно один раз, в confirmHelp. Проекция
+     * помощи обновляется сразу, потому что запись остаётся активной.
      */
     public HelpResponse completeHelp(Long helpId, Long actorId, boolean admin) {
         log.info("Завершение помощи: helpId={}, actorId={}, admin={}", helpId, actorId, admin);
@@ -184,6 +193,10 @@ public class HelpService {
 
         recordHistory(updatedHelp, HelpStatus.ACCEPTED, HelpStatus.COMPLETED, actorId,
                 admin ? HelpActorRole.ADMIN : HelpActorRole.HELPER, null, now);
+
+        // ACCEPTED and COMPLETED are both active help records; the projection
+        // stores their count separately from confirmed acts.
+        ratingService.recalculateUsers(List.of(helperId));
 
         log.info("Помощь отмечена как выполненная: helpId={}", helpId);
         return helpMapper.toResponse(updatedHelp);
@@ -253,7 +266,9 @@ public class HelpService {
         walletService.addCoinsForHelp(helperId, receiverId, post.getId());
         walletService.addCoinsForReceivedHelp(receiverId, helperId, post.getId());
         achievementService.checkAndAwardAchievements(help.getHelper(), help);
-        ratingService.recordSuccessfulHelp(helperId, receiverId);
+        // Projection rebuild from the just-flushed CONFIRMED fact. Repeating a
+        // confirmation cannot double-count because nothing is incremented.
+        ratingService.recalculateUsers(List.of(helperId, receiverId));
 
         recordHistory(help, HelpStatus.COMPLETED, HelpStatus.CONFIRMED, actorId,
                 admin ? HelpActorRole.ADMIN : HelpActorRole.RECEIVER, null, now);
@@ -392,12 +407,12 @@ public class HelpService {
             }
         }
 
-        ratingService.recordCancelledHelp(helperId);
-
         recordHistory(help, fromStatus, HelpStatus.CANCELLED, actorId, initiator,
                 help.getCancelReason(), now);
 
         helpRepository.saveAndFlush(help);
+        // The cancellation is a fact now; rebuild the helper's projection.
+        ratingService.recalculateUsers(List.of(helperId));
     }
 
     private void recordHistory(Help help, HelpStatus fromStatus, HelpStatus toStatus,
@@ -602,113 +617,150 @@ public class HelpService {
      * Пользователь всегда в корне - это придает ему веса и значимости
      */
     public org.example.helptreeservice.dto.graph.HelpGraphDto getHelpGraph(Long userId) {
-        log.info("Построение графа помощи для userId: {}", userId);
-        
-        List<Object[]> graphData = helpRepository.findConfirmedHelpGraphData();
-        
+        return getHelpGraph(userId, null, null);
+    }
+
+    /**
+     * Builds the confirmed-help graph.
+     *
+     * <p>Edges are directed helper -> receiver and their id is the help record
+     * id. Only CONFIRMED, non-deleted helps are present, so the graph carries
+     * exactly the same acts as ratings, achievements and statistics.</p>
+     *
+     * @param depth    optional maximum distance from {@code userId}; null means
+     *                 the whole reachable component. Ignored for the global
+     *                 graph.
+     * @param maxEdges optional hard limit on returned edges. When it applies
+     *                 the response is marked {@code truncated} and
+     *                 {@code totalHelps} still reports the full subgraph size.
+     */
+    public org.example.helptreeservice.dto.graph.HelpGraphDto getHelpGraph(Long userId,
+                                                                          Integer depth,
+                                                                          Integer maxEdges) {
+        long started = System.nanoTime();
+        log.info("Построение графа помощи для userId={}, depth={}, maxEdges={}",
+                userId, depth, maxEdges);
+
+        List<ConfirmedHelpGraphProjection> confirmedHelps =
+                helpRepository.findConfirmedHelpGraphProjection();
+
+        Integer effectiveDepth = depth != null && depth >= 0 ? depth : null;
+        int effectiveMaxEdges = maxEdges != null && maxEdges > 0 ? maxEdges : Integer.MAX_VALUE;
+
+        Set<Long> selectedUserIds = selectGraphUsers(userId, effectiveDepth, confirmedHelps);
+
+        Map<Long, User> usersMap = userRepository.findAllById(selectedUserIds).stream()
+                .collect(Collectors.toMap(User::getId, user -> user));
+        Map<Long, org.example.helptreeservice.dto.graph.HelpGraphDto.Node> nodesMap =
+                new LinkedHashMap<>();
+        for (Long id : selectedUserIds) {
+            User user = usersMap.get(id);
+            if (user != null) {
+                nodesMap.put(id, toGraphNode(user));
+            }
+        }
+
+        List<org.example.helptreeservice.dto.graph.HelpGraphDto.Edge> matchingEdges =
+                new ArrayList<>();
+        for (ConfirmedHelpGraphProjection help : confirmedHelps) {
+            if (selectedUserIds.contains(help.getHelperId())
+                    && selectedUserIds.contains(help.getReceiverId())) {
+                matchingEdges.add(org.example.helptreeservice.dto.graph.HelpGraphDto.Edge.builder()
+                        // The edge identity is the help act, not the helper.
+                        .id(help.getHelpId())
+                        .fromUserId(help.getHelperId())
+                        .fromUserName(help.getHelperName() != null ? help.getHelperName() : "")
+                        .toUserId(help.getReceiverId())
+                        .toUserName(help.getReceiverName() != null ? help.getReceiverName() : "")
+                        .postId(help.getPostId())
+                        .postTitle(help.getPostTitle() != null ? help.getPostTitle() : "")
+                        .status(help.getStatus() != null ? help.getStatus().name() : "")
+                        .confirmedAt(help.getConfirmedAt())
+                        .build());
+            }
+        }
+
+        boolean truncated = matchingEdges.size() > effectiveMaxEdges;
+        List<org.example.helptreeservice.dto.graph.HelpGraphDto.Edge> returnedEdges =
+                truncated
+                        ? new ArrayList<>(matchingEdges.subList(0, effectiveMaxEdges))
+                        : matchingEdges;
+
+        long durationNanos = System.nanoTime() - started;
+        helpGraphMetrics.record(userId == null, durationNanos, nodesMap.size(),
+                matchingEdges.size(), returnedEdges.size(), truncated);
+
+        log.info("Граф помощи построен: users={}, helps={}, returnedEdges={}, truncated={}, buildTimeMs={}",
+                nodesMap.size(), matchingEdges.size(), returnedEdges.size(), truncated,
+                Duration.ofNanos(durationNanos).toMillis());
+
+        return org.example.helptreeservice.dto.graph.HelpGraphDto.builder()
+                .nodes(new ArrayList<>(nodesMap.values()))
+                .edges(returnedEdges)
+                .totalHelps(matchingEdges.size())
+                .returnedHelps(returnedEdges.size())
+                .totalUsers(nodesMap.size())
+                .truncated(truncated)
+                .buildTimeMs(Duration.ofNanos(durationNanos).toMillis())
+                .build();
+    }
+
+    /**
+     * For a user graph: BFS over helper -> receiver edges up to {@code depth}.
+     * For the global graph: every helper and receiver that appears in a
+     * confirmed act.
+     */
+    private Set<Long> selectGraphUsers(Long userId,
+                                       Integer depth,
+                                       List<ConfirmedHelpGraphProjection> confirmedHelps) {
+        Set<Long> selected = new HashSet<>();
         if (userId == null) {
-            return buildFullGraphFromSql(graphData);
+            for (ConfirmedHelpGraphProjection help : confirmedHelps) {
+                selected.add(help.getHelperId());
+                selected.add(help.getReceiverId());
+            }
+            return selected;
         }
-        
-        // Строим карту: кто помог → список кому помогли
-        Map<Long, List<Long>> helperToReceivers = new HashMap<>();
-        
-        for (Object[] row : graphData) {
-            Long helperId = ((Number) row[0]).longValue();
-            Long receiverId = ((Number) row[2]).longValue();
-            helperToReceivers.computeIfAbsent(helperId, k -> new ArrayList<>()).add(receiverId);
+
+        Map<Long, List<ConfirmedHelpGraphProjection>> outgoing = new HashMap<>();
+        for (ConfirmedHelpGraphProjection help : confirmedHelps) {
+            outgoing.computeIfAbsent(help.getHelperId(), key -> new ArrayList<>()).add(help);
         }
-        
-        // Собираем только тех, кто идёт ОТ userId (его дети и их дети)
-        Set<Long> visitedUserIds = new HashSet<>();
-        visitedUserIds.add(userId);
-        
-        List<Long> toProcess = new ArrayList<>();
-        toProcess.add(userId);
-        
-        while (!toProcess.isEmpty()) {
-            Long currentId = toProcess.remove(0);
-            
-            List<Long> iHelped = helperToReceivers.get(currentId);
-            if (iHelped != null) {
-                for (Long helpedId : iHelped) {
-                    if (!visitedUserIds.contains(helpedId)) {
-                        visitedUserIds.add(helpedId);
-                        toProcess.add(helpedId);
-                    }
+
+        Map<Long, Integer> levelByUser = new HashMap<>();
+        Deque<Long> queue = new ArrayDeque<>();
+        selected.add(userId);
+        levelByUser.put(userId, 0);
+        queue.add(userId);
+
+        while (!queue.isEmpty()) {
+            Long current = queue.removeFirst();
+            int currentLevel = levelByUser.get(current);
+            if (depth != null && currentLevel >= depth) {
+                continue;
+            }
+            for (ConfirmedHelpGraphProjection help : outgoing.getOrDefault(current, List.of())) {
+                Long receiverId = help.getReceiverId();
+                int receiverLevel = currentLevel + 1;
+                Integer knownLevel = levelByUser.get(receiverId);
+                if (knownLevel == null || receiverLevel < knownLevel) {
+                    levelByUser.put(receiverId, receiverLevel);
+                    selected.add(receiverId);
+                    queue.addLast(receiverId);
                 }
             }
         }
-        
-        // Загружаем всех пользователей одним запросом
-        List<User> allUsers = userRepository.findAllById(visitedUserIds);
-        Map<Long, User> usersMap = new HashMap<>();
-        for (User user : allUsers) {
-            usersMap.put(user.getId(), user);
-        }
-        
-        // Создаем узлы
-        Map<Long, org.example.helptreeservice.dto.graph.HelpGraphDto.Node> nodesMap = new HashMap<>();
-        
-        User currentUser = usersMap.get(userId);
-        if (currentUser != null) {
-            nodesMap.put(userId, org.example.helptreeservice.dto.graph.HelpGraphDto.Node.builder()
-                    .id(userId)
-                    .name(currentUser.getName())
-                    .avatarUrl(imageService.refreshUrl(currentUser.getAvatarUrl()))
-                    .helpedCount(currentUser.getHelpedCount())
-                    .debtCount(currentUser.getDebtCount())
-                    .rating(currentUser.getRating())
-                    .build());
-        }
-        
-        for (Long id : visitedUserIds) {
-            if (id.equals(userId)) continue;
-            User user = usersMap.get(id);
-            if (user != null) {
-                nodesMap.put(id, org.example.helptreeservice.dto.graph.HelpGraphDto.Node.builder()
-                        .id(id)
-                        .name(user.getName())
-                        .avatarUrl(imageService.refreshUrl(user.getAvatarUrl()))
-                        .helpedCount(user.getHelpedCount())
-                        .debtCount(user.getDebtCount())
-                        .rating(user.getRating())
-                        .build());
-            }
-        }
-        
-        // Создаем рёбра
-        List<org.example.helptreeservice.dto.graph.HelpGraphDto.Edge> edges = new ArrayList<>();
-        for (Object[] row : graphData) {
-            Long fromId = ((Number) row[0]).longValue();
-            String fromName = row[1] != null ? row[1].toString() : "";
-            Long toId = ((Number) row[2]).longValue();
-            String toName = row[3] != null ? row[3].toString() : "";
-            Long postId = ((Number) row[4]).longValue();
-            String postTitle = row[5] != null ? row[5].toString() : "";
-            String status = row[6] != null ? row[6].toString() : "";
-            LocalDateTime confirmedAt = row[7] instanceof LocalDateTime ? (LocalDateTime) row[7] : null;
-            
-            if (visitedUserIds.contains(fromId) && visitedUserIds.contains(toId)) {
-                edges.add(org.example.helptreeservice.dto.graph.HelpGraphDto.Edge.builder()
-                        .id(((Number) row[0]).longValue())
-                        .fromUserId(fromId)
-                        .fromUserName(fromName)
-                        .toUserId(toId)
-                        .toUserName(toName)
-                        .postId(postId)
-                        .postTitle(postTitle)
-                        .status(status)
-                        .confirmedAt(confirmedAt)
-                        .build());
-            }
-        }
-        
-        return org.example.helptreeservice.dto.graph.HelpGraphDto.builder()
-                .nodes(new ArrayList<>(nodesMap.values()))
-                .edges(edges)
-                .totalHelps(edges.size())
-                .totalUsers(nodesMap.size())
+        return selected;
+    }
+
+    private org.example.helptreeservice.dto.graph.HelpGraphDto.Node toGraphNode(User user) {
+        return org.example.helptreeservice.dto.graph.HelpGraphDto.Node.builder()
+                .id(user.getId())
+                .name(user.getName())
+                .avatarUrl(imageService.refreshUrl(user.getAvatarUrl()))
+                .helpedCount(user.getHelpedCount())
+                .debtCount(user.getDebtCount())
+                .rating(user.getRating())
                 .build();
     }
 
@@ -771,93 +823,19 @@ public class HelpService {
                 .build())
             .collect(Collectors.toList());
         
-        long totalHelps = helpRepository.countActive();
-        
+        long totalHelps = helpRepository.countByStatus(HelpStatus.CONFIRMED);
+        long totalHelpRecords = helpRepository.countActive();
+        long activeHelps = helpRepository.countByStatusIn(ACTIVE_HELP_STATUSES);
+        long cancelledHelps = helpRepository.countByStatus(HelpStatus.CANCELLED);
+
         return org.example.helptreeservice.dto.graph.HelpStatsDto.builder()
                 .totalHelps((int) totalHelps)
+                .totalHelpRecords((int) totalHelpRecords)
+                .activeHelps((int) activeHelps)
+                .cancelledHelps((int) cancelledHelps)
                 .byMonth(byMonth)
                 .byCategory(byCategory)
                 .topHelpers(topHelpersList)
-                .build();
-    }
-    
-    /**
-     * Построить полный граф всех пользователей (без фильтрации) из SQL данных
-     */
-    private org.example.helptreeservice.dto.graph.HelpGraphDto buildFullGraphFromSql(List<Object[]> graphData) {
-        Map<Long, org.example.helptreeservice.dto.graph.HelpGraphDto.Node> nodesMap = new HashMap<>();
-        
-        Set<Long> allIds = new HashSet<>();
-        for (Object[] row : graphData) {
-            allIds.add(((Number) row[0]).longValue());
-            allIds.add(((Number) row[2]).longValue());
-        }
-        
-        Map<Long, User> usersMap = userRepository.findAllById(allIds).stream()
-                .collect(java.util.stream.Collectors.toMap(User::getId, u -> u));
-        
-        for (Object[] row : graphData) {
-            Long helperId = ((Number) row[0]).longValue();
-            Long receiverId = ((Number) row[2]).longValue();
-            
-            if (!nodesMap.containsKey(helperId)) {
-                User helper = usersMap.get(helperId);
-                if (helper != null) {
-                    nodesMap.put(helperId, org.example.helptreeservice.dto.graph.HelpGraphDto.Node.builder()
-                            .id(helperId)
-                            .name(helper.getName())
-                            .avatarUrl(imageService.refreshUrl(helper.getAvatarUrl()))
-                            .helpedCount(helper.getHelpedCount())
-                            .debtCount(helper.getDebtCount())
-                            .rating(helper.getRating())
-                            .build());
-                }
-            }
-            
-            if (!nodesMap.containsKey(receiverId)) {
-                User receiver = usersMap.get(receiverId);
-                if (receiver != null) {
-                    nodesMap.put(receiverId, org.example.helptreeservice.dto.graph.HelpGraphDto.Node.builder()
-                            .id(receiverId)
-                            .name(receiver.getName())
-                            .avatarUrl(imageService.refreshUrl(receiver.getAvatarUrl()))
-                            .helpedCount(receiver.getHelpedCount())
-                            .debtCount(receiver.getDebtCount())
-                            .rating(receiver.getRating())
-                            .build());
-                }
-            }
-        }
-        
-        List<org.example.helptreeservice.dto.graph.HelpGraphDto.Edge> edges = new ArrayList<>();
-        for (Object[] row : graphData) {
-            Long fromId = ((Number) row[0]).longValue();
-            String fromName = row[1] != null ? row[1].toString() : "";
-            Long toId = ((Number) row[2]).longValue();
-            String toName = row[3] != null ? row[3].toString() : "";
-            Long postId = ((Number) row[4]).longValue();
-            String postTitle = row[5] != null ? row[5].toString() : "";
-            String status = row[6] != null ? row[6].toString() : "";
-            LocalDateTime confirmedAt = row[7] instanceof LocalDateTime ? (LocalDateTime) row[7] : null;
-            
-            edges.add(org.example.helptreeservice.dto.graph.HelpGraphDto.Edge.builder()
-                    .id(fromId)
-                    .fromUserId(fromId)
-                    .fromUserName(fromName)
-                    .toUserId(toId)
-                    .toUserName(toName)
-                    .postId(postId)
-                    .postTitle(postTitle)
-                    .status(status)
-                    .confirmedAt(confirmedAt)
-                    .build());
-        }
-        
-        return org.example.helptreeservice.dto.graph.HelpGraphDto.builder()
-                .nodes(new ArrayList<>(nodesMap.values()))
-                .edges(edges)
-                .totalHelps(graphData.size())
-                .totalUsers(nodesMap.size())
                 .build();
     }
 }

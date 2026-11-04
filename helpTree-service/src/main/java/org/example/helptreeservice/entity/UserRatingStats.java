@@ -40,6 +40,17 @@ public class UserRatingStats {
     @Column(name = "cancelled_helps")
     private Long cancelledHelps = 0L;
 
+    @Builder.Default
+    @Column(name = "active_helps_given")
+    private Long activeHelpsGiven = 0L;
+
+    @Builder.Default
+    @Column(name = "review_count")
+    private Long reviewCount = 0L;
+
+    @Column(name = "average_review_rating")
+    private Double averageReviewRating;
+
     @Column(name = "average_response_time")
     private Double averageResponseTime;
 

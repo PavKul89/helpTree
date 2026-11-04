@@ -23,24 +23,34 @@ public class ScheduledRatingService {
     @Value("${rating.calculation.batch-size:100}")
     private int batchSize;
 
+    /**
+     * Rebuilds stale rating projections.
+     *
+     * <p>Pagination is cursor-based. A recalculated row stops matching the
+     * {@code lastCalculated < threshold} predicate, so an offset would skip the
+     * rows that shift into the freed positions. The id cursor continues where
+     * the previous batch ended regardless of how the predicate changes.</p>
+     */
     @Scheduled(cron = "${rating.calculation.cron:0 0/5 * * * ?}")
     public void recalculateAllRatings() {
         log.info("Начало периодического пересчета рейтингов");
 
         LocalDateTime threshold = LocalDateTime.now().minusHours(1);
-        int page = 0;
+        long afterId = 0L;
         int totalProcessed = 0;
+        int totalFailed = 0;
 
         try {
             while (true) {
-                List<UserRatingStats> staleStats = statsRepository.findStaleStats(
-                        threshold, PageRequest.of(page, batchSize));
+                List<UserRatingStats> staleStats = statsRepository.findStaleStatsAfter(
+                        threshold, afterId, PageRequest.of(0, batchSize));
 
                 if (staleStats.isEmpty()) {
                     break;
                 }
 
                 for (UserRatingStats stats : staleStats) {
+                    afterId = stats.getId();
                     try {
                         calculationService.calculateUserRating(stats.getUserId());
                         totalProcessed++;
@@ -50,16 +60,21 @@ public class ScheduledRatingService {
                         }
 
                     } catch (Exception e) {
+                        // Advance the cursor anyway: a permanently failing row
+                        // must not block the rest of the batch.
+                        totalFailed++;
                         log.error("Ошибка при пересчете рейтинга пользователя ID: {}",
                                 stats.getUserId(), e);
                     }
                 }
 
-                page++;
+                if (staleStats.size() < batchSize) {
+                    break;
+                }
             }
 
-            log.info("Завершен периодический пересчет рейтингов. Всего обработано: {}",
-                    totalProcessed);
+            log.info("Завершен периодический пересчет рейтингов. Обработано: {}, ошибок: {}",
+                    totalProcessed, totalFailed);
 
         } catch (Exception e) {
             log.error("Критическая ошибка при периодическом пересчете рейтингов", e);

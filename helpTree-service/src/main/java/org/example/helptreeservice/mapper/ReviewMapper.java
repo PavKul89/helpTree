@@ -9,6 +9,7 @@ import org.mapstruct.Mapping;
 public interface ReviewMapper {
 
     @Mapping(source = "help.id", target = "helpId")
+    @Mapping(source = "help.post.id", target = "postId")
     @Mapping(source = "fromUser.id", target = "fromUserId")
     @Mapping(source = "fromUser.name", target = "fromUserName")
     @Mapping(source = "toUser.id", target = "toUserId")

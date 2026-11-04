@@ -13,9 +13,11 @@ import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.NotFoundException;
 import org.example.helptreeservice.mapper.UserMapper;
 import org.example.helptreeservice.repository.PostRepository;
+import org.example.helptreeservice.repository.UserRatingStatsRepository;
 import org.example.helptreeservice.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -35,6 +37,7 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final PostRepository postRepository;
+    private final UserRatingStatsRepository ratingStatsRepository;
     private final UserMapper userMapper;
     private final PasswordService passwordService;
     private final ImageService imageService;
@@ -471,6 +474,7 @@ public class UserService {
                 .build();
     }
 
+    @CacheEvict(value = "userRating", key = "#id")
     public void updateUserRating(Long id, Double rating) {
         log.info("Обновление рейтинга пользователя ID: {} на {}", id, rating);
         try {
@@ -478,6 +482,15 @@ public class UserService {
             user.setRating(rating);
             user.setUpdatedAt(LocalDateTime.now());
             userRepository.save(user);
+
+            // Keep the projection consistent with the manual override and give
+            // the scheduled rebuild a full freshness window.
+            LocalDateTime now = LocalDateTime.now();
+            ratingStatsRepository.findByUserId(id).ifPresent(stats -> {
+                stats.setCurrentRating(rating);
+                stats.setLastCalculated(now);
+                ratingStatsRepository.save(stats);
+            });
             log.info("Рейтинг пользователя ID {} успешно обновлен", id);
         } catch (Exception e) {
             log.error("Ошибка при обновлении рейтинга пользователя ID: {}", id, e);

@@ -19,8 +19,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Optional;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -33,6 +35,7 @@ class ReviewServiceTest {
     @Mock private ReviewMapper reviewMapper;
     @Mock private UserService userService;
     @Mock private WalletService walletService;
+    @Mock private RatingService ratingService;
 
     private ReviewService reviewService;
 
@@ -40,7 +43,7 @@ class ReviewServiceTest {
     void setUp() {
         reviewService = new ReviewService(
                 reviewRepository, helpRepository, userRepository,
-                reviewMapper, userService, walletService);
+                reviewMapper, userService, walletService, ratingService);
     }
 
     @Test
@@ -92,6 +95,50 @@ class ReviewServiceTest {
 
         verify(reviewRepository).save(any(Review.class));
         verify(walletService).addCoinsForReview(1L, 77L);
+        verify(ratingService).recalculateUsers(List.of(1L));
+    }
+
+    @Test
+    void deleteReview_shouldSoftDeleteAndRecalculateRecipientRating() {
+        User helper = user(1L);
+        User receiver = user(2L);
+        Help help = help(10L, HelpStatus.CONFIRMED, helper, receiver);
+        Review review = new Review();
+        review.setId(77L);
+        review.setHelp(help);
+        review.setFromUser(receiver);
+        review.setToUser(helper);
+        review.setRating(5);
+        review.setDeleted(false);
+        when(reviewRepository.findById(77L)).thenReturn(Optional.of(review));
+
+        reviewService.deleteReview(77L, 2L);
+
+        assertEquals(true, review.getDeleted());
+        verify(reviewRepository).save(review);
+        verify(ratingService).recalculateUsers(List.of(1L));
+    }
+
+    @Test
+    void getAdminReviews_shouldMapPageFromRepository() {
+        User helper = user(1L);
+        User receiver = user(2L);
+        Help help = help(10L, HelpStatus.CONFIRMED, helper, receiver);
+        Review review = new Review();
+        review.setId(77L);
+        review.setHelp(help);
+        review.setFromUser(receiver);
+        review.setToUser(helper);
+        review.setRating(4);
+        var pageable = org.springframework.data.domain.PageRequest.of(0, 20);
+        var page = new org.springframework.data.domain.PageImpl<>(List.of(review), pageable, 1);
+        when(reviewRepository.findForAdmin(1L, 4, null, null, pageable)).thenReturn(page);
+        when(reviewMapper.toResponse(review)).thenReturn(ReviewResponse.builder().id(77L).build());
+
+        var result = reviewService.getAdminReviews(1L, 4, null, null, pageable);
+
+        assertEquals(1, result.getTotalElements());
+        assertEquals(77L, result.getContent().get(0).getId());
     }
 
     private CreateReviewRequest request(Long helpId) {
