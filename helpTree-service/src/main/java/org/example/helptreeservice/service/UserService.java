@@ -38,6 +38,7 @@ public class UserService {
     private final UserRepository userRepository;
     private final PostRepository postRepository;
     private final UserRatingStatsRepository ratingStatsRepository;
+    private final RatingService ratingService;
     private final UserMapper userMapper;
     private final PasswordService passwordService;
     private final ImageService imageService;
@@ -595,18 +596,24 @@ public class UserService {
         LocalDateTime now = LocalDateTime.now();
         List<User> usersToBlock = userRepository.findUsersWithDebtToBlock(
                 now, economyConfig.getDebtBlockThreshold());
+        List<Long> blockedUserIds = new ArrayList<>();
         
         for (User user : usersToBlock) {
             if (user.getBlockedUntil() == null || user.getBlockedUntil().isBefore(LocalDateTime.now())) {
                 user.setBlockedAt(LocalDateTime.now());
                 user.setBlockedUntil(LocalDateTime.now().plusDays(economyConfig.getDebtBlockDays()));
                 userRepository.save(user);
+                blockedUserIds.add(user.getId());
                 // Debt blocking must immediately invalidate already issued tokens.
                 authSessionService.revokeAllSessionsForUser(user.getId(), "ACCOUNT_BLOCKED");
                 log.info("Пользователь {} заблокирован за долг на 7 дней (debtCount: {}, blockedUntil: {})", 
                     user.getId(), user.getDebtCount(), user.getBlockedUntil());
             }
         }
+
+        // The block penalty is part of the rating formula: refresh it in the
+        // same transaction instead of waiting for the scheduled rebuild.
+        ratingService.recalculateUsers(blockedUserIds, "Блокировка за долг");
         
         if (!usersToBlock.isEmpty()) {
             log.info("Заблокировано {} пользователей за долг", usersToBlock.size());
@@ -628,6 +635,8 @@ public class UserService {
         user.setBlockedAt(null);
         user.setBlockedUntil(null);
         userRepository.save(user);
+        // Remove the block penalty from the projection immediately.
+        ratingService.recalculateUsers(List.of(userId), "Ручная разблокировка");
         log.info("Пользователь {} разблокирован", userId);
     }
 
@@ -635,7 +644,11 @@ public class UserService {
     public void unblockExpiredBlocks() {
         log.info("Запуск авто-разблокировки пользователей с истёкшим сроком");
         LocalDateTime now = LocalDateTime.now();
+        // Read the ids before the bulk update: loading entities here would leave
+        // stale blocked values in the persistence context for the recalculation.
+        List<Long> unblockedIds = userRepository.findIdsWithExpiredBlocks(now);
         int unblocked = userRepository.unblockExpiredUsers(now);
+        ratingService.recalculateUsers(unblockedIds, "Автоматическая разблокировка");
         if (unblocked > 0) {
             log.info("Авто-разблокировано {} пользователей", unblocked);
         }

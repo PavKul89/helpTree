@@ -70,6 +70,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query("SELECT u FROM User u WHERE u.role = :role AND (u.deleted = false OR u.deleted IS NULL) ORDER BY u.id")
     List<User> findActiveByRoleForUpdate(@Param("role") Role role);
 
+    @Query("SELECT u.id FROM User u WHERE u.deleted = false AND u.blockedUntil IS NOT NULL AND u.blockedUntil < :now")
+    List<Long> findIdsWithExpiredBlocks(@Param("now") LocalDateTime now);
+
     @Modifying
     @Query("UPDATE User u SET u.blockedAt = NULL, u.blockedUntil = NULL, u.updatedAt = CURRENT_TIMESTAMP " +
            "WHERE u.deleted = false AND u.blockedUntil IS NOT NULL AND u.blockedUntil < :now")

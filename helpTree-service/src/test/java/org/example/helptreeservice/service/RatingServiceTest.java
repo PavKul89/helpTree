@@ -24,6 +24,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -120,14 +121,49 @@ class RatingServiceTest {
     }
 
     @Test
+    void getUserRating_shouldMaterialiseMissingProjectionFromFacts() {
+        UserRatingStats rebuilt = stats(1L, 4.2);
+        when(userRepository.findByIdAndDeletedFalse(1L)).thenReturn(Optional.of(user(1L, "User", false)));
+        when(statsRepository.findByUserId(1L))
+                .thenReturn(Optional.empty(), Optional.of(rebuilt));
+        when(calculationService.calculateUserRating(1L, "Первичный расчет")).thenReturn(4.2);
+
+        RatingResponse response = ratingService.getUserRating(1L);
+
+        assertEquals(4.2, response.getOverallRating());
+        assertEquals(1L, response.getTotalHelpRecords());
+        verify(calculationService).calculateUserRating(1L, "Первичный расчет");
+    }
+
+    @Test
+    void getUserRating_shouldFallBackWhenProjectionStillMissingAfterRebuild() {
+        when(userRepository.findByIdAndDeletedFalse(1L)).thenReturn(Optional.of(user(1L, "User", false)));
+        when(statsRepository.findByUserId(1L)).thenReturn(Optional.empty(), Optional.empty());
+        when(calculationService.calculateUserRating(1L, "Первичный расчет")).thenReturn(null);
+
+        RatingResponse response = ratingService.getUserRating(1L);
+
+        assertEquals(3.0, response.getOverallRating());
+        assertEquals(0L, response.getTotalHelpRecords());
+    }
+
+    @Test
     void recalculateUsers_shouldRebuildEachAffectedUserOnceInDeterministicOrder() {
         ratingService.recalculateUsers(List.of(3L, 1L, 2L, 1L));
 
         org.mockito.InOrder inOrder = inOrder(calculationService);
-        inOrder.verify(calculationService).calculateUserRating(1L);
-        inOrder.verify(calculationService).calculateUserRating(2L);
-        inOrder.verify(calculationService).calculateUserRating(3L);
-        verify(calculationService, times(3)).calculateUserRating(anyLong());
+        inOrder.verify(calculationService).calculateUserRating(1L, "Автоматический пересчет");
+        inOrder.verify(calculationService).calculateUserRating(2L, "Автоматический пересчет");
+        inOrder.verify(calculationService).calculateUserRating(3L, "Автоматический пересчет");
+        verify(calculationService, times(3))
+                .calculateUserRating(anyLong(), eq("Автоматический пересчет"));
+    }
+
+    @Test
+    void recalculateUsers_shouldPassTheReasonToHistory() {
+        ratingService.recalculateUsers(List.of(1L), "Блокировка за долг");
+
+        verify(calculationService).calculateUserRating(1L, "Блокировка за долг");
     }
 
     @Test

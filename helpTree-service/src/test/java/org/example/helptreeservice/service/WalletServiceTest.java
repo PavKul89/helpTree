@@ -38,6 +38,7 @@ class WalletServiceTest {
     @Mock private UserRepository userRepository;
     @Mock private CoinTransactionRepository transactionRepository;
     @Mock private AdminCoinAuditRepository adminAuditRepository;
+    @Mock private RatingService ratingService;
 
     private EconomyConfig economyConfig;
     private WalletService walletService;
@@ -49,7 +50,7 @@ class WalletServiceTest {
         PaginationConfig paginationConfig = new PaginationConfig();
         walletService = new WalletService(
                 userRepository, transactionRepository, adminAuditRepository,
-                economyConfig, paginationConfig);
+                ratingService, economyConfig, paginationConfig);
 
         user = new User();
         user.setId(1L);
@@ -223,6 +224,7 @@ class WalletServiceTest {
         assertNull(user.getBlockedAt());
         assertNull(user.getBlockedUntil());
         assertEquals(100L - economyConfig.getAccountUnblockPrice(), user.getHelpCoins());
+        verify(ratingService).recalculateUsers(List.of(1L), "Покупка разблокировки");
     }
 
     @Test

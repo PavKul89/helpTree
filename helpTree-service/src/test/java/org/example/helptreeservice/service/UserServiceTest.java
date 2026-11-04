@@ -39,6 +39,8 @@ class UserServiceTest {
     @Mock
     private UserRatingStatsRepository ratingStatsRepository;
     @Mock
+    private RatingService ratingService;
+    @Mock
     private UserMapper userMapper;
     @Mock
     private PasswordService passwordService;
@@ -59,6 +61,7 @@ class UserServiceTest {
                 userRepository,
                 postRepository,
                 ratingStatsRepository,
+                ratingService,
                 userMapper,
                 passwordService,
                 imageService,
@@ -343,6 +346,33 @@ class UserServiceTest {
         assertNotNull(user.getBlockedUntil());
         assertTrue(user.getBlockedUntil().isAfter(LocalDateTime.now()));
         verify(authSessionService).revokeAllSessionsForUser(1L, "ACCOUNT_BLOCKED");
+        verify(ratingService).recalculateUsers(List.of(1L), "Блокировка за долг");
+    }
+
+    @Test
+    void unblockUser_shouldClearBlockAndRecalculateRating() {
+        User user = user(1L, false);
+        user.setBlockedAt(LocalDateTime.now().minusDays(1));
+        user.setBlockedUntil(LocalDateTime.now().plusDays(6));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        userService.unblockUser(1L);
+
+        assertNull(user.getBlockedAt());
+        assertNull(user.getBlockedUntil());
+        verify(userRepository).save(user);
+        verify(ratingService).recalculateUsers(List.of(1L), "Ручная разблокировка");
+    }
+
+    @Test
+    void unblockExpiredBlocks_shouldRecalculateExpiredUsersAfterBulkUpdate() {
+        when(userRepository.findIdsWithExpiredBlocks(any(LocalDateTime.class)))
+                .thenReturn(List.of(1L, 2L));
+        when(userRepository.unblockExpiredUsers(any(LocalDateTime.class))).thenReturn(2);
+
+        userService.unblockExpiredBlocks();
+
+        verify(ratingService).recalculateUsers(List.of(1L, 2L), "Автоматическая разблокировка");
     }
 
     @Test

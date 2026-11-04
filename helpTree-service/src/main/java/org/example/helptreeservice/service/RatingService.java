@@ -43,9 +43,22 @@ public class RatingService {
                 .orElseThrow(() -> new NotFoundException("Пользователь не найден"));
 
         UserRatingStats stats = statsRepository.findByUserId(userId)
-                .orElseGet(() -> defaultStats(userId));
+                .orElseGet(() -> materializeStats(userId));
 
         return buildRatingResponse(user, stats);
+    }
+
+    /**
+     * A projection row is normally created by the first rating calculation. A
+     * legacy user may still have facts but no row (V43 only backfilled existing
+     * rows), so a plain read would silently return the 3.0 default. Rebuild the
+     * projection from the facts before answering; the fallback only covers a
+     * concurrent deletion/race.
+     */
+    private UserRatingStats materializeStats(Long userId) {
+        calculationService.calculateUserRating(userId, "Первичный расчет");
+        return statsRepository.findByUserId(userId)
+                .orElseGet(() -> defaultStats(userId));
     }
 
     public RatingResponse recalculateUserRating(Long userId) {
@@ -70,11 +83,15 @@ public class RatingService {
      * or review change first; the calculation joins that transaction.</p>
      */
     public void recalculateUsers(Collection<Long> userIds) {
+        recalculateUsers(userIds, "Автоматический пересчет");
+    }
+
+    public void recalculateUsers(Collection<Long> userIds, String reason) {
         if (userIds == null || userIds.isEmpty()) {
             return;
         }
         new TreeSet<>(userIds.stream().filter(Objects::nonNull).collect(Collectors.toSet()))
-                .forEach(calculationService::calculateUserRating);
+                .forEach(userId -> calculationService.calculateUserRating(userId, reason));
     }
 
     public Page<RatingResponse> getTopRatedUsers(Pageable pageable) {

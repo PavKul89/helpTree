@@ -61,6 +61,7 @@ public class WalletService {
     private final UserRepository userRepository;
     private final CoinTransactionRepository transactionRepository;
     private final AdminCoinAuditRepository adminAuditRepository;
+    private final RatingService ratingService;
     private final EconomyConfig economyConfig;
     private final PaginationConfig paginationConfig;
 
@@ -337,6 +338,9 @@ public class WalletService {
                 user.setDebtStartedAt(null);
             }
             userRepository.save(user);
+            // Both the debt penalty and the active block penalty disappear with
+            // this purchase, so rebuild the projection now.
+            ratingService.recalculateUsers(List.of(userId), "Покупка разблокировки");
             log.info("Пользователь {} разблокирован за монеты, долг снижен с {} до {}", userId, debt, newDebt);
         }
 
