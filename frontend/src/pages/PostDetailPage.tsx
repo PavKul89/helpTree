@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -6,6 +6,7 @@ import {
   Ban,
   CalendarDays,
   Check,
+  Flag,
   HandHeart,
   Image as ImageIcon,
   MapPin,
@@ -21,7 +22,7 @@ import { helpApi } from '../api/helpApi';
 import { reviewApi } from '../api/reviewApi';
 import { chatApi } from '../api/chatApi';
 import { authApi } from '../api/authApi';
-import type { Post, Comment, Help, Review } from '../types';
+import type { Post, Comment, CommentSort, Help, Review, ReportReason } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/Toast';
 import { getStatusColor, getStatusLabel } from '../components/StatusBadge';
@@ -31,6 +32,18 @@ import { Avatar } from '../components/Avatar';
 import { getRelativeTime } from '../utils/dateUtils';
 import { createIdempotencyKey } from '../utils/idempotency';
 import './PostDetailPage.css';
+
+const COMMENT_PAGE_SIZE = 20;
+const COMMENT_MAX_LENGTH = 1000;
+const COMMENT_MAX_DEPTH = 3;
+
+const REPORT_REASONS: { value: ReportReason; label: string }[] = [
+  { value: 'SPAM', label: 'Спам' },
+  { value: 'ABUSE', label: 'Оскорбление' },
+  { value: 'HARASSMENT', label: 'Травля' },
+  { value: 'INAPPROPRIATE', label: 'Неуместный контент' },
+  { value: 'OTHER', label: 'Другое' },
+];
 
 const StatusBadge = ({ status, type = 'post' }: { status: string; type?: 'post' | 'help' }) => {
   const color = getStatusColor(status, type);
@@ -75,6 +88,53 @@ export const PostDetailPage = () => {
   const [isReplying, setIsReplying] = useState(false);
   const [deletingCommentId, setDeletingCommentId] = useState<number | null>(null);
   const [isDeletingPost, setIsDeletingPost] = useState(false);
+  const [commentsPage, setCommentsPage] = useState(0);
+  const [commentsTotal, setCommentsTotal] = useState(0);
+  const [commentsHasMore, setCommentsHasMore] = useState(false);
+  const [commentsSort, setCommentsSort] = useState<CommentSort>('OLDEST');
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [reportingCommentId, setReportingCommentId] = useState<number | null>(null);
+  const [reportReason, setReportReason] = useState<ReportReason>('SPAM');
+  const [reportDetails, setReportDetails] = useState('');
+  const [isReporting, setIsReporting] = useState(false);
+  const commentsSortRef = useRef<CommentSort>('OLDEST');
+
+  const applyCommentPage = useCallback(
+    (data: Awaited<ReturnType<typeof postsApi.getComments>>, append: boolean) => {
+      setComments((previous) => (append ? [...previous, ...data.content] : data.content));
+      setCommentsPage(data.page);
+      setCommentsTotal(data.totalComments);
+      setCommentsHasMore(data.hasMore);
+      setCommentsError(false);
+    },
+    []
+  );
+
+  const loadComments = useCallback(
+    async (page: number, sort: CommentSort, append: boolean) => {
+      setCommentsLoading(true);
+      try {
+        const data = await postsApi.getComments(postId, {
+          page,
+          size: COMMENT_PAGE_SIZE,
+          sort,
+        });
+        applyCommentPage(data, append);
+      } catch {
+        if (append) {
+          showToast('Не удалось загрузить следующие комментарии.', 'error');
+        } else {
+          setComments([]);
+          setCommentsTotal(0);
+          setCommentsHasMore(false);
+          setCommentsError(true);
+        }
+      } finally {
+        setCommentsLoading(false);
+      }
+    },
+    [applyCommentPage, postId, showToast]
+  );
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -84,19 +144,12 @@ export const PostDetailPage = () => {
     try {
       const postData = await postsApi.getById(postId);
       setPost(postData);
-      const [commentsResult, helpsResult, userResult] = await Promise.allSettled([
-        postsApi.getComments(postId),
+      const commentsRequest = loadComments(0, commentsSortRef.current, false);
+      const [helpsResult, userResult] = await Promise.allSettled([
         helpApi.getHelpsByPost(postId),
         authApi.getCurrentUser(),
       ]);
-
-      if (commentsResult.status === 'fulfilled') {
-        setComments(commentsResult.value);
-        setCommentsError(false);
-      } else {
-        setComments([]);
-        setCommentsError(true);
-      }
+      await commentsRequest;
 
       if (helpsResult.status === 'fulfilled') {
         setHelps(helpsResult.value);
@@ -133,7 +186,7 @@ export const PostDetailPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [postId, showToast, user?.id]);
+  }, [loadComments, postId, showToast, user?.id]);
 
   useEffect(() => {
     void loadData();
@@ -167,8 +220,15 @@ export const PostDetailPage = () => {
     if (!content || !user || isCommenting) return;
     setIsCommenting(true);
     try {
-      const comment = await postsApi.addComment(postId, { content });
-      setComments((previous) => [...previous, comment]);
+      const result = await postsApi.addComment(postId, { content });
+      setComments((previous) =>
+        commentsSort === 'NEWEST' ? [result.comment, ...previous] : [...previous, result.comment]
+      );
+      setCommentsTotal(result.totalComments);
+      setCommentsError(false);
+      setPost((previous) =>
+        previous ? { ...previous, commentsCount: result.totalComments } : previous
+      );
       setNewComment('');
       showToast('Комментарий добавлен.', 'success');
     } catch {
@@ -259,8 +319,15 @@ export const PostDetailPage = () => {
   const handleDeleteComment = async (commentId: number) => {
     setDeletingCommentId(commentId);
     try {
-      await postsApi.deleteComment(postId, commentId);
-      setComments((previous) => previous.filter((comment) => comment.id !== commentId));
+      const result = await postsApi.deleteComment(postId, commentId);
+      // Replace in place: a tombstone keeps the thread and its replies visible.
+      setComments((previous) =>
+        previous.map((comment) => (comment.id === result.comment.id ? result.comment : comment))
+      );
+      setCommentsTotal(result.totalComments);
+      setPost((previous) =>
+        previous ? { ...previous, commentsCount: result.totalComments } : previous
+      );
       showToast('Комментарий удалён.', 'success');
     } catch {
       showToast('Не удалось удалить комментарий.', 'error');
@@ -286,16 +353,57 @@ export const PostDetailPage = () => {
     if (!content || !user || isReplying) return;
     setIsReplying(true);
     try {
-      const comment = await postsApi.addComment(postId, { content, parentCommentId });
-      setComments((previous) => [...previous, comment]);
+      const result = await postsApi.addComment(postId, { content, parentCommentId });
+      setComments((previous) => [...previous, result.comment]);
+      setCommentsTotal(result.totalComments);
+      setCommentsError(false);
+      setPost((previous) =>
+        previous ? { ...previous, commentsCount: result.totalComments } : previous
+      );
       setReplyContent('');
       setReplyingTo(null);
       showToast('Ответ добавлен.', 'success');
-    } catch {
-      showToast('Не удалось отправить ответ.', 'error');
+    } catch (error: unknown) {
+      const message =
+        typeof error === 'object' && error !== null && 'response' in error
+          ? (error as { response?: { data?: { message?: string } } }).response?.data?.message
+          : undefined;
+      showToast(message || 'Не удалось отправить ответ.', 'error');
     } finally {
       setIsReplying(false);
     }
+  };
+
+  const handleReportComment = async (commentId: number) => {
+    if (!user || isReporting) return;
+    setIsReporting(true);
+    try {
+      await postsApi.reportComment(postId, commentId, {
+        reason: reportReason,
+        details: reportDetails.trim() || undefined,
+      });
+      setReportingCommentId(null);
+      setReportDetails('');
+      setReportReason('SPAM');
+      showToast('Жалоба отправлена. Спасибо, что помогаете модерировать.', 'success');
+    } catch (error: unknown) {
+      const message =
+        typeof error === 'object' && error !== null && 'response' in error
+          ? (error as { response?: { data?: { message?: string } } }).response?.data?.message
+          : undefined;
+      showToast(message || 'Не удалось отправить жалобу.', 'error');
+    } finally {
+      setIsReporting(false);
+    }
+  };
+
+  const handleSortChange = (sort: CommentSort) => {
+    if (sort === commentsSort) return;
+    commentsSortRef.current = sort;
+    setCommentsSort(sort);
+    setReplyingTo(null);
+    setReportingCommentId(null);
+    void loadComments(0, sort, false);
   };
 
   const handleToggleFavorite = async () => {
@@ -375,6 +483,158 @@ export const PostDetailPage = () => {
     (help) => help.status === 'CONFIRMED' && (help.helperId === user?.id || post.userId === user?.id)
   );
   const showReviews = confirmedHelps.length > 0;
+
+  const childrenByParent = new Map<number, Comment[]>();
+  comments.forEach((comment) => {
+    if (comment.parentCommentId == null) return;
+    const siblings = childrenByParent.get(comment.parentCommentId) ?? [];
+    siblings.push(comment);
+    childrenByParent.set(comment.parentCommentId, siblings);
+  });
+  childrenByParent.forEach((siblings) => {
+    siblings.sort((a, b) => {
+      const byDate = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      return byDate !== 0 ? byDate : a.id - b.id;
+    });
+  });
+  const rootComments = comments.filter((comment) => comment.parentCommentId == null);
+  const canModerate = user?.role === 'ADMIN';
+
+  const renderComment = (comment: Comment): ReactNode => {
+    const children = childrenByParent.get(comment.id) ?? [];
+    const isDeleted = comment.deleted;
+    const canReply = Boolean(user) && !isDeleted && (comment.depth ?? 0) < COMMENT_MAX_DEPTH;
+    const canDelete = Boolean(user) && (!isDeleted) && (user?.id === comment.userId || canModerate);
+    const canReport = Boolean(user) && !isDeleted && user?.id !== comment.userId;
+
+    return (
+      <div className="post-detail-comment-thread" key={comment.id}>
+        <article className={`post-detail-comment${isDeleted ? ' is-deleted' : ''}`}>
+          <Avatar name={comment.userName} avatarUrl={comment.userAvatarUrl} size="medium" clickable userId={comment.userId} />
+          <div className="post-detail-comment-body">
+            <div className="post-detail-comment-head">
+              <Link to={`/profile/${comment.userId}`}>{comment.userName}</Link>
+              <time dateTime={comment.createdAt}>{getRelativeTime(comment.createdAt)}</time>
+            </div>
+
+            {isDeleted ? (
+              <p className="post-detail-comment-tombstone">
+                {comment.deletedByAuthor
+                  ? 'Комментарий удалён автором'
+                  : 'Комментарий удалён модератором'}
+              </p>
+            ) : (
+              <>
+                <p>{comment.content}</p>
+                <div className="post-detail-comment-actions">
+                  {canReply && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReportingCommentId(null);
+                        setReplyingTo(replyingTo === comment.id ? null : comment.id);
+                      }}
+                    >
+                      <MessageCircle size={13} aria-hidden="true" /> Ответить
+                    </button>
+                  )}
+                  {canReport && (
+                    <button
+                      type="button"
+                      className="post-detail-comment-report"
+                      onClick={() => {
+                        setReplyingTo(null);
+                        setReportDetails('');
+                        setReportReason('SPAM');
+                        setReportingCommentId(reportingCommentId === comment.id ? null : comment.id);
+                      }}
+                    >
+                      <Flag size={13} aria-hidden="true" /> Жалоба
+                    </button>
+                  )}
+                  {canDelete && (
+                    <button
+                      type="button"
+                      className="post-detail-comment-delete"
+                      onClick={() => void handleDeleteComment(comment.id)}
+                      disabled={deletingCommentId === comment.id}
+                    >
+                      <Trash2 size={13} aria-hidden="true" />
+                      {deletingCommentId === comment.id ? 'Удаляем…' : 'Удалить'}
+                    </button>
+                  )}
+                </div>
+
+                {replyingTo === comment.id && (
+                  <form
+                    className="post-detail-reply-form"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void handleReply(comment.id);
+                    }}
+                  >
+                    <input
+                      value={replyContent}
+                      onChange={(event) => setReplyContent(event.target.value)}
+                      placeholder={`Ответ для ${comment.userName}…`}
+                      maxLength={COMMENT_MAX_LENGTH}
+                      aria-label="Текст ответа"
+                    />
+                    <Button type="submit" disabled={!replyContent.trim() || isReplying}>
+                      <Send size={14} /> {isReplying ? 'Отправляем…' : 'Отправить'}
+                    </Button>
+                    <button type="button" onClick={() => { setReplyingTo(null); setReplyContent(''); }}>Отмена</button>
+                  </form>
+                )}
+
+                {reportingCommentId === comment.id && (
+                  <form
+                    className="post-detail-report-form"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void handleReportComment(comment.id);
+                    }}
+                  >
+                    <label htmlFor={`report-reason-${comment.id}`}>Причина жалобы</label>
+                    <select
+                      id={`report-reason-${comment.id}`}
+                      value={reportReason}
+                      onChange={(event) => setReportReason(event.target.value as ReportReason)}
+                    >
+                      {REPORT_REASONS.map((option) => (
+                        <option value={option.value} key={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                    <textarea
+                      value={reportDetails}
+                      onChange={(event) => setReportDetails(event.target.value)}
+                      placeholder="Детали (необязательно)"
+                      rows={2}
+                      maxLength={2000}
+                      aria-label="Детали жалобы"
+                    />
+                    <div className="post-detail-report-actions">
+                      <Button type="submit" disabled={isReporting}>
+                        <Flag size={14} aria-hidden="true" />
+                        {isReporting ? 'Отправляем…' : 'Отправить жалобу'}
+                      </Button>
+                      <button type="button" onClick={() => setReportingCommentId(null)}>Отмена</button>
+                    </div>
+                  </form>
+                )}
+              </>
+            )}
+          </div>
+        </article>
+
+        {children.length > 0 && (
+          <div className="post-detail-comment-children">
+            {children.map((child) => renderComment(child))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <main className="post-detail-page">
@@ -596,7 +856,27 @@ export const PostDetailPage = () => {
             <h2 id="post-detail-comments-heading">Комментарии</h2>
             <p>Обсудите детали заявки с автором и сообществом.</p>
           </div>
-          <span aria-label={`${comments.length} комментариев`}>{comments.length}</span>
+          <div className="post-detail-comments-toolbar">
+            <div className="post-detail-comments-sort" role="group" aria-label="Сортировка комментариев">
+              <button
+                type="button"
+                className={commentsSort === 'OLDEST' ? 'is-active' : ''}
+                aria-pressed={commentsSort === 'OLDEST'}
+                onClick={() => handleSortChange('OLDEST')}
+              >
+                Сначала старые
+              </button>
+              <button
+                type="button"
+                className={commentsSort === 'NEWEST' ? 'is-active' : ''}
+                aria-pressed={commentsSort === 'NEWEST'}
+                onClick={() => handleSortChange('NEWEST')}
+              >
+                Сначала новые
+              </button>
+            </div>
+            <span aria-label={`${commentsTotal} комментариев`}>{commentsTotal}</span>
+          </div>
         </div>
 
         {user && (
@@ -614,10 +894,10 @@ export const PostDetailPage = () => {
               onChange={(event) => setNewComment(event.target.value)}
               placeholder="Напишите комментарий…"
               rows={4}
-              maxLength={2000}
+              maxLength={COMMENT_MAX_LENGTH}
             />
             <div className="post-detail-form-footer">
-              <span>{newComment.length}/2000</span>
+              <span>{newComment.length}/{COMMENT_MAX_LENGTH}</span>
               <Button type="submit" disabled={!newComment.trim() || isCommenting}>
                 <Send size={15} aria-hidden="true" /> {isCommenting ? 'Отправляем…' : 'Отправить'}
               </Button>
@@ -628,7 +908,12 @@ export const PostDetailPage = () => {
         {commentsError ? (
           <div className="post-detail-comments-error" role="alert">
             <p>Не удалось загрузить комментарии. Попробуйте ещё раз.</p>
-            <button type="button" onClick={() => void loadData()}>Повторить</button>
+            <button type="button" onClick={() => void loadComments(0, commentsSort, false)}>Повторить</button>
+          </div>
+        ) : commentsLoading && comments.length === 0 ? (
+          <div className="post-detail-comments-empty" role="status">
+            <span><MessageCircle size={18} aria-hidden="true" /></span>
+            <p>Загружаем обсуждение…</p>
           </div>
         ) : comments.length === 0 ? (
           <div className="post-detail-comments-empty">
@@ -637,57 +922,17 @@ export const PostDetailPage = () => {
           </div>
         ) : (
           <div className="post-detail-comment-list">
-            {comments.map((comment) => (
-              <article className="post-detail-comment" key={comment.id}>
-                <Avatar name={comment.userName} size="medium" clickable userId={comment.userId} />
-                <div className="post-detail-comment-body">
-                  <div className="post-detail-comment-head">
-                    <Link to={`/profile/${comment.userId}`}>{comment.userName}</Link>
-                    <time dateTime={comment.createdAt}>{getRelativeTime(comment.createdAt)}</time>
-                  </div>
-                  <p>{comment.content}</p>
-                  <div className="post-detail-comment-actions">
-                    {user && (
-                      <button type="button" onClick={() => setReplyingTo(replyingTo === comment.id ? null : comment.id)}>
-                        <MessageCircle size={13} aria-hidden="true" /> Ответить
-                      </button>
-                    )}
-                    {user?.id === comment.userId && (
-                      <button
-                        type="button"
-                        className="post-detail-comment-delete"
-                        onClick={() => void handleDeleteComment(comment.id)}
-                        disabled={deletingCommentId === comment.id}
-                      >
-                        <Trash2 size={13} aria-hidden="true" />
-                        {deletingCommentId === comment.id ? 'Удаляем…' : 'Удалить'}
-                      </button>
-                    )}
-                  </div>
-                  {replyingTo === comment.id && (
-                    <form
-                      className="post-detail-reply-form"
-                      onSubmit={(event) => {
-                        event.preventDefault();
-                        void handleReply(comment.id);
-                      }}
-                    >
-                      <input
-                        value={replyContent}
-                        onChange={(event) => setReplyContent(event.target.value)}
-                        placeholder="Написать ответ…"
-                        maxLength={2000}
-                        aria-label="Текст ответа"
-                      />
-                      <Button type="submit" disabled={!replyContent.trim() || isReplying}>
-                        <Send size={14} /> {isReplying ? 'Отправляем…' : 'Отправить'}
-                      </Button>
-                      <button type="button" onClick={() => { setReplyingTo(null); setReplyContent(''); }}>Отмена</button>
-                    </form>
-                  )}
-                </div>
-              </article>
-            ))}
+            {rootComments.map((comment) => renderComment(comment))}
+            {commentsHasMore && (
+              <button
+                type="button"
+                className="post-detail-comments-more"
+                onClick={() => void loadComments(commentsPage + 1, commentsSort, true)}
+                disabled={commentsLoading}
+              >
+                {commentsLoading ? 'Загружаем…' : 'Показать ещё'}
+              </button>
+            )}
           </div>
         )}
       </section>

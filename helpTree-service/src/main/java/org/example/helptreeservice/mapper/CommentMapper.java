@@ -13,7 +13,10 @@ public interface CommentMapper {
     @Mapping(target = "postId", source = "post.id")
     @Mapping(target = "userId", source = "user.id")
     @Mapping(target = "userName", source = "user.name")
+    @Mapping(target = "userAvatarUrl", source = "user.avatarUrl")
     @Mapping(target = "parentCommentId", source = "parentCommentId")
+    @Mapping(target = "content",
+             expression = "java(Boolean.TRUE.equals(comment.getDeleted()) ? null : comment.getContent())")
     CommentResponse toResponse(Comment comment);
 
     List<CommentResponse> toResponseList(List<Comment> comments);

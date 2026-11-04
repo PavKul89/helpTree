@@ -766,6 +766,157 @@
   min-height: 38px;
 }
 
+.post-detail-comments-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.post-detail-comments-toolbar > span {
+  display: inline-grid;
+  min-width: 27px;
+  height: 27px;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0 7px;
+  border: 1px solid rgba(200, 245, 106, 0.23);
+  border-radius: 999px;
+  background: rgba(200, 245, 106, 0.08);
+  color: var(--forest-lime);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.post-detail-comments-sort {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--forest-border);
+  border-radius: 999px;
+  background: rgba(7, 27, 19, 0.35);
+}
+
+.post-detail-comments-sort button {
+  min-height: 25px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--forest-text-subtle);
+  font-size: 10px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.post-detail-comments-sort button.is-active {
+  background: rgba(200, 245, 106, 0.12);
+  color: var(--forest-lime);
+}
+
+.post-detail-comment-thread {
+  border-top: 1px solid var(--forest-border);
+}
+
+.post-detail-comment-thread:first-child {
+  border-top: 0;
+}
+
+.post-detail-comment-children {
+  padding-left: 14px;
+  margin-left: 20px;
+  border-left: 1px solid rgba(180, 225, 155, 0.13);
+}
+
+.post-detail-comment.is-deleted .post-detail-comment-head a {
+  color: var(--forest-text-muted);
+}
+
+.post-detail-comment .post-detail-comment-tombstone {
+  color: var(--forest-text-subtle);
+  font-style: italic;
+}
+
+.post-detail-comment-actions .post-detail-comment-report:hover {
+  color: var(--forest-lime);
+}
+
+.post-detail-report-form {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  margin-top: 10px;
+  border: 1px solid rgba(180, 225, 155, 0.13);
+  border-radius: 11px;
+  background: rgba(7, 27, 19, 0.27);
+}
+
+.post-detail-report-form label {
+  color: var(--forest-text-secondary);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.post-detail-report-form select {
+  min-height: 36px;
+  padding: 0 9px;
+  border: 1px solid var(--forest-border);
+  border-radius: 9px;
+  background: rgba(7, 27, 19, 0.5);
+  color: var(--forest-text);
+  font-size: 12px;
+}
+
+.post-detail-report-form textarea {
+  min-height: 56px;
+}
+
+.post-detail-report-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.post-detail-report-actions > button:not(.ripple-button) {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--forest-text-subtle);
+  font-size: 10px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.post-detail-report-actions > button:not(.ripple-button):hover {
+  color: var(--forest-lime);
+}
+
+.post-detail-comments-more {
+  justify-self: center;
+  min-height: 36px;
+  padding: 0 18px;
+  margin-top: 14px;
+  border: 1px solid var(--forest-border);
+  border-radius: 999px;
+  background: rgba(233, 239, 226, 0.04);
+  color: var(--forest-text-secondary);
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.post-detail-comments-more:hover:not(:disabled) {
+  border-color: rgba(200, 245, 106, 0.35);
+  color: var(--forest-lime);
+}
+
+.post-detail-comments-more:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
 .post-detail-state {
   display: flex;
   min-height: 340px;

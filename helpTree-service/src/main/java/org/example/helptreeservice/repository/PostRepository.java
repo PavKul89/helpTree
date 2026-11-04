@@ -86,4 +86,22 @@ public interface PostRepository extends JpaRepository<Post, Long>, JpaSpecificat
            countQuery = "SELECT COUNT(*) FROM posts p WHERE p.deleted = false",
            nativeQuery = true)
     Page<Post> findAllNotDeletedPaginated(Pageable pageable);
+
+    /**
+     * Atomic counter updates avoid lost increments when two comments are
+     * created concurrently. The comment row itself is flushed first.
+     */
+    @Modifying(flushAutomatically = true)
+    @Query("UPDATE Post p SET p.commentsCount = COALESCE(p.commentsCount, 0) + 1 " +
+           "WHERE p.id = :postId AND (p.deleted = false OR p.deleted IS NULL)")
+    int incrementCommentsCount(@Param("postId") Long postId);
+
+    @Modifying(flushAutomatically = true)
+    @Query("UPDATE Post p SET p.commentsCount = " +
+           "CASE WHEN COALESCE(p.commentsCount, 0) > 0 THEN p.commentsCount - 1 ELSE 0 END " +
+           "WHERE p.id = :postId")
+    int decrementCommentsCount(@Param("postId") Long postId);
+
+    @Query("SELECT p.commentsCount FROM Post p WHERE p.id = :postId")
+    Integer findCommentsCountById(@Param("postId") Long postId);
 }

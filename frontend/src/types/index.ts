@@ -53,6 +53,7 @@ export interface Post {
   authorBlockedAt?: string;
   boostedUntil?: string;
   boosted: boolean;
+  commentsCount: number;
 }
 
 export interface Review {
@@ -73,8 +74,58 @@ export interface Comment {
   postId: number;
   userId: number;
   userName: string;
-  content: string;
+  userAvatarUrl?: string;
+  /** Null for a tombstone (a deleted comment whose replies must survive). */
+  content?: string | null;
   parentCommentId?: number;
+  depth: number;
+  createdAt: string;
+  updatedAt?: string;
+  deleted: boolean;
+  deletedByAuthor: boolean;
+  deletedAt?: string;
+}
+
+export type CommentSort = 'OLDEST' | 'NEWEST';
+
+export interface CommentPage {
+  /** Root comments of the page followed by their descendants. */
+  content: Comment[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+  hasMore: boolean;
+  /** Number of non-deleted comments on the post. */
+  totalComments: number;
+}
+
+export interface CommentAction {
+  comment: Comment;
+  totalComments: number;
+}
+
+export type ReportReason = 'SPAM' | 'ABUSE' | 'HARASSMENT' | 'INAPPROPRIATE' | 'OTHER';
+
+export interface CreateCommentReportRequest {
+  reason: ReportReason;
+  details?: string;
+}
+
+export interface Report {
+  id: number;
+  reporterId?: number;
+  reporterName?: string;
+  targetType: 'POST' | 'USER' | 'COMMENT' | 'MESSAGE' | 'HELP' | 'CHAT';
+  targetId: number;
+  reason: ReportReason;
+  details?: string;
+  status: 'OPEN' | 'IN_REVIEW' | 'RESOLVED' | 'REJECTED' | 'DUPLICATE';
+  priority: 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
+  resolution?: string;
+  resolvedById?: number;
+  resolvedByName?: string;
+  resolvedAt?: string;
   createdAt: string;
 }
 

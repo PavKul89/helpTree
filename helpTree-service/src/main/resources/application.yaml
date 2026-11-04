@@ -129,6 +129,13 @@ app:
     # Legacy /topic destinations remain authorized for older frontend builds.
     # Disable after the frontend has fully moved to /user/queue destinations.
     legacy-topics-enabled: ${CHAT_LEGACY_TOPICS_ENABLED:true}
+  comments:
+    max-length: ${COMMENT_MAX_LENGTH:1000}
+    max-depth: ${COMMENT_MAX_DEPTH:3}
+    rate-limit-enabled: ${COMMENT_RATE_LIMIT_ENABLED:true}
+    per-minute: ${COMMENT_PER_MINUTE:10}
+    default-page-size: 20
+    max-page-size: 100
   help:
     # Stale ACCEPTED helps are cancelled after this many hours (default 7 days).
     sla-enabled: ${HELP_SLA_ENABLED:true}

@@ -1,6 +1,7 @@
 package org.example.helptreeservice.dto.comments;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -15,5 +16,6 @@ public class CreateCommentRequest {
     @Size(max = 1000, message = "Комментарий не может быть длиннее 1000 символов")
     private String content;
 
+    @Positive(message = "parentCommentId должен быть положительным")
     private Long parentCommentId;
 }

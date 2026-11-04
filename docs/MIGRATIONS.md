@@ -1,4 +1,4 @@
-# Миграции базы данных (Block 6–7)
+# Миграции базы данных (Block 6–8)
 
 Документ описывает политику миграций, восстановление схемы после V33,
 безопасную стратегию для V3, порядок проверки/отката и проекцию статистики
@@ -157,8 +157,41 @@ V43 обновляла только уже существующие строки
 строку до первого события или первого чтения рейтинга: `RatingService`
 материализует проекцию из фактов при чтении (self-heal).
 
-## 6. Проверка миграций
+### 5.2. Устойчивые обсуждения (V45)
 
+V45 переводит комментарии на soft-delete и добавляет пагинацию дерева. Она
+аддитивна для существующих строк:
+
+- `comments.deleted`, `deleted_at`, `deleted_by_id`, `deleted_by_author`,
+  `deleted_reason` — tombstone. Физический `DELETE` приложением больше не
+  используется, поэтому `ON DELETE CASCADE` у `parent_comment_id` не срабатывает
+  и ветка сохраняет ответы.
+- `comments.depth` — 0 для корня; backfill считает глубину рекурсивно по
+  `parent_comment_id` (защитный предел 20 для legacy-циклов). Приложение
+  ограничивает новые ответы значением `app.comments.max-depth`.
+- `comments.updated_at` — заполняется `created_at` для старых строк.
+- `posts.comments_count` — проекция числа неудалённых комментариев; backfill
+  выполняется в той же миграции, дальше счётчик меняется атомарными `UPDATE`
+  в транзакции создания/удаления комментария.
+
+Ограничения:
+
+- `fk_comments_deleted_by` → `users(id)` c `ON DELETE SET NULL`;
+- `chk_comments_depth` (`depth >= 0`);
+- `chk_comments_deleted_state` (`deleted = FALSE` ⇔ `deleted_at IS NULL`);
+- `chk_posts_comments_count` (`comments_count >= 0`).
+
+Индексы:
+
+- `idx_comments_post_roots_created` — partial по корням поста для пагинации;
+- `idx_comments_post_thread` — выборка ветки по `parent_comment_id`;
+- `idx_comments_post_deleted_created` — подсчёт и модерация.
+
+Проверка: `scripts/fixtures/verify_block8_schema.sql` проверяет колонки,
+constraints, индексы, корректность `depth` у корней и ответов, согласованность
+tombstone-полей и совпадение `posts.comments_count` с фактическими строками.
+
+## 6. Проверка миграций
 ### 6.1 Чистая база
 
 ```powershell
@@ -178,6 +211,10 @@ docker exec postgres psql -U helpTree -d helptree_clean_test `
 docker cp scripts/fixtures/verify_block7_schema.sql postgres:/tmp/verify_block7_schema.sql
 docker exec postgres psql -U helpTree -d helptree_clean_test `
   -v ON_ERROR_STOP=1 -f /tmp/verify_block7_schema.sql
+
+docker cp scripts/fixtures/verify_block8_schema.sql postgres:/tmp/verify_block8_schema.sql
+docker exec postgres psql -U helpTree -d helptree_clean_test `
+  -v ON_ERROR_STOP=1 -f /tmp/verify_block8_schema.sql
 ```
 
 ### 6.2 Копия существующей базы
@@ -202,6 +239,10 @@ docker exec postgres psql -U helpTree -d helptree_copy_test `
 docker cp scripts/fixtures/verify_block7_schema.sql postgres:/tmp/verify_block7_schema.sql
 docker exec postgres psql -U helpTree -d helptree_copy_test `
   -v ON_ERROR_STOP=1 -f /tmp/verify_block7_schema.sql
+
+docker cp scripts/fixtures/verify_block8_schema.sql postgres:/tmp/verify_block8_schema.sql
+docker exec postgres psql -U helpTree -d helptree_copy_test `
+  -v ON_ERROR_STOP=1 -f /tmp/verify_block8_schema.sql
 ```
 
 Проверьте, что количество строк в `users`, `posts`, `helps`, `chats`,
@@ -226,6 +267,7 @@ psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block6_schema.sql
 psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block6_legacy.sql
 psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block6_constraints.sql
 psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block7_schema.sql
+psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block8_schema.sql
 ```
 
 ## 7. Backup перед миграцией
@@ -239,7 +281,7 @@ docker cp postgres:/tmp/helpTree_db_pre_v41.dump .\helpTree_db_pre_v41.dump
 
 Для production используйте штатный backup PostgreSQL (`pg_basebackup` или
 `pg_dump -Fc`) и проверяйте restore на отдельной базе. Не запускайте
-V41/V42/V43 без проверенной точки восстановления.
+V41–V45 без проверенной точки восстановления.
 
 ## 8. Rollback / recovery
 
@@ -267,9 +309,12 @@ V40, а V41/V42 затем применяются повторно без оши
 V43 — аддитивная миграция (колонки, backfill, partial-индексы), отдельного
 rollback-скрипта не имеет. V44 — только данные (`INSERT ... ON CONFLICT DO
 NOTHING`), откат не требуется: удаление строк не безопасно и не нужно.
-Оставленные после отката кода колонки безопасны: они заполнены и не
-используются старой версией приложения. Для точного состояния до V43
-восстановите backup.
+V45 — тоже аддитивная (колонки, constraints, индексы, backfill `depth` и
+`comments_count`); после отката кода старый физический delete продолжит
+каскадно удалять ответы, поэтому откатывать приложение и схему следует вместе
+или восстанавливать backup. Оставленные после отката кода колонки безопасны:
+они заполнены и не используются старой версией приложения. Для точного
+состояния до V43 восстановите backup.
 
 ## 9. Ограничения и замечания
 
@@ -287,3 +332,6 @@ NOTHING`), откат не требуется: удаление строк не 
 - V44 добавляет строки для пользователей, у которых их не было, и сразу
   заполняет проекцию по формуле. Блокировка/разблокировка, погашение долга и
   платная разблокировка теперь пересчитывают рейтинг в той же транзакции.
+- V45 закрепляет soft-delete комментариев: `DELETE /comments/{id}` создаёт
+  tombstone, а `ON DELETE CASCADE` остаётся только защитой от физического
+  удаления вне приложения. Жалобы Block 8 хранятся в таблицах V42 `reports`.

@@ -35,7 +35,43 @@ public class Comment {
     @Column(name = "parent_comment_id")
     private Long parentCommentId;
 
+    /** 0 for a root comment; computed from the parent when a reply is stored. */
+    @Builder.Default
+    @Column(nullable = false)
+    private Integer depth = 0;
+
+    /**
+     * Comments are never physically deleted: replies reference them and the
+     * tree must survive moderation. The row keeps the original content for
+     * audit, while the API masks it when {@code deleted} is true.
+     */
+    @Builder.Default
+    @Column(nullable = false)
+    private Boolean deleted = false;
+
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "deleted_by_id")
+    private User deletedBy;
+
+    /**
+     * True when the author removed the comment, false when moderation removed
+     * it. Kept as an explicit column so the tombstone text does not depend on
+     * mutable user data.
+     */
+    @Builder.Default
+    @Column(name = "deleted_by_author", nullable = false)
+    private Boolean deletedByAuthor = false;
+
+    @Column(name = "deleted_reason", length = 40)
+    private String deletedReason;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
+
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
 }

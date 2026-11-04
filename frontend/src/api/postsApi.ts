@@ -4,8 +4,12 @@ import type {
   Post,
   CreatePostRequest,
   UpdatePostRequest,
-  Comment,
+  CommentAction,
+  CommentPage,
+  CommentSort,
   CreateCommentRequest,
+  CreateCommentReportRequest,
+  Report,
 } from '../types';
 
 interface PostsResponse {
@@ -58,18 +62,36 @@ export const postsApi = {
     return response.data;
   },
 
-  getComments: async (postId: number): Promise<Comment[]> => {
-    const response = await api.get<Comment[]>(`/api/posts/${postId}/comments`);
+  getComments: async (
+    postId: number,
+    params?: { page?: number; size?: number; sort?: CommentSort }
+  ): Promise<CommentPage> => {
+    const response = await api.get<CommentPage>(`/api/posts/${postId}/comments`, { params });
     return response.data;
   },
 
-  addComment: async (postId: number, data: CreateCommentRequest): Promise<Comment> => {
-    const response = await api.post<Comment>(`/api/posts/${postId}/comments`, data);
+  addComment: async (postId: number, data: CreateCommentRequest): Promise<CommentAction> => {
+    const response = await api.post<CommentAction>(`/api/posts/${postId}/comments`, data);
     return response.data;
   },
 
-  deleteComment: async (postId: number, commentId: number): Promise<void> => {
-    await api.delete(`/api/posts/${postId}/comments/${commentId}`);
+  deleteComment: async (postId: number, commentId: number): Promise<CommentAction> => {
+    const response = await api.delete<CommentAction>(
+      `/api/posts/${postId}/comments/${commentId}`
+    );
+    return response.data;
+  },
+
+  reportComment: async (
+    postId: number,
+    commentId: number,
+    data: CreateCommentReportRequest
+  ): Promise<Report> => {
+    const response = await api.post<Report>(
+      `/api/posts/${postId}/comments/${commentId}/reports`,
+      data
+    );
+    return response.data;
   },
 
   getByIds: async (ids: number[]): Promise<Post[]> => {

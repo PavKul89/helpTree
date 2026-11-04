@@ -60,6 +60,14 @@ public class Post {
     @Column(name = "boosted_until")
     private LocalDateTime boostedUntil;
 
+    /**
+     * Projection of non-deleted comments. It is maintained atomically in the
+     * same transaction as comment create/delete, so post lists do not need a
+     * correlated count subquery.
+     */
+    @Column(name = "comments_count", nullable = false)
+    private Integer commentsCount = 0;
+
     public boolean isBoosted() {
         return boostedUntil != null && boostedUntil.isAfter(LocalDateTime.now());
     }
