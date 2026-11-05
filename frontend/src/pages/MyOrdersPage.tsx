@@ -30,12 +30,6 @@ interface StatItem {
   Icon: typeof FileText;
 }
 
-const isHelpPage = (value: unknown): value is { content: Help[] } =>
-  typeof value === 'object' &&
-  value !== null &&
-  'content' in value &&
-  Array.isArray(value.content);
-
 const getBoostTimeRemaining = (post: Post): string => {
   if (!post.boostedUntil) return '';
   const diff = new Date(post.boostedUntil).getTime() - Date.now();
@@ -97,19 +91,12 @@ export const MyOrdersPage = () => {
     setLoading(true);
     setLoadError(false);
     try {
-      const [postsResponse, helpsResponse] = await Promise.all([
-        postsApi.getByUser(user.id),
-        helpApi.getHelpsByHelper(user.id),
+      const [postsList, helps] = await Promise.all([
+        postsApi.getAllByUser(user.id),
+        helpApi.getAllHelpsByHelper(user.id),
       ]);
-      const helpsPayload: unknown = helpsResponse;
-      setMyPosts(Array.isArray(postsResponse) ? postsResponse : []);
-      if (Array.isArray(helpsPayload)) {
-        setMyHelps(helpsPayload as Help[]);
-      } else if (isHelpPage(helpsPayload)) {
-        setMyHelps(helpsPayload.content);
-      } else {
-        setMyHelps([]);
-      }
+      setMyPosts(postsList);
+      setMyHelps(helps);
     } catch {
       setLoadError(true);
     } finally {

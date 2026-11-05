@@ -288,7 +288,7 @@ class UserServiceTest {
 
         when(userRepository.existsByEmailIgnoreCase("mixed@test.com")).thenReturn(false);
         when(passwordService.encode("Strong1Pass")).thenReturn("encoded-password");
-        when(geocodingService.geocodeCity("Moscow")).thenReturn(Optional.empty());
+        when(geocodingService.cached("Moscow")).thenReturn(Optional.empty());
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> {
             User saved = invocation.getArgument(0);
             saved.setId(10L);
@@ -318,7 +318,7 @@ class UserServiceTest {
 
         when(userRepository.existsByEmailIgnoreCase("admin2@test.com")).thenReturn(false);
         when(passwordService.encode("Strong1Pass")).thenReturn("encoded-password");
-        when(geocodingService.geocodeCity("Moscow")).thenReturn(Optional.empty());
+        when(geocodingService.cached("Moscow")).thenReturn(Optional.empty());
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> {
             User saved = invocation.getArgument(0);
             saved.setId(11L);

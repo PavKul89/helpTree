@@ -37,12 +37,15 @@ public class ActivityService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new NotFoundException("User not found"));
 
+        // Every source contributes at most the requested number of rows: a row
+        // outside a source's own top-N can never be in the global top-N.
+        int perSource = Math.max(1, limit);
         List<ActivityDto> activities = new ArrayList<>();
 
-        activities.addAll(getHelpGivenActivities(user));
-        activities.addAll(getHelpReceivedActivities(user));
-        activities.addAll(getPostCreatedActivities(user));
-        activities.addAll(getAchievementActivities(user));
+        activities.addAll(getHelpGivenActivities(user, perSource));
+        activities.addAll(getHelpReceivedActivities(user, perSource));
+        activities.addAll(getPostCreatedActivities(user, perSource));
+        activities.addAll(getAchievementActivities(user, perSource));
         activities.addAll(getBlockedActivities(user));
 
         return activities.stream()
@@ -51,8 +54,8 @@ public class ActivityService {
                 .collect(Collectors.toList());
     }
 
-    private List<ActivityDto> getHelpGivenActivities(User user) {
-        List<Help> helps = helpRepository.findByHelperWithDetails(user, PageRequest.of(0, 1000)).getContent();
+    private List<ActivityDto> getHelpGivenActivities(User user, int limit) {
+        List<Help> helps = helpRepository.findByHelperWithDetails(user, PageRequest.of(0, limit)).getContent();
         return helps.stream()
                 .filter(help -> help.getStatus() != null)
                 .map(help -> ActivityDto.builder()
@@ -72,8 +75,8 @@ public class ActivityService {
                 .collect(Collectors.toList());
     }
 
-    private List<ActivityDto> getHelpReceivedActivities(User user) {
-        List<Help> helps = helpRepository.findByReceiverWithDetails(user, PageRequest.of(0, 1000)).getContent();
+    private List<ActivityDto> getHelpReceivedActivities(User user, int limit) {
+        List<Help> helps = helpRepository.findByReceiverWithDetails(user, PageRequest.of(0, limit)).getContent();
         return helps.stream()
                 .filter(help -> help.getStatus() != null)
                 .map(help -> ActivityDto.builder()
@@ -100,8 +103,8 @@ public class ActivityService {
         return help.getCreatedAt();
     }
 
-    private List<ActivityDto> getPostCreatedActivities(User user) {
-        List<Post> posts = postRepository.findByUserId(user.getId());
+    private List<ActivityDto> getPostCreatedActivities(User user, int limit) {
+        List<Post> posts = postRepository.findByUserId(user.getId(), PageRequest.of(0, limit)).getContent();
         return posts.stream()
                 .filter(post -> post.getDeleted() == null || !post.getDeleted())
                 .map(post -> ActivityDto.builder()
@@ -119,8 +122,10 @@ public class ActivityService {
                 .collect(Collectors.toList());
     }
 
-    private List<ActivityDto> getAchievementActivities(User user) {
-        List<Achievement> achievements = achievementRepository.findByUserIdOrderByEarnedAtDesc(user.getId());
+    private List<ActivityDto> getAchievementActivities(User user, int limit) {
+        List<Achievement> achievements = achievementRepository
+                .findByUserIdOrderByEarnedAtDesc(user.getId(), PageRequest.of(0, limit))
+                .getContent();
         return achievements.stream()
                 .filter(a -> a.getEarnedAt() != null)
                 .map(achievement -> {

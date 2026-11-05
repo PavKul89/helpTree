@@ -5,6 +5,7 @@ import org.example.helptreeservice.entity.Help;
 import org.example.helptreeservice.entity.User;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -21,11 +22,13 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
 
     boolean existsByHelpAndFromUser(Help help, User fromUser);
 
-    @Query("SELECT r FROM Review r JOIN FETCH r.fromUser JOIN FETCH r.help WHERE r.help = :help AND (r.deleted = false OR r.deleted IS NULL)")
-    List<Review> findByHelpWithDetails(@Param("help") Help help);
+    @EntityGraph(attributePaths = {"fromUser", "toUser", "help", "help.post"})
+    @Query("SELECT r FROM Review r WHERE r.help = :help AND (r.deleted = false OR r.deleted IS NULL)")
+    Page<Review> findByHelpWithDetails(@Param("help") Help help, Pageable pageable);
 
-    @Query("SELECT r FROM Review r JOIN FETCH r.fromUser WHERE r.toUser = :user AND (r.deleted = false OR r.deleted IS NULL)")
-    List<Review> findByToUserWithFromUser(@Param("user") User user);
+    @EntityGraph(attributePaths = {"fromUser", "toUser", "help", "help.post"})
+    @Query("SELECT r FROM Review r WHERE r.toUser = :user AND (r.deleted = false OR r.deleted IS NULL)")
+    Page<Review> findByToUserWithFromUser(@Param("user") User user, Pageable pageable);
 
     @Query("SELECT AVG(r.rating) FROM Review r WHERE r.toUser = :user AND (r.deleted = false OR r.deleted IS NULL)")
     Double calculateAverageRating(@Param("user") User user);

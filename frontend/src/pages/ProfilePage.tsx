@@ -153,7 +153,7 @@ export const ProfilePage = () => {
             postsApi.getAll({ userId: targetId, size: PROFILE_POST_PAGE_SIZE, page: 0 }),
             achievementApi.getAllAchievements(targetId),
             activityApi.getAllActivities(targetId, 20),
-            reviewApi.getByUser(targetId),
+            reviewApi.getAllByUser(targetId),
           ]);
 
         if (cancelled) return;
@@ -315,7 +315,7 @@ export const ProfilePage = () => {
       } else if (section === 'activities') {
         setActivities((await activityApi.getAllActivities(profileUser.id, 20)).filter(isPublicActivity));
       } else {
-        setReviews(await reviewApi.getByUser(profileUser.id));
+        setReviews(await reviewApi.getAllByUser(profileUser.id));
       }
       setSections((current) => ({
         ...current,

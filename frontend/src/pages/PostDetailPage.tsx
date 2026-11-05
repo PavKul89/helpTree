@@ -146,7 +146,7 @@ export const PostDetailPage = () => {
       setPost(postData);
       const commentsRequest = loadComments(0, commentsSortRef.current, false);
       const [helpsResult, userResult] = await Promise.allSettled([
-        helpApi.getHelpsByPost(postId),
+        helpApi.getAllHelpsByPost(postId),
         authApi.getCurrentUser(),
       ]);
       await commentsRequest;
@@ -156,7 +156,7 @@ export const PostDetailPage = () => {
         const confirmedHelp = helpsResult.value.find((help) => help.status === 'CONFIRMED');
         if (confirmedHelp) {
           try {
-            setReviews(await reviewApi.getByHelp(confirmedHelp.id));
+            setReviews(await reviewApi.getAllByHelp(confirmedHelp.id));
           } catch {
             setReviews([]);
             showToast('Не удалось загрузить отзывы.', 'error');

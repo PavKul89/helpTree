@@ -1,4 +1,5 @@
 import api from './axios';
+import { collectAllPages, type PageResponse } from './pagination';
 import type { Review } from '../types';
 
 export const reviewApi = {
@@ -7,15 +8,31 @@ export const reviewApi = {
     return response.data;
   },
 
-  getByHelp: async (helpId: number): Promise<Review[]> => {
-    const response = await api.get<Review[]>(`/api/reviews/help/${helpId}`);
+  getByHelp: async (
+    helpId: number,
+    params?: { page?: number; size?: number }
+  ): Promise<PageResponse<Review>> => {
+    const response = await api.get<PageResponse<Review>>(`/api/reviews/help/${helpId}`, {
+      params,
+    });
     return response.data;
   },
 
-  getByUser: async (userId: number): Promise<Review[]> => {
-    const response = await api.get<Review[]>(`/api/reviews/user/${userId}`);
+  getAllByHelp: async (helpId: number): Promise<Review[]> =>
+    collectAllPages((page, size) => reviewApi.getByHelp(helpId, { page, size })),
+
+  getByUser: async (
+    userId: number,
+    params?: { page?: number; size?: number }
+  ): Promise<PageResponse<Review>> => {
+    const response = await api.get<PageResponse<Review>>(`/api/reviews/user/${userId}`, {
+      params,
+    });
     return response.data;
   },
+
+  getAllByUser: async (userId: number): Promise<Review[]> =>
+    collectAllPages((page, size) => reviewApi.getByUser(userId, { page, size })),
 
   delete: async (reviewId: number): Promise<void> => {
     await api.delete(`/api/reviews/${reviewId}`);

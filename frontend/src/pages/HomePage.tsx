@@ -159,13 +159,10 @@ export const HomePage = () => {
   useEffect(() => {
     let cancelled = false;
     authApi
-      .getAllUsers()
+      .getAllUsers({ page: 0, size: 5, sort: 'helpedCount', direction: 'desc' })
       .then((users) => {
         if (cancelled) return;
-        const active = [...users]
-          .sort((a, b) => (b.helpedCount || 0) - (a.helpedCount || 0))
-          .slice(0, 5);
-        setCommunity(active);
+        setCommunity(users.content);
       })
       .catch((error) => {
         console.error('Failed to load community members', error);

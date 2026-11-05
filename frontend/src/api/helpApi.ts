@@ -1,4 +1,5 @@
 import api from './axios';
+import { collectAllPages, type PageResponse } from './pagination';
 import type { Help, HelpRequest, HelpGraph } from '../types';
 
 export interface HelpStats {
@@ -39,20 +40,44 @@ export const helpApi = {
     return response.data;
   },
 
-  getHelpsByHelper: async (helperId: number): Promise<Help[]> => {
-    const response = await api.get<Help[]>(`/api/helps/helper/${helperId}`);
+  getHelpsByHelper: async (
+    helperId: number,
+    params?: { page?: number; size?: number }
+  ): Promise<PageResponse<Help>> => {
+    const response = await api.get<PageResponse<Help>>(`/api/helps/helper/${helperId}`, {
+      params,
+    });
     return response.data;
   },
 
-  getHelpsByReceiver: async (receiverId: number): Promise<Help[]> => {
-    const response = await api.get<Help[]>(`/api/helps/receiver/${receiverId}`);
+  getAllHelpsByHelper: async (helperId: number): Promise<Help[]> =>
+    collectAllPages((page, size) => helpApi.getHelpsByHelper(helperId, { page, size })),
+
+  getHelpsByReceiver: async (
+    receiverId: number,
+    params?: { page?: number; size?: number }
+  ): Promise<PageResponse<Help>> => {
+    const response = await api.get<PageResponse<Help>>(`/api/helps/receiver/${receiverId}`, {
+      params,
+    });
     return response.data;
   },
 
-  getHelpsByPost: async (postId: number): Promise<Help[]> => {
-    const response = await api.get<Help[]>(`/api/helps/post/${postId}`);
+  getAllHelpsByReceiver: async (receiverId: number): Promise<Help[]> =>
+    collectAllPages((page, size) => helpApi.getHelpsByReceiver(receiverId, { page, size })),
+
+  getHelpsByPost: async (
+    postId: number,
+    params?: { page?: number; size?: number }
+  ): Promise<PageResponse<Help>> => {
+    const response = await api.get<PageResponse<Help>>(`/api/helps/post/${postId}`, {
+      params,
+    });
     return response.data;
   },
+
+  getAllHelpsByPost: async (postId: number): Promise<Help[]> =>
+    collectAllPages((page, size) => helpApi.getHelpsByPost(postId, { page, size })),
 
   getHelpGraph: async (
     userId?: number,

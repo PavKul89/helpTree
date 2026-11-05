@@ -2,6 +2,8 @@ package org.example.helptreeservice.repository;
 
 import org.example.helptreeservice.entity.Achievement;
 import org.example.helptreeservice.enums.AchievementType;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -15,6 +17,7 @@ import java.util.Set;
 
 public interface AchievementRepository extends JpaRepository<Achievement, Long> {
     List<Achievement> findByUserIdOrderByEarnedAtDesc(Long userId);
+    Page<Achievement> findByUserIdOrderByEarnedAtDesc(Long userId, Pageable pageable);
     boolean existsByUserIdAndType(Long userId, AchievementType type);
     Optional<Achievement> findFirstByUserIdAndType(Long userId, AchievementType type);
 

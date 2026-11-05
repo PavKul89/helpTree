@@ -1,4 +1,5 @@
 import axios from 'axios';
+import type { PageResponse } from './pagination';
 import type { AuthResponse, LoginRequest, RegisterRequest, User, UserPublic, WsTicket } from '../types';
 
 const API_URL = 'http://localhost:8080';
@@ -50,8 +51,15 @@ export const authApi = {
     return response.data;
   },
 
-  getAllUsers: async (): Promise<UserPublic[]> => {
-    const response = await api.get<UserPublic[]>('/api/users/public');
+  getAllUsers: async (params?: {
+    page?: number;
+    size?: number;
+    q?: string;
+    city?: string;
+    sort?: 'id' | 'name' | 'rating' | 'helpedCount' | 'createdAt';
+    direction?: 'asc' | 'desc';
+  }): Promise<PageResponse<UserPublic>> => {
+    const response = await api.get<PageResponse<UserPublic>>('/api/users/public', { params });
     return response.data;
   },
 

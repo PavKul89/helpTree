@@ -18,6 +18,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 
 import java.util.List;
 
@@ -93,33 +98,37 @@ class PostServiceTest {
     }
 
     @Test
-    void getPostsByUser_shouldHideCancelledPostsForPublicViewer() {
+    void getPostsByUser_shouldMapRepositoryPage() {
         when(userService.getUserEntityById(1L)).thenReturn(owner);
-        when(postRepository.findByUserId(1L)).thenReturn(List.of(
-                post(1L, PostStatus.OPEN, owner),
-                post(2L, PostStatus.CANCELLED, owner),
-                post(3L, PostStatus.COMPLETED, owner)
-        ));
+        Pageable pageable = PageRequest.of(0, 20);
+        when(postRepository.findAll(any(Specification.class), eq(pageable)))
+                .thenReturn(new PageImpl<>(List.of(
+                        post(1L, PostStatus.OPEN, owner),
+                        post(3L, PostStatus.COMPLETED, owner)
+                ), pageable, 2));
 
-        List<PostDto> result = postService.getPostsByUser(1L, false);
+        Page<PostDto> result = postService.getPostsByUser(1L, false, pageable);
 
-        assertEquals(2, result.size());
-        assertTrue(result.stream().noneMatch(dto -> dto.getStatus() == PostStatus.CANCELLED));
+        assertEquals(2, result.getTotalElements());
+        assertEquals(2, result.getContent().size());
+        verify(postRepository).findAll(any(Specification.class), eq(pageable));
     }
 
     @Test
-    void getPostsByUser_shouldShowAllNonDeletedPostsToOwnerOrAdmin() {
+    void getPostsByUser_shouldMapAllStatusesForOwner() {
         when(userService.getUserEntityById(1L)).thenReturn(owner);
-        when(postRepository.findByUserId(1L)).thenReturn(List.of(
-                post(1L, PostStatus.OPEN, owner),
-                post(2L, PostStatus.CANCELLED, owner),
-                post(3L, PostStatus.COMPLETED, owner)
-        ));
+        Pageable pageable = PageRequest.of(0, 20);
+        when(postRepository.findAll(any(Specification.class), eq(pageable)))
+                .thenReturn(new PageImpl<>(List.of(
+                        post(1L, PostStatus.OPEN, owner),
+                        post(2L, PostStatus.CANCELLED, owner),
+                        post(3L, PostStatus.COMPLETED, owner)
+                ), pageable, 3));
 
-        List<PostDto> result = postService.getPostsByUser(1L, true);
+        Page<PostDto> result = postService.getPostsByUser(1L, true, pageable);
 
-        assertEquals(3, result.size());
-        assertTrue(result.stream().anyMatch(dto -> dto.getStatus() == PostStatus.CANCELLED));
+        assertEquals(3, result.getTotalElements());
+        assertTrue(result.getContent().stream().anyMatch(dto -> dto.getStatus() == PostStatus.CANCELLED));
     }
 
     @Test
@@ -128,8 +137,8 @@ class PostServiceTest {
                 .thenThrow(new org.example.helptreeservice.exception.NotFoundException("Пользователь не найден"));
 
         assertThrows(org.example.helptreeservice.exception.NotFoundException.class,
-                () -> postService.getPostsByUser(1L, false));
-        verify(postRepository, never()).findByUserId(anyLong());
+                () -> postService.getPostsByUser(1L, false, PageRequest.of(0, 20)));
+        verify(postRepository, never()).findAll(any(Specification.class), any(Pageable.class));
     }
 
     @Test

@@ -46,6 +46,7 @@ import { hasCoordinates } from '../utils/coordinates';
 import './MapPage.css';
 
 const LIST_BATCH = 12;
+const MAP_PAGE_SIZE = 100;
 const DEFAULT_ZOOM = 6;
 
 type TileMode = 'dark' | 'light';
@@ -142,7 +143,11 @@ const USER_ICON = L.divIcon({
 
 export const MapPage = () => {
   const [posts, setPosts] = useState<Post[]>([]);
+  const [total, setTotal] = useState(0);
+  const [hasNext, setHasNext] = useState(false);
+  const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<'network' | 'access' | null>(null);
   const [reloadTick, setReloadTick] = useState(0);
 
@@ -172,18 +177,34 @@ export const MapPage = () => {
   const requestRef = useRef(0);
   const geoRequestRef = useRef(0);
 
+  const filterKey = `${deferredSearch.trim()}|${category}|${cityFilter}`;
+
   useEffect(() => {
     const controller = new AbortController();
     const sequence = ++requestRef.current;
 
     setLoading(true);
     setError(null);
+    setSelectedId(null);
 
     postsApi
-      .getMapPosts(controller.signal)
+      .getMapPosts(
+        {
+          page: 0,
+          size: MAP_PAGE_SIZE,
+          q: deferredSearch.trim() || undefined,
+          category: category || undefined,
+          city: cityFilter || undefined,
+        },
+        controller.signal
+      )
       .then((data) => {
         if (sequence !== requestRef.current) return;
-        setPosts(Array.isArray(data) ? data.filter(Boolean) : []);
+        setPosts(data.content.filter(Boolean));
+        setTotal(data.totalElements);
+        setHasNext(data.hasNext);
+        setPage(data.number);
+        setVisibleCount(LIST_BATCH);
         setLoading(false);
       })
       .catch((requestError: unknown) => {
@@ -196,7 +217,31 @@ export const MapPage = () => {
       });
 
     return () => controller.abort();
-  }, [reloadTick]);
+  }, [reloadTick, filterKey, deferredSearch, category, cityFilter]);
+
+  const loadMoreFromServer = useCallback(async () => {
+    if (loadingMore || !hasNext) return;
+    setLoadingMore(true);
+    try {
+      const data = await postsApi.getMapPosts({
+        page: page + 1,
+        size: MAP_PAGE_SIZE,
+        q: deferredSearch.trim() || undefined,
+        category: category || undefined,
+        city: cityFilter || undefined,
+      });
+      const loaded = data.content.filter(Boolean);
+      setPosts((previous) => [...previous, ...loaded]);
+      setVisibleCount((count) => count + loaded.length);
+      setTotal(data.totalElements);
+      setHasNext(data.hasNext);
+      setPage(data.number);
+    } catch {
+      setError('network');
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [loadingMore, hasNext, page, deferredSearch, category, cityFilter]);
 
   const categoryOptions = useMemo(() => {
     const values = new Set(posts.map((post) => post.category).filter(Boolean));
@@ -212,23 +257,11 @@ export const MapPage = () => {
     return Array.from(values).sort((left, right) => left.localeCompare(right, 'ru'));
   }, [posts, cityFilter]);
 
+  // The server already applied every filter; the client only splits the loaded
+  // page into the list batch size.
+  const filteredPosts = posts;
   const locatedPosts = useMemo(() => posts.filter(hasCoordinates), [posts]);
-
-  const filteredPosts = useMemo(() => {
-    const query = deferredSearch.trim().toLocaleLowerCase('ru');
-
-    return posts.filter((post) => {
-      if (category && post.category !== category) return false;
-      if (cityFilter && (post.userCity?.trim() || '') !== cityFilter) return false;
-      if (!query) return true;
-
-      return [post.title, post.description, post.category, post.authorName, post.userCity]
-        .filter(Boolean)
-        .some((value) => value!.toLocaleLowerCase('ru').includes(query));
-    });
-  }, [posts, category, cityFilter, deferredSearch]);
-
-  const filteredLocated = useMemo(() => filteredPosts.filter(hasCoordinates), [filteredPosts]);
+  const filteredLocated = locatedPosts;
 
   const selectedPost = useMemo(
     () => filteredPosts.find((post) => post.id === selectedId) ?? null,
@@ -247,7 +280,6 @@ export const MapPage = () => {
   const fatalError = Boolean(error) && posts.length === 0;
   const isLocating = geo.status === 'locating';
   const tileProvider = TILE_PROVIDERS[tileMode];
-  const filterKey = `${deferredSearch.trim()}|${category}|${cityFilter}`;
 
   useEffect(() => {
     setVisibleCount(LIST_BATCH);
@@ -510,10 +542,10 @@ export const MapPage = () => {
         {!initialLoading && !fatalError && posts.length > 0 && (
           <div className="map-hero-stats" aria-label="Сводка по заявкам">
             <span className="map-stat">
-              <strong>{posts.length}</strong> открытых
+              <strong>{total}</strong> открытых
             </span>
             <span className="map-stat">
-              <strong>{locatedPosts.length}</strong> на карте
+              <strong>{posts.length}</strong> загружено
             </span>
             {unlocatedAllCount > 0 && (
               <span className="map-stat map-stat--muted">
@@ -785,7 +817,7 @@ export const MapPage = () => {
                 </svg>
               </span>
               Список
-              <span className="map-view-count">{filteredPosts.length}</span>
+              <span className="map-view-count">{total}</span>
             </button>
             <button
               type="button"
@@ -804,7 +836,7 @@ export const MapPage = () => {
               'Загружаем заявки…'
             ) : (
               <>
-                Найдено: <strong>{filteredPosts.length}</strong>
+                Найдено: <strong>{total}</strong>
                 <span className="map-results-sep">·</span>
                 На карте: <strong>{filteredLocated.length}</strong>
                 {unlocatedFilteredCount > 0 && (
@@ -832,7 +864,7 @@ export const MapPage = () => {
                   <p>Открытые заявки</p>
                 </div>
                 <span className="map-list-count">
-                  {initialLoading ? '…' : filteredPosts.length}
+                  {initialLoading ? '…' : total}
                 </span>
               </div>
 
@@ -888,7 +920,7 @@ export const MapPage = () => {
                     ))}
                   </ul>
 
-                  {visiblePosts.length < filteredPosts.length && (
+                  {visiblePosts.length < filteredPosts.length ? (
                     <button
                       type="button"
                       className="map-load-more"
@@ -897,7 +929,16 @@ export const MapPage = () => {
                       Показать ещё{' '}
                       {Math.min(LIST_BATCH, filteredPosts.length - visiblePosts.length)}
                     </button>
-                  )}
+                  ) : hasNext ? (
+                    <button
+                      type="button"
+                      className="map-load-more"
+                      onClick={() => void loadMoreFromServer()}
+                      disabled={loadingMore}
+                    >
+                      {loadingMore ? 'Загружаем…' : 'Показать ещё с сервера'}
+                    </button>
+                  ) : null}
                 </>
               )}
             </section>

@@ -3,6 +3,7 @@ package org.example.helptreeservice.controller;
 import lombok.extern.slf4j.Slf4j;
 import org.example.helptreeservice.config.EconomyConfig;
 import org.example.helptreeservice.config.PaginationConfig;
+import org.example.helptreeservice.dto.common.PageResponse;
 import org.example.helptreeservice.dto.users.CreateUserRequest;
 import org.example.helptreeservice.dto.users.UpdateUserRequest;
 import org.example.helptreeservice.dto.users.UpdateRoleRequest;
@@ -12,8 +13,10 @@ import org.example.helptreeservice.dto.wallet.CoinTransactionDto;
 import org.example.helptreeservice.dto.wallet.WalletDto;
 import org.example.helptreeservice.dto.wallet.WalletOperationResult;
 import org.example.helptreeservice.dto.wallet.WalletPricingDto;
+import org.example.helptreeservice.enums.Role;
 import org.example.helptreeservice.enums.TransactionDirection;
 import org.example.helptreeservice.enums.TransactionType;
+import org.example.helptreeservice.enums.UserStatus;
 import org.example.helptreeservice.exception.ForbiddenException;
 import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.UnauthorizedException;
@@ -21,10 +24,10 @@ import org.example.helptreeservice.service.AuthorizationService;
 import org.example.helptreeservice.service.AuthorizationService.UserContext;
 import org.example.helptreeservice.service.UserService;
 import org.example.helptreeservice.service.WalletService;
+import org.example.helptreeservice.util.PageRequests;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -60,26 +63,36 @@ public class UserController {
     }
 
     @GetMapping
-    public ResponseEntity<?> getAllUsers(
+    public ResponseEntity<PageResponse<UserDto>> getAllUsers(
             @RequestParam(required = false) Integer page,
-            @RequestParam(required = false) Integer size) {
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) Role role,
+            @RequestParam(required = false) UserStatus status,
+            @RequestParam(required = false) Boolean blocked,
+            @RequestParam(defaultValue = "createdAt") String sort,
+            @RequestParam(defaultValue = "desc") String direction) {
         if (!authService.isAdmin()) {
             throw new ForbiddenException("Только администратор может просматривать всех пользователей");
         }
-        if (page == null && size == null) {
-            return ResponseEntity.ok(userService.getAllUsers());
-        }
-        return ResponseEntity.ok(userService.getAllUsers(resolvePageable(page, size)));
+        Pageable pageable = resolveDirectoryPageable(page, size, sort, direction,
+                java.util.Set.of("id", "name", "email", "rating", "helpedCount", "createdAt"));
+        Page<UserDto> users = userService.getAllUsers(pageable, q, role, status, blocked);
+        return ResponseEntity.ok(PageResponse.from(users));
     }
 
     @GetMapping("/public")
-    public ResponseEntity<?> getAllUsersPublic(
+    public ResponseEntity<PageResponse<UserPublicDto>> getAllUsersPublic(
             @RequestParam(required = false) Integer page,
-            @RequestParam(required = false) Integer size) {
-        if (page == null && size == null) {
-            return ResponseEntity.ok(userService.getAllUsersPublic());
-        }
-        return ResponseEntity.ok(userService.getAllUsersPublic(resolvePageable(page, size)));
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) String city,
+            @RequestParam(defaultValue = "rating") String sort,
+            @RequestParam(defaultValue = "desc") String direction) {
+        Pageable pageable = resolveDirectoryPageable(page, size, sort, direction,
+                java.util.Set.of("id", "name", "rating", "helpedCount", "createdAt"));
+        Page<UserPublicDto> users = userService.getAllUsersPublic(pageable, q, city);
+        return ResponseEntity.ok(PageResponse.from(users));
     }
 
     @GetMapping("/me")
@@ -370,20 +383,19 @@ public class UserController {
     }
 
     /**
-     * Опциональная пагинация: параметры ограничиваются серверными настройками.
+     * Directory pagination with a server-side sort whitelist. The id tiebreaker
+     * makes deep pages deterministic.
      */
-    private Pageable resolvePageable(Integer page, Integer size) {
-        int resolvedSize = size != null ? size : paginationConfig.getDefaultPageSize();
-        if (resolvedSize < 1) {
-            throw new BadRequestException("Параметр size должен быть положительным");
-        }
-        resolvedSize = Math.min(resolvedSize, paginationConfig.getMaxPageSize());
-
-        int resolvedPage = page != null ? page : 0;
-        if (resolvedPage < 0) {
-            throw new BadRequestException("Параметр page не может быть отрицательным");
-        }
-
-        return PageRequest.of(resolvedPage, resolvedSize, Sort.by(Sort.Direction.ASC, "id"));
+    private Pageable resolveDirectoryPageable(Integer page,
+                                              Integer size,
+                                              String sort,
+                                              String direction,
+                                              java.util.Set<String> allowedSorts) {
+        String property = sort != null && allowedSorts.contains(sort) ? sort : "id";
+        Sort.Direction dir = "asc".equalsIgnoreCase(direction)
+                ? Sort.Direction.ASC
+                : Sort.Direction.DESC;
+        Sort sortSpec = Sort.by(dir, property).and(Sort.by(Sort.Direction.DESC, "id"));
+        return PageRequests.of(page, size, paginationConfig, sortSpec);
     }
 }

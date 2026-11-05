@@ -82,11 +82,14 @@ public class PostService {
                 post.setLatitude(user.getLatitude());
                 post.setLongitude(user.getLongitude());
             } else if (user.getCity() != null) {
-                geocodingService.geocodeCity(user.getCity())
+                // Never call Nominatim from a write path: use the durable cache
+                // when the city is already resolved and enqueue it otherwise.
+                geocodingService.cached(user.getCity())
                         .ifPresent(coords -> {
                             post.setLatitude(coords.lat());
                             post.setLongitude(coords.lng());
                         });
+                geocodingService.enqueue(user.getCity());
             }
             
             if (request.getImageUrls() != null && !request.getImageUrls().isEmpty()) {
@@ -109,26 +112,21 @@ public class PostService {
     }
 
     @Transactional(readOnly = true)
-    public List<PostDto> getPostsByUser(Long userId, boolean includeAllStatuses) {
-        log.info("Запрос постов пользователя с ID: {}, includeAllStatuses={}", userId, includeAllStatuses);
+    public Page<PostDto> getPostsByUser(Long userId, boolean includeAllStatuses, Pageable pageable) {
+        log.info("Запрос постов пользователя с ID: {}, includeAllStatuses={}, page={}, size={}",
+                userId, includeAllStatuses, pageable.getPageNumber(), pageable.getPageSize());
 
         try {
             userService.getUserEntityById(userId);
 
-            List<Post> userPosts = postRepository.findByUserId(userId);
-            if (!includeAllStatuses) {
-                userPosts = userPosts.stream()
-                        .filter(post -> post.getStatus() != PostStatus.CANCELLED)
-                        .collect(Collectors.toList());
-            }
+            Specification<Post> spec = PostSpecification.filter(
+                    userId, null, null, null, null, null, !includeAllStatuses);
 
-            List<PostDto> posts = userPosts.stream()
-                    .map(this::toDto)
-                    .collect(Collectors.toList());
+            Page<PostDto> posts = postRepository.findAll(spec, pageable).map(this::toDto);
 
-            log.info("Найдено {} постов для пользователя с ID: {}", posts.size(), userId);
-            log.debug("ID постов пользователя {}: {}", userId,
-                    posts.stream().map(PostDto::getId).collect(Collectors.toList()));
+            log.info("Найдено {} постов для пользователя с ID: {}", posts.getTotalElements(), userId);
+            log.debug("ID постов пользователя {} на текущей странице: {}", userId,
+                    posts.getContent().stream().map(PostDto::getId).collect(Collectors.toList()));
 
             return posts;
 
@@ -159,26 +157,6 @@ public class PostService {
             throw e;
         } catch (Exception e) {
             log.error("Ошибка при получении поста с ID: {}", id, e);
-            throw e;
-        }
-    }
-
-    @Transactional(readOnly = true)
-    public List<PostDto> getAllPosts() {
-        log.info("Запрос списка всех активных постов");
-
-        try {
-            List<PostDto> posts = postRepository.findAllNotDeletedOrderByBoostedFirst().stream()
-                    .map(this::toDto)
-                    .collect(Collectors.toList());
-
-            log.info("Получен список всех активных постов, количество: {}", posts.size());
-            log.debug("ID всех постов: {}", posts.stream().map(PostDto::getId).collect(Collectors.toList()));
-
-            return posts;
-
-        } catch (Exception e) {
-            log.error("Ошибка при получении списка всех постов", e);
             throw e;
         }
     }
@@ -370,21 +348,102 @@ public class PostService {
     }
 
     @Transactional(readOnly = true)
-    public List<PostDto> getPostsOnMap(Double latitude, Double longitude, Double radius, String status) {
-        log.info("Запрос всех активных постов для карты");
-        List<Post> posts = postRepository.findAllActive();
-        
-        for (Post post : posts) {
-            if ((post.getLatitude() == null || post.getLongitude() == null) && post.getUser() != null && post.getUser().getCity() != null) {
-                final String city = post.getUser().getCity();
-                geocodingService.geocodeCity(city).ifPresent(coords -> {
-                    post.setLatitude(coords.lat());
-                    post.setLongitude(coords.lng());
-                });
+    public Page<PostDto> getPostsOnMap(PostStatus status,
+                                       String category,
+                                       String city,
+                                       String search,
+                                       Double minLat,
+                                       Double minLng,
+                                       Double maxLat,
+                                       Double maxLng,
+                                       Double latitude,
+                                       Double longitude,
+                                       Double radius,
+                                       Pageable pageable) {
+        log.info("Запрос постов для карты: status={}, category={}, city={}, q={}, bbox=[{},{},{},{}], center=({},{}), radius={}, page={}, size={}",
+                status, category, city, search, minLat, minLng, maxLat, maxLng,
+                latitude, longitude, radius, pageable.getPageNumber(), pageable.getPageSize());
+
+        validateMapBounds(minLat, minLng, maxLat, maxLng, latitude, longitude, radius);
+
+        Double effectiveMinLat = minLat;
+        Double effectiveMinLng = minLng;
+        Double effectiveMaxLat = maxLat;
+        Double effectiveMaxLng = maxLng;
+
+        // A radius is translated into an indexed bounding box; the haversine
+        // predicate then trims the box corners to a circle.
+        if (latitude != null && longitude != null && radius != null && radius > 0) {
+            double latDelta = Math.toDegrees(radius / 6371.0);
+            double cosLat = Math.cos(Math.toRadians(latitude));
+            double lngDelta = cosLat < 1.0e-6
+                    ? 180.0
+                    : Math.toDegrees(radius / (6371.0 * cosLat));
+            effectiveMinLat = Math.max(-90.0, latitude - latDelta);
+            effectiveMaxLat = Math.min(90.0, latitude + latDelta);
+            effectiveMinLng = Math.max(-180.0, longitude - lngDelta);
+            effectiveMaxLng = Math.min(180.0, longitude + lngDelta);
+        }
+
+        Specification<Post> mapSpec = PostSpecification.mapFilter(
+                status, category, city, search,
+                effectiveMinLat, effectiveMinLng, effectiveMaxLat, effectiveMaxLng,
+                latitude, longitude, radius);
+
+        Specification<Post> orderedSpec = (root, query, cb) -> {
+            if (query.getResultType() != Long.class && query.getResultType() != long.class) {
+                LocalDateTime now = LocalDateTime.now();
+                var boostedOrder = cb.selectCase()
+                        .when(cb.greaterThan(root.get("boostedUntil"), now), 1)
+                        .otherwise(0);
+                query.orderBy(
+                        cb.desc(boostedOrder),
+                        cb.desc(root.get("createdAt")),
+                        cb.desc(root.get("id"))
+                );
+            }
+            return mapSpec.toPredicate(root, query, cb);
+        };
+
+        Page<PostDto> posts = postRepository.findAll(orderedSpec, pageable).map(this::toDto);
+        log.info("Найдено постов для карты: {}, всего страниц: {}", posts.getTotalElements(), posts.getTotalPages());
+        return posts;
+    }
+
+    private void validateMapBounds(Double minLat,
+                                   Double minLng,
+                                   Double maxLat,
+                                   Double maxLng,
+                                   Double latitude,
+                                   Double longitude,
+                                   Double radius) {
+        boolean anyBbox = minLat != null || minLng != null || maxLat != null || maxLng != null;
+        boolean completeBbox = minLat != null && minLng != null && maxLat != null && maxLng != null;
+        if (anyBbox && !completeBbox) {
+            throw new BadRequestException("bbox должен содержать minLat, minLng, maxLat и maxLng");
+        }
+        if (completeBbox) {
+            if (minLat < -90 || maxLat > 90 || minLng < -180 || maxLng > 180) {
+                throw new BadRequestException("bbox содержит координаты вне допустимого диапазона");
+            }
+            if (minLat > maxLat || minLng > maxLng) {
+                throw new BadRequestException("bbox должен быть задан как minLat,minLng,maxLat,maxLng");
             }
         }
-        
-        return posts.stream().map(this::toDto).collect(Collectors.toList());
+
+        boolean anyCenter = latitude != null || longitude != null || radius != null;
+        boolean completeCenter = latitude != null && longitude != null && radius != null;
+        if (anyCenter && !completeCenter) {
+            throw new BadRequestException("Для поиска по радиусу нужны latitude, longitude и radius");
+        }
+        if (completeCenter) {
+            if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+                throw new BadRequestException("Координаты центра вне допустимого диапазона");
+            }
+            if (radius <= 0) {
+                throw new BadRequestException("Параметр radius должен быть положительным");
+            }
+        }
     }
 
     /**

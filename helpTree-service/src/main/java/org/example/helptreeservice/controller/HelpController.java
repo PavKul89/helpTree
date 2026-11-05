@@ -1,5 +1,7 @@
 package org.example.helptreeservice.controller;
 
+import org.example.helptreeservice.config.PaginationConfig;
+import org.example.helptreeservice.dto.common.PageResponse;
 import org.example.helptreeservice.dto.helps.CancelHelpRequest;
 import org.example.helptreeservice.dto.helps.HelpHistoryEntryDto;
 import org.example.helptreeservice.dto.helps.HelpRequest;
@@ -7,12 +9,13 @@ import org.example.helptreeservice.dto.helps.HelpResponse;
 import org.example.helptreeservice.exception.ForbiddenException;
 import org.example.helptreeservice.service.AuthorizationService;
 import org.example.helptreeservice.service.HelpService;
+import org.example.helptreeservice.util.PageRequests;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.web.PageableDefault;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -27,6 +30,7 @@ public class HelpController {
 
     private final HelpService helpService;
     private final AuthorizationService authService;
+    private final PaginationConfig paginationConfig;
 
     @PostMapping("/accept")
     public ResponseEntity<HelpResponse> acceptHelp(@Valid @RequestBody HelpRequest request) {
@@ -36,8 +40,12 @@ public class HelpController {
     }
 
     @GetMapping("/post/{postId}")
-    public ResponseEntity<List<HelpResponse>> getHelpsByPost(@PathVariable Long postId) {
-        return ResponseEntity.ok(helpService.getHelpsByPost(postId));
+    public ResponseEntity<PageResponse<HelpResponse>> getHelpsByPost(
+            @PathVariable Long postId,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size) {
+        Pageable pageable = responsePageable(page, size);
+        return ResponseEntity.ok(PageResponse.from(helpService.getHelpsByPost(postId, pageable)));
     }
 
     @PostMapping("/{helpId}/complete")
@@ -69,23 +77,27 @@ public class HelpController {
     }
 
     @GetMapping("/helper/{helperId}")
-    public ResponseEntity<Page<HelpResponse>> getHelpsByHelper(
+    public ResponseEntity<PageResponse<HelpResponse>> getHelpsByHelper(
             @PathVariable Long helperId,
-            @PageableDefault(page = 0, size = 20) Pageable pageable) {
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size) {
         if (!authService.canAccessHelp(helperId, null)) {
             throw new ForbiddenException("Вы можете просматривать только свои записи");
         }
-        return ResponseEntity.ok(helpService.getHelpsByHelper(helperId, pageable));
+        Page<HelpResponse> helps = helpService.getHelpsByHelper(helperId, responsePageable(page, size));
+        return ResponseEntity.ok(PageResponse.from(helps));
     }
 
     @GetMapping("/receiver/{receiverId}")
-    public ResponseEntity<Page<HelpResponse>> getHelpsByReceiver(
+    public ResponseEntity<PageResponse<HelpResponse>> getHelpsByReceiver(
             @PathVariable Long receiverId,
-            @PageableDefault(page = 0, size = 20) Pageable pageable) {
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size) {
         if (!authService.canAccessHelp(null, receiverId)) {
             throw new ForbiddenException("Вы можете просматривать только свои записи");
         }
-        return ResponseEntity.ok(helpService.getHelpsByReceiver(receiverId, pageable));
+        Page<HelpResponse> helps = helpService.getHelpsByReceiver(receiverId, responsePageable(page, size));
+        return ResponseEntity.ok(PageResponse.from(helps));
     }
 
     @GetMapping("/graph")
@@ -112,6 +124,12 @@ public class HelpController {
             @RequestParam(required = false) String since) {
         Long actorId = requireCurrentUserId("Необходимо войти в систему");
         return ResponseEntity.ok(helpService.getNewResponses(actorId, since));
+    }
+
+    private Pageable responsePageable(Integer page, Integer size) {
+        Sort sort = Sort.by(Sort.Direction.DESC, "createdAt")
+                .and(Sort.by(Sort.Direction.DESC, "id"));
+        return PageRequests.of(page, size, paginationConfig, sort);
     }
 
     private Long requireCurrentUserId(String message) {

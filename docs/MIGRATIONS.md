@@ -191,6 +191,41 @@ V45 переводит комментарии на soft-delete и добавля
 constraints, индексы, корректность `depth` у корней и ответов, согласованность
 tombstone-полей и совпадение `posts.comments_count` с фактическими строками.
 
+### 5.3. Серверная карта и поиск (V46)
+
+V46 — аддитивная миграция Block 9. Она не удаляет и не переписывает данные,
+кроме двух безопасных backfill-операций:
+
+- `CREATE EXTENSION pg_trgm` и case-insensitive триграммные GIN-индексы:
+  `idx_posts_title_trgm`, `idx_posts_description_trgm`,
+  `idx_posts_category_trgm`, `idx_users_name_trgm`, `idx_users_city_trgm`,
+  `idx_reviews_comment_trgm`. Они обслуживают `ILIKE '%…%'` в
+  `PostSpecification.mapFilter` и `SearchRepository`.
+- Partial-индексы для публичных выборок: `idx_posts_map_active` (координаты
+  есть, `deleted = FALSE`, `status <> 'CANCELLED'`),
+  `idx_posts_map_category` (категория + статус + координаты),
+  `idx_posts_public_feed` (`created_at DESC, id DESC`),
+  `idx_users_public_rating`, `idx_helps_created`.
+- `geocoding_cache` — durable очередь и кэш геокодирования. Запросы только
+  читают `FOUND`-строки и добавляют `PENDING`; сетевой вызов Nominatim делает
+  только `GeocodingScheduler` (батч, rate limit, повтор до
+  `app.geocoding.max-attempts`, переобработка зависших `PROCESSING`).
+- Backfill координат: `posts` без координат получают координаты автора, если у
+  него они уже есть. Вручную заданные координаты поста не перезаписываются.
+- Очередь предзаполняется городами пользователей без координат; ключ
+  нормализуется так же, как `GeocodingService.normalizeKey` (lowercase,
+  схлопывание пробелов, удаление ведущего `г.`/`г`).
+
+Ограничения V46: `geocoding_cache_status_chk` (допустимые статусы) и
+`geocoding_cache_attempts_chk` (`attempts >= 0`). Индекс
+`idx_geocoding_cache_queue` упорядочивает выборку worker-а по
+`status, attempts, updated_at`.
+
+Проверка: `scripts/fixtures/verify_block9_schema.sql` проверяет расширение,
+типы и partial-условия индексов, структуру `geocoding_cache`, constraints и
+инварианты очереди (нормализованный ключ, `FOUND` с координатами), а также
+наличие backfill-координат у видимых постов.
+
 ## 6. Проверка миграций
 ### 6.1 Чистая база
 
@@ -215,6 +250,10 @@ docker exec postgres psql -U helpTree -d helptree_clean_test `
 docker cp scripts/fixtures/verify_block8_schema.sql postgres:/tmp/verify_block8_schema.sql
 docker exec postgres psql -U helpTree -d helptree_clean_test `
   -v ON_ERROR_STOP=1 -f /tmp/verify_block8_schema.sql
+
+docker cp scripts/fixtures/verify_block9_schema.sql postgres:/tmp/verify_block9_schema.sql
+docker exec postgres psql -U helpTree -d helptree_clean_test `
+  -v ON_ERROR_STOP=1 -f /tmp/verify_block9_schema.sql
 ```
 
 ### 6.2 Копия существующей базы
@@ -243,6 +282,10 @@ docker exec postgres psql -U helpTree -d helptree_copy_test `
 docker cp scripts/fixtures/verify_block8_schema.sql postgres:/tmp/verify_block8_schema.sql
 docker exec postgres psql -U helpTree -d helptree_copy_test `
   -v ON_ERROR_STOP=1 -f /tmp/verify_block8_schema.sql
+
+docker cp scripts/fixtures/verify_block9_schema.sql postgres:/tmp/verify_block9_schema.sql
+docker exec postgres psql -U helpTree -d helptree_copy_test `
+  -v ON_ERROR_STOP=1 -f /tmp/verify_block9_schema.sql
 ```
 
 Проверьте, что количество строк в `users`, `posts`, `helps`, `chats`,
@@ -268,6 +311,7 @@ psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block6_legacy.sql
 psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block6_constraints.sql
 psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block7_schema.sql
 psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block8_schema.sql
+psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block9_schema.sql
 ```
 
 ## 7. Backup перед миграцией
@@ -281,7 +325,7 @@ docker cp postgres:/tmp/helpTree_db_pre_v41.dump .\helpTree_db_pre_v41.dump
 
 Для production используйте штатный backup PostgreSQL (`pg_basebackup` или
 `pg_dump -Fc`) и проверяйте restore на отдельной базе. Не запускайте
-V41–V45 без проверенной точки восстановления.
+V41–V46 без проверенной точки восстановления.
 
 ## 8. Rollback / recovery
 
@@ -313,8 +357,12 @@ V45 — тоже аддитивная (колонки, constraints, индекс
 `comments_count`); после отката кода старый физический delete продолжит
 каскадно удалять ответы, поэтому откатывать приложение и схему следует вместе
 или восстанавливать backup. Оставленные после отката кода колонки безопасны:
-они заполнены и не используются старой версией приложения. Для точного
-состояния до V43 восстановите backup.
+они заполнены и не используются старой версией приложения. V46 — аддитивная
+(расширение, индексы, очередь `geocoding_cache` и backfill координат);
+отдельного rollback-скрипта не имеет. Старый код не обращается к новым
+таблицам/индексам, поэтому откат приложения безопасен; удаление
+`geocoding_cache` приведёт лишь к повторному заполнению очереди при следующей
+миграции. Для точного состояния до V43 восстановите backup.
 
 ## 9. Ограничения и замечания
 
@@ -335,3 +383,10 @@ V45 — тоже аддитивная (колонки, constraints, индекс
 - V45 закрепляет soft-delete комментариев: `DELETE /comments/{id}` создаёт
   tombstone, а `ON DELETE CASCADE` остаётся только защитой от физического
   удаления вне приложения. Жалобы Block 8 хранятся в таблицах V42 `reports`.
+- V46 требует `pg_trgm`; на managed PostgreSQL расширение должно быть
+  разрешено для роли приложения (расширение trusted, но политика провайдера
+  может отличаться). Геокодирование после V46 полностью асинхронное: запрос
+  никогда не ходит в Nominatim, поэтому при отключённом worker-е
+  (`app.geocoding.enabled=false`) новые города не получат координаты до
+  повторного включения. Wildcard-символы `%`/`_` в поиске вырезаются до
+  передачи в SQL.

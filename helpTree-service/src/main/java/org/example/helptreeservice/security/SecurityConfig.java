@@ -84,6 +84,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/images/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/posts/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/stats").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/search").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/users/public").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/users/*/public").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/helps/graph").permitAll()

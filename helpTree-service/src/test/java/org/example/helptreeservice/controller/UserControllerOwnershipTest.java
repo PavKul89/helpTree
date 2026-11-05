@@ -187,12 +187,13 @@ class UserControllerOwnershipTest {
     void getAllUsers_shouldClampPageSizeToServerMaximum() {
         when(authService.isAdmin()).thenReturn(true);
         when(paginationConfig.getMaxPageSize()).thenReturn(100);
-        when(userService.getAllUsers(any(Pageable.class))).thenReturn(Page.empty());
+        when(userService.getAllUsers(any(Pageable.class), isNull(), isNull(), isNull(), isNull()))
+                .thenReturn(Page.empty());
 
-        userController.getAllUsers(0, 500);
+        userController.getAllUsers(0, 500, null, null, null, null, "createdAt", "desc");
 
         ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
-        verify(userService).getAllUsers(captor.capture());
+        verify(userService).getAllUsers(captor.capture(), isNull(), isNull(), isNull(), isNull());
         assertEquals(100, captor.getValue().getPageSize());
         assertEquals(0, captor.getValue().getPageNumber());
     }
@@ -200,12 +201,13 @@ class UserControllerOwnershipTest {
     @Test
     void getAllUsersPublic_shouldClampPageSizeToServerMaximum() {
         when(paginationConfig.getMaxPageSize()).thenReturn(100);
-        when(userService.getAllUsersPublic(any(Pageable.class))).thenReturn(Page.empty());
+        when(userService.getAllUsersPublic(any(Pageable.class), isNull(), isNull()))
+                .thenReturn(Page.empty());
 
-        userController.getAllUsersPublic(1, 1000);
+        userController.getAllUsersPublic(1, 1000, null, null, "rating", "desc");
 
         ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
-        verify(userService).getAllUsersPublic(captor.capture());
+        verify(userService).getAllUsersPublic(captor.capture(), isNull(), isNull());
         assertEquals(100, captor.getValue().getPageSize());
         assertEquals(1, captor.getValue().getPageNumber());
     }
@@ -213,37 +215,44 @@ class UserControllerOwnershipTest {
     @Test
     void getAllUsersPublic_shouldRejectNegativePage() {
         assertThrows(BadRequestException.class,
-                () -> userController.getAllUsersPublic(-1, 20));
-        verify(userService, never()).getAllUsersPublic(any(Pageable.class));
+                () -> userController.getAllUsersPublic(-1, 20, null, null, "rating", "desc"));
+        verify(userService, never()).getAllUsersPublic(any(Pageable.class), any(), any());
     }
 
     @Test
     void getAllUsersPublic_shouldRejectNonPositiveSize() {
         assertThrows(BadRequestException.class,
-                () -> userController.getAllUsersPublic(0, 0));
-        verify(userService, never()).getAllUsersPublic(any(Pageable.class));
+                () -> userController.getAllUsersPublic(0, 0, null, null, "rating", "desc"));
+        verify(userService, never()).getAllUsersPublic(any(Pageable.class), any(), any());
     }
 
     @Test
-    void getAllUsersPublic_shouldKeepLegacyArrayWithoutPaginationParameters() {
-        when(userService.getAllUsersPublic()).thenReturn(java.util.List.of());
+    void getAllUsersPublic_shouldAlwaysReturnPagedEnvelope() {
+        when(paginationConfig.getDefaultPageSize()).thenReturn(20);
+        when(paginationConfig.getMaxPageSize()).thenReturn(100);
+        when(userService.getAllUsersPublic(any(Pageable.class), isNull(), isNull()))
+                .thenReturn(Page.empty());
 
-        var response = userController.getAllUsersPublic(null, null);
+        var response = userController.getAllUsersPublic(null, null, null, null, "rating", "desc");
 
-        assertTrue(response.getBody() instanceof java.util.List);
-        verify(userService).getAllUsersPublic();
-        verify(userService, never()).getAllUsersPublic(any(Pageable.class));
+        assertNotNull(response.getBody());
+        assertTrue(response.getBody().getContent().isEmpty());
+        verify(userService).getAllUsersPublic(any(Pageable.class), isNull(), isNull());
     }
 
     @Test
-    void getAllUsers_shouldKeepLegacyArrayWithoutPaginationParameters() {
+    void getAllUsers_shouldAlwaysReturnPagedEnvelope() {
         when(authService.isAdmin()).thenReturn(true);
-        when(userService.getAllUsers()).thenReturn(java.util.List.of());
+        when(paginationConfig.getDefaultPageSize()).thenReturn(20);
+        when(paginationConfig.getMaxPageSize()).thenReturn(100);
+        when(userService.getAllUsers(any(Pageable.class), isNull(), isNull(), isNull(), isNull()))
+                .thenReturn(Page.empty());
 
-        var response = userController.getAllUsers(null, null);
+        var response = userController.getAllUsers(null, null, null, null, null, null, "createdAt", "desc");
 
-        assertTrue(response.getBody() instanceof java.util.List);
-        verify(userService).getAllUsers();
+        assertNotNull(response.getBody());
+        assertTrue(response.getBody().getContent().isEmpty());
+        verify(userService).getAllUsers(any(Pageable.class), isNull(), isNull(), isNull(), isNull());
     }
 
     @Test
@@ -251,12 +260,13 @@ class UserControllerOwnershipTest {
         when(authService.isAdmin()).thenReturn(true);
         when(paginationConfig.getDefaultPageSize()).thenReturn(20);
         when(paginationConfig.getMaxPageSize()).thenReturn(100);
-        when(userService.getAllUsers(any(Pageable.class))).thenReturn(Page.empty());
+        when(userService.getAllUsers(any(Pageable.class), isNull(), isNull(), isNull(), isNull()))
+                .thenReturn(Page.empty());
 
-        userController.getAllUsers(2, null);
+        userController.getAllUsers(2, null, null, null, null, null, "createdAt", "desc");
 
         ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
-        verify(userService).getAllUsers(captor.capture());
+        verify(userService).getAllUsers(captor.capture(), isNull(), isNull(), isNull(), isNull());
         assertEquals(PageRequest.of(2, 20).getPageSize(), captor.getValue().getPageSize());
         assertEquals(2, captor.getValue().getPageNumber());
     }

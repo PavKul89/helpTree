@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useDeferredValue, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Ban,
@@ -40,11 +40,14 @@ export const AdminUsersPage: React.FC = () => {
   const { showToast } = useToast();
 
   const [users, setUsers] = useState<AdminUser[]>([]);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
   const [search, setSearch] = useState('');
+  const deferredSearch = useDeferredValue(search);
   const [roleFilter, setRoleFilter] = useState<RoleFilter>('ALL');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
   const [sort, setSort] = useState<SortOption>('created-desc');
@@ -62,8 +65,26 @@ export const AdminUsersPage: React.FC = () => {
       setLoading(true);
       setError(null);
       try {
-        const data = await adminApi.getUsers();
-        if (!cancelled) setUsers(data);
+        const sortParams: Record<SortOption, { sort: 'createdAt' | 'rating' | 'helpedCount' | 'name'; direction: 'asc' | 'desc' }> = {
+          'created-desc': { sort: 'createdAt', direction: 'desc' },
+          'rating-desc': { sort: 'rating', direction: 'desc' },
+          'helped-desc': { sort: 'helpedCount', direction: 'desc' },
+          'name-asc': { sort: 'name', direction: 'asc' },
+        };
+        const { sort: sortField, direction } = sortParams[sort];
+        const data = await adminApi.getUsers({
+          page,
+          size: PAGE_SIZE,
+          q: deferredSearch.trim() || undefined,
+          role: roleFilter === 'ALL' ? undefined : roleFilter,
+          status: statusFilter === 'ALL' ? undefined : statusFilter,
+          sort: sortField,
+          direction,
+        });
+        if (cancelled) return;
+        setUsers(data.content);
+        setTotal(data.totalElements);
+        setTotalPages(Math.max(1, data.totalPages));
       } catch (loadError) {
         if (!cancelled) {
           setError(getApiErrorMessage(loadError, 'Не удалось загрузить список пользователей.'));
@@ -77,47 +98,15 @@ export const AdminUsersPage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [reloadKey]);
+  }, [reloadKey, page, deferredSearch, roleFilter, statusFilter, sort]);
 
   useEffect(() => {
     setPage(0);
-  }, [search, roleFilter, statusFilter, sort]);
-
-  const filtered = useMemo(() => {
-    const query = search.trim().toLowerCase();
-
-    const result = users.filter((user) => {
-      if (roleFilter !== 'ALL' && user.role !== roleFilter) return false;
-      if (statusFilter !== 'ALL' && user.status !== statusFilter) return false;
-      if (!query) return true;
-
-      return [user.name, user.email, user.phone, user.city, String(user.id)]
-        .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(query));
-    });
-
-    return result.sort((a, b) => {
-      switch (sort) {
-        case 'rating-desc':
-          return (b.rating ?? 0) - (a.rating ?? 0);
-        case 'helped-desc':
-          return (b.helpedCount ?? 0) - (a.helpedCount ?? 0);
-        case 'name-asc':
-          return a.name.localeCompare(b.name, 'ru');
-        case 'created-desc':
-        default:
-          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-      }
-    });
-  }, [users, search, roleFilter, statusFilter, sort]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  }, [deferredSearch, roleFilter, statusFilter, sort]);
 
   useEffect(() => {
     if (page > totalPages - 1) setPage(totalPages - 1);
   }, [page, totalPages]);
-
-  const visibleUsers = filtered.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
 
   const resetFilters = () => {
     setSearch('');
@@ -133,8 +122,10 @@ export const AdminUsersPage: React.FC = () => {
     try {
       await adminApi.deleteUser(deleteTarget.id);
       setUsers((previous) => previous.filter((user) => user.id !== deleteTarget.id));
+      setTotal((previous) => Math.max(0, previous - 1));
       showToast(`Пользователь «${deleteTarget.name}» удалён.`, 'success');
       setDeleteTarget(null);
+      setReloadKey((value) => value + 1);
     } catch (deleteFailure) {
       setDeleteError(getApiErrorMessage(deleteFailure, 'Не удалось удалить пользователя.'));
     } finally {
@@ -150,9 +141,9 @@ export const AdminUsersPage: React.FC = () => {
       <div className="admin-notice">
         <Users size={17} aria-hidden="true" />
         <p>
-          <code>GET /api/users</code> возвращает полный список активных аккаунтов без серверной
-          пагинации, поэтому поиск, фильтры и разбиение на страницы выполняются в браузере.
-          Удалённые аккаунты сервер в этот список не включает.
+          <code>GET /api/users</code> фильтрует, сортирует и разбивает на страницы на сервере.
+          Поиск <code>q</code> охватывает имя, email и город; телефон и ID серверным поиском не
+          поддерживаются. Удалённые аккаунты в этот список не попадают.
         </p>
       </div>
 
@@ -237,12 +228,11 @@ export const AdminUsersPage: React.FC = () => {
 
         <div className="admin-toolbar-meta">
           <span>
-            Найдено <strong>{formatNumber(filtered.length)}</strong> из{' '}
-            <strong>{formatNumber(users.length)}</strong>
+            Всего <strong>{formatNumber(total)}</strong>
           </span>
-          {filtered.length > 0 && (
+          {users.length > 0 && (
             <span>
-              Показано {page * PAGE_SIZE + 1}–{Math.min(filtered.length, (page + 1) * PAGE_SIZE)}
+              Показано {page * PAGE_SIZE + 1}–{page * PAGE_SIZE + users.length}
             </span>
           )}
         </div>
@@ -258,16 +248,21 @@ export const AdminUsersPage: React.FC = () => {
           message={error}
           onRetry={() => setReloadKey((value) => value + 1)}
         />
-      ) : filtered.length === 0 ? (
+      ) : users.length === 0 ? (
         <AdminEmptyState
-          title={users.length === 0 ? 'Пользователей нет' : 'Ничего не найдено'}
+          title={filtersActive ? 'Ничего не найдено' : 'Пользователей нет'}
           description={
-            users.length === 0
-              ? 'Сервер вернул пустой список активных пользователей.'
-              : 'Измените поисковый запрос или сбросьте фильтры.'
+            filtersActive
+              ? 'Измените поисковый запрос или сбросьте фильтры.'
+              : 'Сервер вернул пустой список активных пользователей.'
           }
           action={
-            users.length === 0 ? (
+            filtersActive ? (
+              <button type="button" className="admin-button admin-button--secondary" onClick={resetFilters}>
+                <FilterX size={16} aria-hidden="true" />
+                Сбросить фильтры
+              </button>
+            ) : (
               <button
                 type="button"
                 className="admin-button admin-button--primary"
@@ -275,11 +270,6 @@ export const AdminUsersPage: React.FC = () => {
               >
                 <UserPlus size={16} aria-hidden="true" />
                 Создать пользователя
-              </button>
-            ) : (
-              <button type="button" className="admin-button admin-button--secondary" onClick={resetFilters}>
-                <FilterX size={16} aria-hidden="true" />
-                Сбросить фильтры
               </button>
             )
           }
@@ -311,7 +301,7 @@ export const AdminUsersPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {visibleUsers.map((user) => {
+                {users.map((user) => {
                   const blocked = isUserBlocked(user);
                   return (
                     <tr key={user.id}>

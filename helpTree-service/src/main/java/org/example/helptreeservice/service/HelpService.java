@@ -465,10 +465,10 @@ public class HelpService {
      * Получить все помощи пользователя (где он помогал)
      */
     @Transactional(readOnly = true)
-    public List<HelpResponse> getHelpsByPost(Long postId) {
-        return helpRepository.findByPostId(postId).stream()
-                .map(helpMapper::toResponse)
-                .collect(Collectors.toList());
+    public Page<HelpResponse> getHelpsByPost(Long postId, Pageable pageable) {
+        log.info("Запрос откликов по посту ID: {}, page={}, size={}", postId, pageable.getPageNumber(), pageable.getPageSize());
+        return helpRepository.findByPostId(postId, pageable)
+                .map(helpMapper::toResponse);
     }
 
     @Transactional(readOnly = true)

@@ -1,5 +1,6 @@
 package org.example.helptreeservice.controller;
 
+import org.example.helptreeservice.config.PaginationConfig;
 import org.example.helptreeservice.dto.helps.CancelHelpRequest;
 import org.example.helptreeservice.dto.helps.HelpRequest;
 import org.example.helptreeservice.dto.helps.HelpResponse;
@@ -11,10 +12,19 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -22,12 +32,13 @@ class HelpControllerTest {
 
     @Mock private HelpService helpService;
     @Mock private AuthorizationService authService;
+    @Mock private PaginationConfig paginationConfig;
 
     private HelpController controller;
 
     @BeforeEach
     void setUp() {
-        controller = new HelpController(helpService, authService);
+        controller = new HelpController(helpService, authService, paginationConfig);
     }
 
     @Test
@@ -101,6 +112,27 @@ class HelpControllerTest {
 
         assertThrows(ForbiddenException.class, () -> controller.getHelpHistory(3L));
         verifyNoInteractions(helpService);
+    }
+
+    @Test
+    void getHelpsByHelper_shouldReturnTheSharedPageEnvelope() {
+        when(authService.canAccessHelp(5L, null)).thenReturn(true);
+        when(paginationConfig.getMaxPageSize()).thenReturn(100);
+        Page<HelpResponse> page = new PageImpl<>(
+                List.of(HelpResponse.builder().id(1L).build()),
+                PageRequest.of(0, 1),
+                3);
+        when(helpService.getHelpsByHelper(eq(5L), any(Pageable.class))).thenReturn(page);
+
+        var response = controller.getHelpsByHelper(5L, 0, 1);
+
+        assertEquals(200, response.getStatusCode().value());
+        assertEquals(3, response.getBody().getTotalElements());
+        assertEquals(1, response.getBody().getContent().size());
+        assertEquals(3, response.getBody().getTotalPages());
+        assertTrue(response.getBody().isHasNext());
+        assertEquals(1, response.getBody().getSize());
+        assertEquals(0, response.getBody().getNumber());
     }
 
     private HelpRequest request() {

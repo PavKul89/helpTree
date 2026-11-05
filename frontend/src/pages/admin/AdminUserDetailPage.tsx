@@ -186,8 +186,8 @@ export const AdminUserDetailPage: React.FC = () => {
         const [walletData, postsData, reviewsData, achievementsData, activitiesData] =
           await Promise.all([
             settle(adminApi.getWallet(id), 'wallet', 'Кошелёк недоступен.'),
-            settle(adminApi.getUserPosts(id), 'posts', 'Заявки пользователя недоступны.'),
-            settle(adminApi.getUserReviews(id), 'reviews', 'Отзывы пользователя недоступны.'),
+            settle(adminApi.getAllUserPosts(id), 'posts', 'Заявки пользователя недоступны.'),
+            settle(adminApi.getAllUserReviews(id), 'reviews', 'Отзывы пользователя недоступны.'),
             settle(
               adminApi.getUserAchievements(id),
               'achievements',

@@ -7,6 +7,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -20,8 +21,9 @@ import java.util.Optional;
 @Repository
 public interface PostRepository extends JpaRepository<Post, Long>, JpaSpecificationExecutor<Post> {
     
-    @Query("SELECT p FROM Post p LEFT JOIN FETCH p.user LEFT JOIN FETCH p.helper WHERE p.user.id = :userId AND (p.deleted = false OR p.deleted IS NULL)")
-    List<Post> findByUserId(@Param("userId") Long userId);
+    @EntityGraph(attributePaths = {"user", "helper"})
+    @Query("SELECT p FROM Post p WHERE p.user.id = :userId AND (p.deleted = false OR p.deleted IS NULL)")
+    Page<Post> findByUserId(@Param("userId") Long userId, Pageable pageable);
     
     @Query("SELECT p FROM Post p LEFT JOIN FETCH p.user LEFT JOIN FETCH p.helper WHERE p.id = :id")
     Post findByIdWithUser(@Param("id") Long id);
@@ -36,20 +38,11 @@ public interface PostRepository extends JpaRepository<Post, Long>, JpaSpecificat
     
     long countByUserId(Long userId);
 
-    @Query("SELECT p FROM Post p LEFT JOIN FETCH p.user LEFT JOIN FETCH p.helper WHERE p.deleted = false AND p.status = 'OPEN'")
-    List<Post> findAllActive();
-
     @Query("SELECT p FROM Post p LEFT JOIN FETCH p.user LEFT JOIN FETCH p.helper WHERE p.id IN :ids AND (p.deleted = false OR p.deleted IS NULL)")
     List<Post> findByIdsWithUser(@Param("ids") List<Long> ids);
 
-    @Query("SELECT p FROM Post p LEFT JOIN FETCH p.user LEFT JOIN FETCH p.helper WHERE p.deleted = false OR p.deleted IS NULL")
-    List<Post> findAllNotDeleted();
-
     @Query("SELECT COUNT(p) FROM Post p WHERE p.status = :status AND (p.deleted = false OR p.deleted IS NULL)")
     long countByStatus(@Param("status") PostStatus status);
-
-    @Query("SELECT p FROM Post p LEFT JOIN FETCH p.user LEFT JOIN FETCH p.helper WHERE p.deleted = false ORDER BY CASE WHEN p.boostedUntil > CURRENT_TIMESTAMP THEN 1 ELSE 0 END DESC, p.createdAt DESC")
-    List<Post> findAllNotDeletedOrderByBoostedFirst();
 
     /**
      * Atomically charges nothing but extends the boost window. The caller has

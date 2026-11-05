@@ -1,6 +1,8 @@
 package org.example.helptreeservice.controller;
 
 import org.example.helptreeservice.config.EconomyConfig;
+import org.example.helptreeservice.config.PaginationConfig;
+import org.example.helptreeservice.dto.common.PageResponse;
 import org.example.helptreeservice.dto.posts.CreatePostRequest;
 import org.example.helptreeservice.dto.posts.PostDto;
 import org.example.helptreeservice.dto.posts.UpdatePostRequest;
@@ -10,6 +12,7 @@ import org.example.helptreeservice.exception.ForbiddenException;
 import org.example.helptreeservice.service.AuthorizationService;
 import org.example.helptreeservice.service.PostService;
 import org.example.helptreeservice.service.UserService;
+import org.example.helptreeservice.util.PageRequests;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,6 +22,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -34,6 +38,7 @@ public class PostController {
     private final AuthorizationService authService;
     private final UserService userService;
     private final EconomyConfig economyConfig;
+    private final PaginationConfig paginationConfig;
 
     @PostMapping
     public ResponseEntity<PostDto> createPost(@Valid @RequestBody CreatePostRequest request) {
@@ -49,7 +54,7 @@ public class PostController {
     }
 
     @GetMapping
-    public ResponseEntity<Page<PostDto>> getPosts(
+    public ResponseEntity<PageResponse<PostDto>> getPosts(
             @RequestParam(required = false) Long userId,
             @RequestParam(required = false) PostStatus status,
             @RequestParam(required = false) String title,
@@ -63,9 +68,11 @@ public class PostController {
         boolean excludeCancelled = userId != null
                 ? !authService.canManageUser(userId)
                 : !authService.isAdmin();
+        Pageable safePageable = PageRequests.of(pageable.getPageNumber(), pageable.getPageSize(),
+                paginationConfig, pageable.getSort());
         Page<PostDto> result = postService.getPosts(
-                userId, status, title, authorName, category, city, pageable, excludeCancelled);
-        return ResponseEntity.ok(result);
+                userId, status, title, authorName, category, city, safePageable, excludeCancelled);
+        return ResponseEntity.ok(PageResponse.from(result));
     }
 
     @GetMapping("/{id}")
@@ -107,9 +114,14 @@ public class PostController {
     }
 
     @GetMapping("/user/{userId}")
-    public ResponseEntity<List<PostDto>> getPostsByUser(@PathVariable Long userId) {
+    public ResponseEntity<PageResponse<PostDto>> getPostsByUser(
+            @PathVariable Long userId,
+            @PageableDefault(page = 0, size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
         boolean includeAllStatuses = authService.canManagePost(userId);
-        return ResponseEntity.ok(postService.getPostsByUser(userId, includeAllStatuses));
+        Pageable safePageable = PageRequests.of(pageable.getPageNumber(), pageable.getPageSize(),
+                paginationConfig, pageable.getSort());
+        Page<PostDto> posts = postService.getPostsByUser(userId, includeAllStatuses, safePageable);
+        return ResponseEntity.ok(PageResponse.from(posts));
     }
 
     @PostMapping("/by-ids")
@@ -121,14 +133,52 @@ public class PostController {
     }
 
     @GetMapping("/map")
-    public ResponseEntity<List<PostDto>> getPostsOnMap(
+    public ResponseEntity<PageResponse<PostDto>> getPostsOnMap(
+            @RequestParam(required = false) String bbox,
             @RequestParam(required = false) Double latitude,
             @RequestParam(required = false) Double longitude,
-            @RequestParam(defaultValue = "10") Double radius,
-            @RequestParam(required = false) String status
-    ) {
-        return ResponseEntity.ok(postService.getPostsOnMap(latitude, longitude, radius, status));
+            @RequestParam(required = false) Double radius,
+            @RequestParam(required = false) PostStatus status,
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) String city,
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size) {
+        Bbox parsedBbox = parseBbox(bbox);
+        Double effectiveRadius = radius;
+        if (latitude != null && longitude != null && effectiveRadius == null) {
+            effectiveRadius = 10.0;
+        }
+
+        Pageable pageable = PageRequests.of(page, size, paginationConfig, Sort.unsorted());
+        Page<PostDto> result = postService.getPostsOnMap(
+                status, category, city, q,
+                parsedBbox.minLat(), parsedBbox.minLng(), parsedBbox.maxLat(), parsedBbox.maxLng(),
+                latitude, longitude, effectiveRadius,
+                pageable);
+        return ResponseEntity.ok(PageResponse.from(result));
     }
+
+    private Bbox parseBbox(String bbox) {
+        if (!StringUtils.hasText(bbox)) {
+            return new Bbox(null, null, null, null);
+        }
+        String[] parts = bbox.split(",");
+        if (parts.length != 4) {
+            throw new BadRequestException("bbox должен быть в формате minLat,minLng,maxLat,maxLng");
+        }
+        try {
+            return new Bbox(
+                    Double.parseDouble(parts[0].trim()),
+                    Double.parseDouble(parts[1].trim()),
+                    Double.parseDouble(parts[2].trim()),
+                    Double.parseDouble(parts[3].trim()));
+        } catch (NumberFormatException e) {
+            throw new BadRequestException("bbox содержит нечисловые координаты");
+        }
+    }
+
+    private record Bbox(Double minLat, Double minLng, Double maxLat, Double maxLng) {}
 
     @PostMapping("/{id}/boost")
     public ResponseEntity<Map<String, Object>> boostPost(

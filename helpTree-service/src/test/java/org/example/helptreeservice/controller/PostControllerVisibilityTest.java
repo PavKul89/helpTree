@@ -1,12 +1,14 @@
 package org.example.helptreeservice.controller;
 
 import org.example.helptreeservice.config.EconomyConfig;
+import org.example.helptreeservice.config.PaginationConfig;
 import org.example.helptreeservice.service.AuthorizationService;
 import org.example.helptreeservice.service.PostService;
 import org.example.helptreeservice.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -14,6 +16,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
@@ -33,6 +36,8 @@ class PostControllerVisibilityTest {
     private UserService userService;
     @Mock
     private EconomyConfig economyConfig;
+    @Mock
+    private PaginationConfig paginationConfig;
 
     @InjectMocks
     private PostController postController;
@@ -46,6 +51,8 @@ class PostControllerVisibilityTest {
                 .thenReturn(Page.empty());
         lenient().when(authService.canManageUser(any())).thenReturn(false);
         lenient().when(authService.isAdmin()).thenReturn(false);
+        lenient().when(paginationConfig.getDefaultPageSize()).thenReturn(20);
+        lenient().when(paginationConfig.getMaxPageSize()).thenReturn(100);
     }
 
     @Test
@@ -82,5 +89,16 @@ class PostControllerVisibilityTest {
 
         verify(postService).getPosts(
                 eq(7L), isNull(), isNull(), isNull(), isNull(), isNull(), eq(pageable), eq(true));
+    }
+
+    @Test
+    void generalFeed_shouldClampRequestedPageSize() {
+        postController.getPosts(null, null, null, null, null, null, PageRequest.of(0, 5000));
+
+        ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
+        verify(postService).getPosts(
+                isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
+                captor.capture(), eq(true));
+        assertEquals(100, captor.getValue().getPageSize());
     }
 }

@@ -15,13 +15,12 @@ import {
   type AdminHelpStats,
   type AdminPostStatus,
   type AdminStats,
-  type AdminUser,
+  type AdminUserSummary,
 } from '../../api/adminApi';
 import { AdminErrorState, AdminLoadingBlock } from '../../components/admin/AdminFeedback';
 import {
   formatMonthKey,
   formatNumber,
-  isUserBlocked,
   POST_STATUS_LABELS,
   POST_STATUS_ORDER,
   USER_STATUS_LABELS,
@@ -32,7 +31,7 @@ interface DashboardData {
   stats: AdminStats | null;
   helpStats: AdminHelpStats | null;
   statusCounts: Record<AdminPostStatus, number> | null;
-  users: AdminUser[] | null;
+  userSummary: AdminUserSummary | null;
   loadedAt: Date;
   failures: string[];
 }
@@ -54,11 +53,11 @@ export const AdminDashboardPage: React.FC = () => {
           adminApi.getStats(),
           adminApi.getHelpStats(),
           adminApi.getPostStatusCounts(),
-          adminApi.getUsers(),
+          adminApi.getUserSummary(),
         ]);
         if (cancelled) return;
 
-        const [statsResult, helpStatsResult, statusCountsResult, usersResult] = results;
+        const [statsResult, helpStatsResult, statusCountsResult, userSummaryResult] = results;
         const successful = results.filter((result) => result.status === 'fulfilled').length;
         if (successful === 0) {
           const firstFailure = results.find(
@@ -75,7 +74,8 @@ export const AdminDashboardPage: React.FC = () => {
             stats: statsResult.status === 'fulfilled' ? statsResult.value : null,
             helpStats: helpStatsResult.status === 'fulfilled' ? helpStatsResult.value : null,
             statusCounts: statusCountsResult.status === 'fulfilled' ? statusCountsResult.value : null,
-            users: usersResult.status === 'fulfilled' ? usersResult.value : null,
+            userSummary: userSummaryResult.status === 'fulfilled' ? userSummaryResult.value : null
+              ?? null,
             loadedAt: new Date(),
             failures,
           });
@@ -113,14 +113,9 @@ export const AdminDashboardPage: React.FC = () => {
       ACTIVE: 0,
       DEBTOR: 0,
     };
-    let admins = 0;
-    let blocked = 0;
-
-    data.users?.forEach((user) => {
-      statusCounts[user.status] = (statusCounts[user.status] ?? 0) + 1;
-      if (user.role === 'ADMIN') admins += 1;
-      if (isUserBlocked(user)) blocked += 1;
-    });
+    if (data.userSummary) {
+      Object.assign(statusCounts, data.userSummary.statusCounts);
+    }
 
     return {
       monthEntries,
@@ -128,9 +123,9 @@ export const AdminDashboardPage: React.FC = () => {
       categoryEntries,
       maxCategory,
       statusCounts,
-      admins,
-      blocked,
-      totalUsers: data.users?.length ?? null,
+      admins: data.userSummary?.admins ?? null,
+      blocked: data.userSummary?.blocked ?? null,
+      totalUsers: data.userSummary?.total ?? null,
     };
   }, [data]);
 
@@ -190,8 +185,8 @@ export const AdminDashboardPage: React.FC = () => {
     },
     {
       label: 'Администраторы',
-      value: data.users ? formatNumber(derived.admins) : '—',
-      hint: 'Роль ADMIN в GET /api/users',
+      value: data.userSummary ? formatNumber(derived.admins) : '—',
+      hint: 'Роль ADMIN · total из GET /api/users',
       icon: ShieldCheck,
     },
   ];
@@ -389,12 +384,13 @@ export const AdminDashboardPage: React.FC = () => {
               <span className="admin-eyebrow">Пользователи</span>
               <h2 id="admin-user-status-title">Репутационные статусы</h2>
               <p className="admin-section-description">
-                Рассчитано на клиенте по полю <code>status</code> из <code>GET /api/users</code>.
+                Серверные счётчики по <code>status</code>, <code>role</code> и <code>blocked</code>
+                {' '}из <code>GET /api/users</code>; полный список пользователей не выгружается.
               </p>
             </div>
           </div>
 
-          {data.users ? <ul className="admin-distribution">
+          {data.userSummary ? <ul className="admin-distribution">
             {Object.entries(USER_STATUS_LABELS).map(([status, label]) => {
               const count = derived.statusCounts[status] ?? 0;
               const percent =
@@ -416,10 +412,10 @@ export const AdminDashboardPage: React.FC = () => {
             })}
           </ul> : <p className="admin-muted" role="status">Распределение пользователей недоступно.</p>}
 
-          {data.users && <div className="admin-mini-stats">
+          {data.userSummary && <div className="admin-mini-stats">
             <span>
               <Users size={15} aria-hidden="true" />
-              Всего в списке: <strong>{formatNumber(derived.totalUsers)}</strong>
+              Всего аккаунтов: <strong>{formatNumber(derived.totalUsers)}</strong>
             </span>
             <span>
               <Ban size={15} aria-hidden="true" />

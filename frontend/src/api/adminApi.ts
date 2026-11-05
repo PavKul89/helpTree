@@ -1,5 +1,6 @@
 import api from './axios';
 import { createIdempotencyKey } from '../utils/idempotency';
+import { collectAllPages } from './pagination';
 import type { Post, Review } from '../types';
 import type { Achievement } from './achievementApi';
 import type { Activity } from './activityApi';
@@ -136,6 +137,28 @@ export interface AdminPostsQuery {
   sort?: string;
 }
 
+export interface AdminUsersQuery {
+  page?: number;
+  size?: number;
+  q?: string;
+  role?: AdminUserRole;
+  status?: AdminUserStatus;
+  blocked?: boolean;
+  sort?: 'id' | 'name' | 'email' | 'rating' | 'helpedCount' | 'createdAt';
+  direction?: 'asc' | 'desc';
+}
+
+/**
+ * Server-side aggregates for the dashboard. No endpoint returns the whole
+ * user table any more, so counts come from `totalElements` of filtered pages.
+ */
+export interface AdminUserSummary {
+  total: number;
+  admins: number;
+  blocked: number;
+  statusCounts: Record<AdminUserStatus, number>;
+}
+
 const getPostStatusCount = async (status: AdminPostStatus): Promise<number> => {
   const response = await api.get<PageResponse<Post>>('/api/posts', {
     params: { status, page: 0, size: 1 },
@@ -165,9 +188,33 @@ export const adminApi = {
   },
 
   // ------------------------------------------------------------------- users
-  getUsers: async (): Promise<AdminUser[]> => {
-    const response = await api.get<AdminUser[]>('/api/users');
+  getUsers: async (query: AdminUsersQuery = {}): Promise<PageResponse<AdminUser>> => {
+    const response = await api.get<PageResponse<AdminUser>>('/api/users', { params: query });
     return response.data;
+  },
+
+  getUserSummary: async (): Promise<AdminUserSummary> => {
+    const count = async (query: AdminUsersQuery): Promise<number> => {
+      const page = await adminApi.getUsers({ ...query, page: 0, size: 1 });
+      return page.totalElements;
+    };
+
+    const [total, admins, blocked, newbie, helper, active, debtor] = await Promise.all([
+      count({}),
+      count({ role: 'ADMIN' }),
+      count({ blocked: true }),
+      count({ status: 'NEWBIE' }),
+      count({ status: 'HELPER' }),
+      count({ status: 'ACTIVE' }),
+      count({ status: 'DEBTOR' }),
+    ]);
+
+    return {
+      total,
+      admins,
+      blocked,
+      statusCounts: { NEWBIE: newbie, HELPER: helper, ACTIVE: active, DEBTOR: debtor },
+    };
   },
 
   getUser: async (id: number): Promise<AdminUser> => {
@@ -231,10 +278,16 @@ export const adminApi = {
     return response.data;
   },
 
-  getUserPosts: async (id: number): Promise<Post[]> => {
-    const response = await api.get<Post[]>(`/api/posts/user/${id}`);
+  getUserPosts: async (
+    id: number,
+    params?: { page?: number; size?: number }
+  ): Promise<PageResponse<Post>> => {
+    const response = await api.get<PageResponse<Post>>(`/api/posts/user/${id}`, { params });
     return response.data;
   },
+
+  getAllUserPosts: async (id: number): Promise<Post[]> =>
+    collectAllPages((page, size) => adminApi.getUserPosts(id, { page, size })),
 
   getUserAchievements: async (id: number): Promise<Achievement[]> => {
     const response = await api.get<Achievement[]>(`/api/users/${id}/achievements`);
@@ -246,10 +299,16 @@ export const adminApi = {
     return response.data;
   },
 
-  getUserReviews: async (id: number): Promise<Review[]> => {
-    const response = await api.get<Review[]>(`/api/reviews/user/${id}`);
+  getUserReviews: async (
+    id: number,
+    params?: { page?: number; size?: number }
+  ): Promise<PageResponse<Review>> => {
+    const response = await api.get<PageResponse<Review>>(`/api/reviews/user/${id}`, { params });
     return response.data;
   },
+
+  getAllUserReviews: async (id: number): Promise<Review[]> =>
+    collectAllPages((page, size) => adminApi.getUserReviews(id, { page, size })),
 
   // ------------------------------------------------------------------- posts
   getPosts: async (params: AdminPostsQuery, signal?: AbortSignal): Promise<PageResponse<Post>> => {

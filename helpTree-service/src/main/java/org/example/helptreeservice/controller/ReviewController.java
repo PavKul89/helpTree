@@ -2,15 +2,19 @@ package org.example.helptreeservice.controller;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.example.helptreeservice.config.PaginationConfig;
+import org.example.helptreeservice.dto.common.PageResponse;
 import org.example.helptreeservice.dto.reviews.CreateReviewRequest;
 import org.example.helptreeservice.dto.reviews.ReviewResponse;
 import org.example.helptreeservice.service.AuthorizationService;
 import org.example.helptreeservice.service.ReviewService;
+import org.example.helptreeservice.util.PageRequests;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/reviews")
@@ -19,6 +23,7 @@ public class ReviewController {
 
     private final ReviewService reviewService;
     private final AuthorizationService authService;
+    private final PaginationConfig paginationConfig;
 
     @PostMapping
     public ResponseEntity<ReviewResponse> createReview(@Valid @RequestBody CreateReviewRequest request) {
@@ -28,13 +33,21 @@ public class ReviewController {
     }
 
     @GetMapping("/help/{helpId}")
-    public ResponseEntity<List<ReviewResponse>> getReviewsByHelp(@PathVariable Long helpId) {
-        return ResponseEntity.ok(reviewService.getReviewsByHelp(helpId));
+    public ResponseEntity<PageResponse<ReviewResponse>> getReviewsByHelp(
+            @PathVariable Long helpId,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size) {
+        Page<ReviewResponse> reviews = reviewService.getReviewsByHelp(helpId, responsePageable(page, size));
+        return ResponseEntity.ok(PageResponse.from(reviews));
     }
 
     @GetMapping("/user/{userId}")
-    public ResponseEntity<List<ReviewResponse>> getReviewsByUser(@PathVariable Long userId) {
-        return ResponseEntity.ok(reviewService.getReviewsByUser(userId));
+    public ResponseEntity<PageResponse<ReviewResponse>> getReviewsByUser(
+            @PathVariable Long userId,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size) {
+        Page<ReviewResponse> reviews = reviewService.getReviewsByUser(userId, responsePageable(page, size));
+        return ResponseEntity.ok(PageResponse.from(reviews));
     }
 
     @DeleteMapping("/{id}")
@@ -42,5 +55,11 @@ public class ReviewController {
         Long currentUserId = authService.getCurrentUser().getUserId();
         reviewService.deleteReview(id, currentUserId);
         return ResponseEntity.noContent().build();
+    }
+
+    private Pageable responsePageable(Integer page, Integer size) {
+        Sort sort = Sort.by(Sort.Direction.DESC, "createdAt")
+                .and(Sort.by(Sort.Direction.DESC, "id"));
+        return PageRequests.of(page, size, paginationConfig, sort);
     }
 }

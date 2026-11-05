@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Star, HandHeart, ClipboardList } from 'lucide-react';
+import { Star, HandHeart, ClipboardList, RefreshCw } from 'lucide-react';
 import { authApi } from '../api/authApi';
 import { Card } from '../components/Card';
 import { Spinner } from '../components/Spinner';
@@ -9,16 +9,62 @@ import { Avatar } from '../components/Avatar';
 import { theme } from '../theme';
 import type { UserPublic } from '../types';
 
+const PAGE_SIZE = 24;
+
 export const UsersPage = () => {
   const [users, setUsers] = useState<UserPublic[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(0);
+  const [hasNext, setHasNext] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
-    authApi.getAllUsers()
-      .then(setUsers)
-      .catch(console.error)
-      .finally(() => setLoading(false));
+    let cancelled = false;
+    setLoading(true);
+    setError(false);
+    authApi
+      .getAllUsers({ page: 0, size: PAGE_SIZE, sort: 'rating', direction: 'desc' })
+      .then((result) => {
+        if (cancelled) return;
+        setUsers(result.content);
+        setTotal(result.totalElements);
+        setPage(result.number);
+        setHasNext(result.hasNext);
+      })
+      .catch(() => {
+        if (!cancelled) setError(true);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  const loadMore = async () => {
+    if (loadingMore || !hasNext) return;
+    setLoadingMore(true);
+    setError(false);
+    try {
+      const result = await authApi.getAllUsers({
+        page: page + 1,
+        size: PAGE_SIZE,
+        sort: 'rating',
+        direction: 'desc',
+      });
+      setUsers((previous) => [...previous, ...result.content]);
+      setTotal(result.totalElements);
+      setPage(result.number);
+      setHasNext(result.hasNext);
+    } catch {
+      setError(true);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   if (loading) return <Spinner message="Загрузка пользователей..." />;
 
@@ -29,10 +75,17 @@ export const UsersPage = () => {
       <Card style={styles.mainCard}>
         <div style={styles.header}>
           <h1 className="page-title" style={styles.title}>Пользователи</h1>
-          <span style={styles.count}>{users.length} чел.</span>
+          <span style={styles.count}>{total.toLocaleString('ru-RU')} чел.</span>
         </div>
 
-        {users.length === 0 ? (
+        {error && users.length === 0 ? (
+          <div style={styles.loadMoreWrap}>
+            <p style={styles.count}>Не удалось загрузить пользователей.</p>
+            <button type="button" style={styles.loadMore} onClick={() => window.location.reload()}>
+              <RefreshCw size={15} aria-hidden="true" /> Повторить
+            </button>
+          </div>
+        ) : users.length === 0 ? (
           <EmptyState 
             variant="users"
             title="Пользователей пока нет" 
@@ -64,6 +117,22 @@ export const UsersPage = () => {
                 </div>
               </Link>
             ))}
+          </div>
+        )}
+
+        {users.length > 0 && hasNext && (
+          <div style={styles.loadMoreWrap}>
+            <button
+              type="button"
+              style={styles.loadMore}
+              onClick={() => void loadMore()}
+              disabled={loadingMore}
+            >
+              {loadingMore ? 'Загружаем…' : 'Показать ещё'}
+            </button>
+            <span style={styles.count}>
+              Показано {users.length} из {total.toLocaleString('ru-RU')}
+            </span>
           </div>
         )}
       </Card>
@@ -154,5 +223,24 @@ const styles: Record<string, React.CSSProperties> = {
   statDivider: {
     color: theme.colors.textMuted,
     fontSize: '12px',
+  },
+  loadMoreWrap: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '0 32px 28px',
+  },
+  loadMore: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '10px 22px',
+    borderRadius: theme.borderRadius.md,
+    border: `1px solid ${theme.colors.border}`,
+    background: 'rgba(255,255,255,0.05)',
+    color: theme.colors.text,
+    cursor: 'pointer',
+    fontSize: '14px',
   },
 };

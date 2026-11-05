@@ -1,5 +1,8 @@
 import api from './axios';
 import { createIdempotencyKey } from '../utils/idempotency';
+import type { PageResponse } from './pagination';
+
+export type { PageResponse } from './pagination';
 
 export const WALLET_UPDATED_EVENT = 'helptree:wallet-updated';
 
@@ -25,19 +28,6 @@ export interface CoinTransactionDto {
   relatedUserId?: number;
   relatedPostId?: number;
   createdAt: string;
-}
-
-/** Spring Data Page. The wallet history endpoint returns exactly this shape. */
-export interface PageResponse<T> {
-  content: T[];
-  totalElements: number;
-  totalPages: number;
-  number: number;
-  size: number;
-  numberOfElements: number;
-  first: boolean;
-  last: boolean;
-  empty: boolean;
 }
 
 export interface DailyBonusResponse {

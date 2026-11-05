@@ -22,7 +22,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -100,23 +99,21 @@ public class ReviewService {
     }
 
     @Transactional(readOnly = true)
-    public List<ReviewResponse> getReviewsByHelp(Long helpId) {
+    public Page<ReviewResponse> getReviewsByHelp(Long helpId, Pageable pageable) {
         Help help = helpRepository.findById(helpId)
                 .orElseThrow(() -> new NotFoundException("Помощь не найдена"));
 
-        return reviewRepository.findByHelpWithDetails(help).stream()
-                .map(reviewMapper::toResponse)
-                .collect(Collectors.toList());
+        return reviewRepository.findByHelpWithDetails(help, pageable)
+                .map(reviewMapper::toResponse);
     }
 
     @Transactional(readOnly = true)
-    public List<ReviewResponse> getReviewsByUser(Long userId) {
+    public Page<ReviewResponse> getReviewsByUser(Long userId, Pageable pageable) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new NotFoundException("Пользователь не найден"));
 
-        return reviewRepository.findByToUserWithFromUser(user).stream()
-                .map(reviewMapper::toResponse)
-                .collect(Collectors.toList());
+        return reviewRepository.findByToUserWithFromUser(user, pageable)
+                .map(reviewMapper::toResponse);
     }
 
     @Transactional

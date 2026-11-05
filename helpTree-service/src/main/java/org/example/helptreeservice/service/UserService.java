@@ -15,6 +15,7 @@ import org.example.helptreeservice.mapper.UserMapper;
 import org.example.helptreeservice.repository.PostRepository;
 import org.example.helptreeservice.repository.UserRatingStatsRepository;
 import org.example.helptreeservice.repository.UserRepository;
+import org.example.helptreeservice.repository.UserSpecification;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
@@ -68,11 +69,12 @@ public class UserService {
         user.setPhone(request.getPhone());
         user.setCity(request.getCity());
         if (request.getCity() != null) {
-            geocodingService.geocodeCity(request.getCity())
+            geocodingService.cached(request.getCity())
                     .ifPresent(coords -> {
                         user.setLatitude(coords.lat());
                         user.setLongitude(coords.lng());
                     });
+            geocodingService.enqueue(request.getCity());
         }
         user.setHelpedCount(0);
         user.setDebtCount(0);
@@ -129,38 +131,27 @@ public class UserService {
     }
 
     @Transactional(readOnly = true)
-    public List<UserDto> getAllUsers() {
-        log.info("Запрос списка всех активных пользователей");
-        try {
-            List<UserDto> users = userRepository.findByDeletedFalse().stream()
-                    .map(userMapper::toDto)
-                    .collect(Collectors.toList());
-            log.info("Получен список пользователей, количество: {}", users.size());
-            log.debug("ID пользователей в списке: {}", users.stream().map(UserDto::getId).collect(Collectors.toList()));
-            return users;
-        } catch (Exception e) {
-            log.error("Ошибка при получении списка всех пользователей", e);
-            throw e;
-        }
+    public Page<UserDto> getAllUsers(Pageable pageable,
+                                     String query,
+                                     Role role,
+                                     UserStatus status,
+                                     Boolean blocked) {
+        log.info("Запрос страницы пользователей: page={}, size={}, q={}, role={}, status={}, blocked={}",
+                pageable.getPageNumber(), pageable.getPageSize(), query, role, status, blocked);
+        return userRepository.findAll(
+                        UserSpecification.filter(query, role, status, null, blocked, true),
+                        pageable)
+                .map(userMapper::toDto);
     }
 
     @Transactional(readOnly = true)
-    public List<UserPublicDto> getAllUsersPublic() {
-        return userRepository.findByDeletedFalse().stream()
-                .map(userMapper::toPublicDto)
-                .collect(Collectors.toList());
-    }
-
-    @Transactional(readOnly = true)
-    public Page<UserDto> getAllUsers(Pageable pageable) {
-        log.info("Запрос страницы пользователей: page={}, size={}", pageable.getPageNumber(), pageable.getPageSize());
-        return userRepository.findByDeletedFalse(pageable).map(userMapper::toDto);
-    }
-
-    @Transactional(readOnly = true)
-    public Page<UserPublicDto> getAllUsersPublic(Pageable pageable) {
-        log.info("Запрос страницы публичных пользователей: page={}, size={}", pageable.getPageNumber(), pageable.getPageSize());
-        return userRepository.findByDeletedFalse(pageable).map(userMapper::toPublicDto);
+    public Page<UserPublicDto> getAllUsersPublic(Pageable pageable, String query, String city) {
+        log.info("Запрос страницы публичных пользователей: page={}, size={}, q={}, city={}",
+                pageable.getPageNumber(), pageable.getPageSize(), query, city);
+        return userRepository.findAll(
+                        UserSpecification.filter(query, null, null, city, null, false),
+                        pageable)
+                .map(userMapper::toPublicDto);
     }
 
     public UserDto updateUser(Long id, UpdateUserRequest request) {
@@ -200,11 +191,12 @@ public class UserService {
                 log.debug("Изменен город пользователя на: {}", request.getCity());
                 
                 if (request.getLatitude() == null || request.getLongitude() == null) {
-                    geocodingService.geocodeCity(request.getCity())
+                    geocodingService.cached(request.getCity())
                             .ifPresent(coords -> {
                                 user.setLatitude(coords.lat());
                                 user.setLongitude(coords.lng());
                             });
+                    geocodingService.enqueue(request.getCity());
                 }
             }
 
@@ -472,6 +464,8 @@ public class UserService {
                 .helpedCount(user.getHelpedCount())
                 .debtCount(user.getDebtCount())
                 .avatarUrl(imageService.refreshUrl(user.getAvatarUrl()))
+                .city(user.getCity())
+                .nicknameColor(user.getNicknameColor())
                 .build();
     }
 
@@ -511,6 +505,8 @@ public class UserService {
                         .helpedCount(u.getHelpedCount())
                         .debtCount(u.getDebtCount())
                         .avatarUrl(imageService.refreshUrl(u.getAvatarUrl()))
+                        .city(u.getCity())
+                        .nicknameColor(u.getNicknameColor())
                         .build())
                 .collect(Collectors.toList());
     }

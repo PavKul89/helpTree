@@ -35,11 +35,15 @@ public interface HelpRepository extends JpaRepository<Help, Long> {
     @Query("SELECT h FROM Help h JOIN FETCH h.post JOIN FETCH h.helper JOIN FETCH h.receiver WHERE h.post.id = :postId AND (h.deleted = false OR h.deleted IS NULL)")
     List<Help> findByPostId(@Param("postId") Long postId);
 
-    @EntityGraph(attributePaths = {"helper", "receiver"})
+    @EntityGraph(attributePaths = {"post", "helper", "receiver"})
+    @Query("SELECT h FROM Help h WHERE h.post.id = :postId AND (h.deleted = false OR h.deleted IS NULL)")
+    Page<Help> findByPostId(@Param("postId") Long postId, Pageable pageable);
+
+    @EntityGraph(attributePaths = {"post", "helper", "receiver"})
     @Query("SELECT h FROM Help h WHERE h.helper = :helper AND (h.deleted = false OR h.deleted IS NULL)")
     Page<Help> findByHelperWithDetails(@Param("helper") User helper, Pageable pageable);
 
-    @EntityGraph(attributePaths = {"helper", "receiver"})
+    @EntityGraph(attributePaths = {"post", "helper", "receiver"})
     @Query("SELECT h FROM Help h WHERE h.receiver = :receiver AND (h.deleted = false OR h.deleted IS NULL)")
     Page<Help> findByReceiverWithDetails(@Param("receiver") User receiver, Pageable pageable);
 

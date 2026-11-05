@@ -1,5 +1,6 @@
 import api from './axios';
 import { createIdempotencyKey } from '../utils/idempotency';
+import { collectAllPages, type PageResponse } from './pagination';
 import type {
   Post,
   CreatePostRequest,
@@ -12,36 +13,56 @@ import type {
   Report,
 } from '../types';
 
-interface PostsResponse {
-  content: Post[];
-  totalElements: number;
-  totalPages: number;
-  number: number;
+export interface PostsQuery {
+  page?: number;
+  size?: number;
+  userId?: number;
+  status?: string;
+  title?: string;
+  authorName?: string;
+  category?: string;
+  city?: string;
+  sort?: string;
+}
+
+export interface MapPostsQuery {
+  page?: number;
+  size?: number;
+  /** minLat,minLng,maxLat,maxLng */
+  bbox?: string;
+  latitude?: number;
+  longitude?: number;
+  radius?: number;
+  status?: string;
+  category?: string;
+  city?: string;
+  q?: string;
 }
 
 export const postsApi = {
   getAll: async (
-    params?: {
-      page?: number;
-      size?: number;
-      userId?: number;
-      status?: string;
-      title?: string;
-      authorName?: string;
-      category?: string;
-      city?: string;
-      sort?: string;
-    },
+    params?: PostsQuery,
     signal?: AbortSignal
-  ): Promise<PostsResponse> => {
-    const response = await api.get<PostsResponse>('/api/posts', { params, signal });
+  ): Promise<PageResponse<Post>> => {
+    const response = await api.get<PageResponse<Post>>('/api/posts', { params, signal });
     return response.data;
   },
 
-  getByUser: async (userId: number): Promise<Post[]> => {
-    const response = await api.get<Post[]>(`/api/posts/user/${userId}`);
+  getByUser: async (
+    userId: number,
+    params?: { page?: number; size?: number },
+    signal?: AbortSignal
+  ): Promise<PageResponse<Post>> => {
+    const response = await api.get<PageResponse<Post>>(`/api/posts/user/${userId}`, {
+      params,
+      signal,
+    });
     return response.data;
   },
+
+  /** Loads every post of a user in bounded pages. */
+  getAllByUser: async (userId: number, signal?: AbortSignal): Promise<Post[]> =>
+    collectAllPages((page, size) => postsApi.getByUser(userId, { page, size }, signal)),
 
   getById: async (id: number): Promise<Post> => {
     const response = await api.get<Post>(`/api/posts/${id}`);
@@ -99,8 +120,16 @@ export const postsApi = {
     return response.data;
   },
 
-  getMapPosts: async (signal?: AbortSignal): Promise<Post[]> => {
-    const response = await api.get<Post[]>('/api/posts/map', { signal });
+  /**
+   * Server-filtered map page. The backend applies bbox/radius, status,
+   * category, city and text filters before pagination, so the client never
+   * receives an unbounded feed.
+   */
+  getMapPosts: async (
+    params?: MapPostsQuery,
+    signal?: AbortSignal
+  ): Promise<PageResponse<Post>> => {
+    const response = await api.get<PageResponse<Post>>('/api/posts/map', { params, signal });
     return response.data;
   },
 

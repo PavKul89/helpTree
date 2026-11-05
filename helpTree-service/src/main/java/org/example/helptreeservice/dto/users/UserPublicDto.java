@@ -16,5 +16,6 @@ public class UserPublicDto {
     private Integer helpedCount;
     private Integer debtCount;
     private String avatarUrl;
+    private String city;
     private String nicknameColor;
 }
