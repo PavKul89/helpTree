@@ -6,32 +6,40 @@ import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import io.minio.RemoveObjectArgs;
 import io.minio.SetBucketPolicyArgs;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.example.helptreeservice.config.ImageUploadProperties;
+import org.example.helptreeservice.dto.images.ProcessedImage;
+import org.example.helptreeservice.entity.ImageObject;
+import org.example.helptreeservice.enums.ImagePurpose;
 import org.example.helptreeservice.exception.BadRequestException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 
 @Service
+@RequiredArgsConstructor
 @Slf4j
 public class ImageService {
 
     private final MinioClient siloClient;
     private final Executor imageUploadExecutor;
-
-    @Value("${upload.max-size}")
-    private long maxSize;
-
-    @Value("${upload.allowed-types}")
-    private List<String> allowedTypes;
+    private final ImageProcessor imageProcessor;
+    private final ImageObjectService imageObjectService;
+    private final ImageUploadProperties properties;
 
     @Value("${silo.public-endpoint}")
     private String publicEndpoint;
@@ -41,115 +49,138 @@ public class ImageService {
 
     private volatile boolean bucketInitialized;
 
-    public ImageService(MinioClient siloClient, Executor imageUploadExecutor) {
-        this.siloClient = siloClient;
-        this.imageUploadExecutor = imageUploadExecutor;
+    public String upload(MultipartFile file, Long ownerId, ImagePurpose purpose) {
+        if (file == null) {
+            throw new BadRequestException("Файл не выбран");
+        }
+        List<String> urls = uploadMultiple(List.of(file), ownerId, purpose);
+        return urls.get(0);
     }
 
-    public String upload(MultipartFile file) {
-        validateFile(file);
-        String filename = generateFilename(file);
+    /**
+     * Validates and stores one or more files atomically from the caller's point
+     * of view: if any step fails, every object already written to Silo is
+     * removed again and no ownership row is committed.
+     */
+    public List<String> uploadMultiple(List<MultipartFile> files, Long ownerId, ImagePurpose purpose) {
+        if (files == null) {
+            throw new BadRequestException("Файлы не выбраны");
+        }
+        List<MultipartFile> present = files.stream()
+                .filter(file -> file != null && !file.isEmpty())
+                .toList();
+        if (present.isEmpty()) {
+            throw new BadRequestException("Файлы не выбраны");
+        }
+        if (present.size() > properties.getMaxFiles()) {
+            throw new BadRequestException("Слишком много файлов: максимум "
+                    + properties.getMaxFiles());
+        }
 
-        try (InputStream input = file.getInputStream()) {
+        long totalSize = 0;
+        for (MultipartFile file : present) {
+            validateFileSize(file);
+            totalSize = Math.addExact(totalSize, file.getSize());
+        }
+        if (totalSize > properties.getMaxRequestSize()) {
+            throw new BadRequestException("Суммарный размер файлов превышает "
+                    + humanMegabytes(properties.getMaxRequestSize()));
+        }
+
+        List<ProcessedImage> processed = new ArrayList<>(present.size());
+        for (MultipartFile file : present) {
+            processed.add(imageProcessor.process(readBytes(file)));
+        }
+
+        return store(processed, ownerId, purpose);
+    }
+
+    private List<String> store(List<ProcessedImage> images, Long ownerId, ImagePurpose purpose) {
+        List<String> uploadedKeys = new ArrayList<>(images.size());
+        List<String> urls = new ArrayList<>(images.size());
+        try {
             ensureBucket();
-            siloClient.putObject(PutObjectArgs.builder()
-                    .bucket(bucket)
-                    .object(filename)
-                    .stream(input, file.getSize(), -1)
-                    .contentType(file.getContentType())
-                    .build());
-            log.info("Изображение загружено в Silo: {}", filename);
-            return publicEndpoint.replaceAll("/+$", "") + "/" + bucket + "/" + filename;
+            for (ProcessedImage image : images) {
+                String objectKey = UUID.randomUUID() + image.extension();
+                putObject(objectKey, image);
+                uploadedKeys.add(objectKey);
+                urls.add(publicUrl(objectKey));
+            }
+
+            List<ImageObjectService.NewImage> registrations = new ArrayList<>(images.size());
+            for (int i = 0; i < images.size(); i++) {
+                ProcessedImage image = images.get(i);
+                registrations.add(new ImageObjectService.NewImage(
+                        uploadedKeys.get(i),
+                        urls.get(i),
+                        image.contentType(),
+                        image.data().length,
+                        image.width(),
+                        image.height(),
+                        image.sha256()));
+            }
+            imageObjectService.register(ownerId, registrations, purpose);
+            return urls;
         } catch (Exception e) {
+            for (String key : uploadedKeys) {
+                tryRemoveObject(key);
+            }
+            if (e instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
             log.error("Ошибка загрузки изображения в Silo: {}", e.getMessage(), e);
             throw new RuntimeException("Ошибка загрузки изображения", e);
         }
     }
 
-    private synchronized void ensureBucket() throws Exception {
-        if (bucketInitialized) {
-            return;
+    private void putObject(String objectKey, ProcessedImage image) throws Exception {
+        try (InputStream input = new ByteArrayInputStream(image.data())) {
+            siloClient.putObject(PutObjectArgs.builder()
+                    .bucket(bucket)
+                    .object(objectKey)
+                    .stream(input, image.data().length, -1)
+                    .contentType(image.contentType())
+                    .build());
         }
-        if (!siloClient.bucketExists(BucketExistsArgs.builder().bucket(bucket).build())) {
-            siloClient.makeBucket(MakeBucketArgs.builder().bucket(bucket).build());
-        }
-        String policy = """
-                {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"AWS":["*"]},"Action":["s3:GetObject"],"Resource":["arn:aws:s3:::%s/*"]}]}
-                """.formatted(bucket);
-        siloClient.setBucketPolicy(SetBucketPolicyArgs.builder()
-                .bucket(bucket)
-                .config(policy)
-                .build());
-        bucketInitialized = true;
+        log.info("Изображение загружено в Silo: {} ({} байт, {})",
+                objectKey, image.data().length, image.contentType());
     }
 
-    public List<String> uploadMultiple(List<MultipartFile> files) {
-        List<String> urls = new ArrayList<>();
-        for (MultipartFile file : files) {
-            if (file != null && !file.isEmpty()) {
-                urls.add(upload(file));
-            }
-        }
-        return urls;
+    public CompletableFuture<String> uploadAsync(MultipartFile file, Long ownerId, ImagePurpose purpose) {
+        return CompletableFuture.supplyAsync(
+                () -> upload(file, ownerId, purpose), imageUploadExecutor);
+    }
+
+    public CompletableFuture<List<String>> uploadMultipleAsync(
+            List<MultipartFile> files, Long ownerId, ImagePurpose purpose) {
+        // One task for the whole batch keeps compensation simple: either every
+        // object is registered or every object is removed.
+        return CompletableFuture.supplyAsync(
+                () -> uploadMultiple(files, ownerId, purpose), imageUploadExecutor);
     }
 
     /**
-     * Explicit offload instead of {@code @Async}: a call from
-     * {@link #uploadMultipleAsync} is a self-invocation and would bypass the
-     * Spring proxy, silently running on the caller thread. Submitting directly
-     * to the injected executor always uses the intended pool.
+     * Deletes an owned image (owner or admin). The object key always comes from
+     * the ownership row, never from the client-supplied URL, so a crafted URL
+     * cannot address another user's object.
      */
-    public CompletableFuture<String> uploadAsync(MultipartFile file) {
-        return CompletableFuture.supplyAsync(() -> upload(file), imageUploadExecutor);
+    public void deleteImage(Long requesterId, String role, String url) {
+        Optional<ImageObject> marked = imageObjectService.markDeletedByUser(requesterId, role, url);
+        marked.ifPresent(object -> scheduleRemovalAfterCommit(object.getObjectKey()));
     }
 
-    public CompletableFuture<List<String>> uploadMultipleAsync(List<MultipartFile> files) {
-        List<CompletableFuture<String>> futures = files.stream()
-                .filter(f -> f != null && !f.isEmpty())
-                .map(this::uploadAsync)
-                .toList();
-        return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-                .thenApply(v -> futures.stream()
-                        .map(CompletableFuture::join)
-                        .toList());
+    /**
+     * Releases the previous avatar after a successful replacement. If a post
+     * still references the same bytes, the object is kept and only stops being
+     * the current avatar.
+     */
+    public void releaseReplacedAvatar(Long ownerId, String oldUrl) {
+        imageObjectService.releaseReplacedAvatar(ownerId, oldUrl)
+                .ifPresent(object -> scheduleRemovalAfterCommit(object.getObjectKey()));
     }
 
-    public void delete(String url) {
-        if (url == null || url.isBlank()) {
-            return;
-        }
-        try {
-            URI imageUri = URI.create(url);
-            String imagePath = imageUri.getPath();
-            String objectPrefix = "/" + bucket + "/";
-            if (imagePath != null && imagePath.startsWith(objectPrefix)
-                    && sameOrigin(imageUri, URI.create(publicEndpoint))) {
-                String objectName = imagePath.substring(objectPrefix.length());
-                if (!objectName.isBlank() && !objectName.contains("/")) {
-                    ensureBucket();
-                    siloClient.removeObject(RemoveObjectArgs.builder()
-                            .bucket(bucket)
-                            .object(objectName)
-                            .build());
-                    log.info("Изображение удалено из Silo: {}", objectName);
-                }
-                return;
-            }
-
-        } catch (Exception e) {
-            log.error("Ошибка удаления изображения: {}", e.getMessage(), e);
-            throw new RuntimeException("Ошибка удаления изображения", e);
-        }
-    }
-
-    private boolean sameOrigin(URI first, URI second) {
-        return first.getScheme() != null
-                && first.getHost() != null
-                && second.getScheme() != null
-                && second.getHost() != null
-                && first.getScheme().equalsIgnoreCase(second.getScheme())
-                && first.getHost().equalsIgnoreCase(second.getHost())
-                && first.getPort() == second.getPort();
+    public void claimOwnedImages(Long ownerId, List<String> urls, ImagePurpose purpose) {
+        imageObjectService.claimForOwner(ownerId, urls, purpose);
     }
 
     public String refreshUrl(String storedUrl) {
@@ -166,37 +197,125 @@ public class ImageService {
         return urls;
     }
 
-    private void validateFile(MultipartFile file) {
+    public Optional<String> extractObjectKey(String url) {
+        if (url == null || url.isBlank()) {
+            return Optional.empty();
+        }
+        try {
+            URI uri = URI.create(url);
+            String imagePath = uri.getPath();
+            String objectPrefix = "/" + bucket + "/";
+            if (imagePath == null || !imagePath.startsWith(objectPrefix)) {
+                return Optional.empty();
+            }
+            String objectName = imagePath.substring(objectPrefix.length());
+            if (objectName.isBlank()
+                    || objectName.contains("/")
+                    || objectName.contains("..")
+                    || objectName.contains("\\")) {
+                return Optional.empty();
+            }
+            return Optional.of(objectName);
+        } catch (IllegalArgumentException e) {
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * Best-effort removal used by the cleanup job. Returning false leaves the
+     * tombstone in place so the next run retries instead of silently losing the
+     * object reference.
+     */
+    public boolean tryRemoveObject(String objectKey) {
+        if (objectKey == null || objectKey.isBlank()) {
+            return true;
+        }
+        try {
+            deleteObject(objectKey);
+            return true;
+        } catch (Exception e) {
+            log.warn("Не удалось удалить объект {} из Silo: {}", objectKey, e.getMessage());
+            return false;
+        }
+    }
+
+    private void scheduleRemovalAfterCommit(String objectKey) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    tryRemoveObject(objectKey);
+                }
+            });
+            return;
+        }
+        // markDeletedByUser owns its transaction when there is no outer one, so
+        // the tombstone is already durable here.
+        tryRemoveObject(objectKey);
+    }
+
+    private void deleteObject(String objectKey) throws Exception {
+        siloClient.removeObject(RemoveObjectArgs.builder()
+                .bucket(bucket)
+                .object(objectKey)
+                .build());
+        log.info("Изображение удалено из Silo: {}", objectKey);
+    }
+
+    private synchronized void ensureBucket() throws Exception {
+        if (bucketInitialized) {
+            return;
+        }
+        if (!siloClient.bucketExists(BucketExistsArgs.builder().bucket(bucket).build())) {
+            siloClient.makeBucket(MakeBucketArgs.builder().bucket(bucket).build());
+        }
+        // Public read-only access. There is deliberately no ListBucket, no
+        // anonymous PutObject and no DeleteObject: only the server credentials
+        // can write or remove objects.
+        String policy = """
+                {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"AWS":["*"]},"Action":["s3:GetObject"],"Resource":["arn:aws:s3:::%s/*"]}]}
+                """.formatted(bucket);
+        siloClient.setBucketPolicy(SetBucketPolicyArgs.builder()
+                .bucket(bucket)
+                .config(policy)
+                .build());
+        bucketInitialized = true;
+    }
+
+    private String publicUrl(String objectKey) {
+        return publicEndpoint.replaceAll("/+$", "") + "/" + bucket + "/" + objectKey;
+    }
+
+    private void validateFileSize(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new BadRequestException("Файл не выбран");
         }
-
-        if (file.getSize() > maxSize) {
-            throw new BadRequestException("Размер файла превышает 10MB");
+        if (file.getSize() <= 0) {
+            throw new BadRequestException("Файл пустой");
         }
-
-        String contentType = file.getContentType();
-        if (contentType == null || !allowedTypes.contains(contentType)) {
-            throw new BadRequestException("Недопустимый тип файла. Разрешены: jpg, png, webp, gif");
+        if (file.getSize() > properties.getMaxSize()) {
+            throw new BadRequestException("Размер файла превышает "
+                    + humanMegabytes(properties.getMaxSize()));
         }
     }
 
-    private String generateFilename(MultipartFile file) {
-        String ext = getExtension(file.getContentType());
-        return UUID.randomUUID() + ext;
-    }
-
-    private String getExtension(String contentType) {
-        if (contentType == null) {
-            return ".jpg";
+    private byte[] readBytes(MultipartFile file) {
+        try {
+            byte[] bytes = file.getBytes();
+            if (bytes.length == 0) {
+                throw new BadRequestException("Файл пустой");
+            }
+            if (bytes.length > properties.getMaxSize()) {
+                throw new BadRequestException("Размер файла превышает "
+                        + humanMegabytes(properties.getMaxSize()));
+            }
+            return bytes;
+        } catch (IOException e) {
+            throw new BadRequestException("Не удалось прочитать файл");
         }
-        return switch (contentType) {
-            case "image/jpeg" -> ".jpg";
-            case "image/png" -> ".png";
-            case "image/webp" -> ".webp";
-            case "image/gif" -> ".gif";
-            default -> ".jpg";
-        };
     }
 
+    private String humanMegabytes(long bytes) {
+        return (bytes / (1024 * 1024)) + " МБ";
+    }
 }

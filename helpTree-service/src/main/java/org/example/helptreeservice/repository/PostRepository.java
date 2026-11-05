@@ -97,4 +97,12 @@ public interface PostRepository extends JpaRepository<Post, Long>, JpaSpecificat
 
     @Query("SELECT p.commentsCount FROM Post p WHERE p.id = :postId")
     Integer findCommentsCountById(@Param("postId") Long postId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = "DELETE FROM post_images WHERE image_url = :url", nativeQuery = true)
+    int deletePostImageUrl(@Param("url") String url);
+
+    @Query(value = "SELECT EXISTS(SELECT 1 FROM post_images WHERE image_url = :url)",
+           nativeQuery = true)
+    boolean existsPostImageUrl(@Param("url") String url);
 }

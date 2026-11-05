@@ -8,6 +8,7 @@ import org.example.helptreeservice.dto.posts.UpdatePostRequest;
 import org.example.helptreeservice.dto.wallet.WalletOperationResult;
 import org.example.helptreeservice.entity.Post;
 import org.example.helptreeservice.entity.User;
+import org.example.helptreeservice.enums.ImagePurpose;
 import org.example.helptreeservice.enums.PostStatus;
 import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.ConflictException;
@@ -93,6 +94,9 @@ public class PostService {
             }
             
             if (request.getImageUrls() != null && !request.getImageUrls().isEmpty()) {
+                // Every attachment must be an active object uploaded by this
+                // author. A client cannot inject somebody else's URL.
+                imageService.claimOwnedImages(authorId, request.getImageUrls(), ImagePurpose.POST);
                 post.setImageUrls(request.getImageUrls());
             }
 
@@ -230,6 +234,10 @@ public class PostService {
             }
 
             if (request.getImageUrls() != null) {
+                if (!request.getImageUrls().isEmpty()) {
+                    imageService.claimOwnedImages(
+                            post.getUser().getId(), request.getImageUrls(), ImagePurpose.POST);
+                }
                 post.setImageUrls(request.getImageUrls());
                 changed = true;
                 log.debug("Обновлен список изображений");

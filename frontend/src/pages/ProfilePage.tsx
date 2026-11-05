@@ -424,7 +424,7 @@ export const ProfilePage = () => {
                 ref={avatarInputRef}
                 className="profile-file-input"
                 type="file"
-                accept="image/*"
+                accept="image/jpeg,image/png,image/gif"
                 onChange={handleAvatarChange}
                 aria-label="Выберите фото профиля"
               />

@@ -1,9 +1,9 @@
-# Миграции базы данных (Block 6–10)
+# Миграции базы данных (Block 6–11)
 
 Документ описывает политику миграций, восстановление схемы после V33,
 безопасную стратегию для V3, порядок проверки/отката, проекцию статистики
-рейтинга (V43), серверную карту/поиск (V46) и индексы производительности
-Block 10 (V47).
+рейтинга (V43), серверную карту/поиск (V46), индексы производительности
+Block 10 (V47) и владение объектами изображений Block 11 (V48).
 
 ## 1. Политика
 
@@ -263,6 +263,64 @@ FALSE`. Это совпадает с предикатами приложения
 Проверка: `scripts/fixtures/verify_block10_schema.sql` проверяет наличие всех
 индексов V47 и их partial-условия/порядок колонок.
 
+### 5.5. Владение изображениями (V48)
+
+V48 — аддитивная миграция Block 11. Она создаёт `image_objects` — реестр
+объектов, которые приложение хранит в Silo, — и не удаляет существующие
+данные.
+
+Схема:
+
+- `owner_id` → `users(id)` с `ON DELETE CASCADE`;
+- `object_key` уникален и генерируется только сервером (UUID + расширение);
+- `url` хранится отдельно от ключа, чтобы клиент не мог подменить адрес
+  объекта;
+- `content_type`, `size_bytes`, `width`, `height`, `sha256` описывают уже
+  перекодированные байты, которые реально лежат в bucket;
+- `purpose` (`AVATAR`, `POST`, `GENERAL`) и `status` (`ACTIVE`, `DELETED`)
+  вместе с `deleted_at` образуют tombstone-модель;
+- `chk_image_objects_deleted_state` запрещает `ACTIVE` с `deleted_at` и
+  `DELETED` без него.
+
+Индексы:
+
+- `idx_image_objects_owner_active` — подсчёт квоты по `owner_id` только для
+  `ACTIVE`;
+- `idx_image_objects_deleted_cleanup` — выборка tombstone по `deleted_at`;
+- `idx_image_objects_orphan_candidates` — кандидаты на очистку по
+  `created_at, id` только для `ACTIVE`;
+- `idx_image_objects_url` — поиск активного объекта по публичному URL при
+  удалении.
+
+Backfill:
+
+- аватары `users.avatar_url` и изображения `post_images.image_url`, которые
+  указывают на стандартный bucket `helptree-images`, получают `ACTIVE`-строки;
+- существующие объекты в bucket не изменяются и не удаляются;
+- для legacy-строк размер неизвестен (`size_bytes = 0`), размеры и SHA-256
+  остаются `NULL`, но такая строка всё равно считается одним объектом квоты;
+- **важно:** при кастомном `SILO_BUCKET` backfill нужно повторить с этим именем
+  bucket, иначе cleanup сочтёт старые объекты бесхозными. Предикат V48 намеренно
+  ограничен `/helptree-images/`.
+
+Поведение приложения:
+
+- загрузка проверяет magic bytes (JPEG/PNG/GIF), лимиты размера, разрешения и
+  пикселей; JPEG/PNG перекодируются с удалением EXIF/ICC/XMP, GIF сохраняется
+  без изменений после проверки кадров;
+- квота проверяется под `SELECT ... FOR UPDATE` строки пользователя, запись
+  создаётся в отдельной транзакции `ImageObjectService`;
+- пост может ссылаться только на активные изображения того же автора;
+- удаление доступно владельцу или администратору: сначала отвязываются
+  `users.avatar_url`/`post_images`, затем строка становится `DELETED`, а объект
+  удаляется из Silo после commit;
+- `ImageCleanupService` батчами удаляет tombstone, бесхозные `ACTIVE`-строки
+  старше TTL и объекты в bucket без строки владения.
+
+Проверка: `scripts/fixtures/verify_block11_schema.sql` проверяет таблицу,
+типы, constraints, partial-индексы, инварианты состояния/ключей и покрытие
+backfill для стандартного bucket.
+
 ## 6. Проверка миграций
 ### 6.1 Чистая база
 
@@ -331,6 +389,10 @@ docker exec postgres psql -U helpTree -d helptree_copy_test `
 docker cp scripts/fixtures/verify_block10_schema.sql postgres:/tmp/verify_block10_schema.sql
 docker exec postgres psql -U helpTree -d helptree_copy_test `
   -v ON_ERROR_STOP=1 -f /tmp/verify_block10_schema.sql
+
+docker cp scripts/fixtures/verify_block11_schema.sql postgres:/tmp/verify_block11_schema.sql
+docker exec postgres psql -U helpTree -d helptree_copy_test `
+  -v ON_ERROR_STOP=1 -f /tmp/verify_block11_schema.sql
 ```
 
 Проверьте, что количество строк в `users`, `posts`, `helps`, `chats`,
@@ -358,6 +420,7 @@ psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block7_schema.sql
 psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block8_schema.sql
 psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block9_schema.sql
 psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block10_schema.sql
+psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block11_schema.sql
 ```
 
 ## 7. Backup перед миграцией
@@ -410,8 +473,13 @@ V45 — тоже аддитивная (колонки, constraints, индекс
 `geocoding_cache` приведёт лишь к повторному заполнению очереди при следующей
 миграции. V47 — только индексы; отдельного rollback-скрипта не имеет. Откат
 кода безопасен: старые версии не зависят от новых индексов, а `DROP INDEX`
-не требуется для работы приложения. Для точного состояния до V43 восстановите
-backup.
+не требуется для работы приложения. V48 — аддитивная (таблица `image_objects`,
+индексы и backfill); отдельного rollback-скрипта не имеет. Перед откатом кода
+отключите `upload.cleanup.enabled`: старая версия не знает о реестре и не
+обновляет его. Удаление таблицы не удаляет объекты из Silo, но теряет
+информацию о владельцах и размерах; после повторного применения V48 backfill
+восстановит только строки стандартного bucket. Для точного состояния до V43
+восстановите backup.
 
 ## 9. Ограничения и замечания
 
@@ -446,3 +514,11 @@ backup.
   так как имена и определения совпадают. Retention-удаление истории рейтингов
   выполняется приложением батчами (`RatingHistoryCleanupService`), а не внутри
   миграции.
+- V48 индексирует таблицу владения изображениями, но сам bucket живёт вне
+  транзакций PostgreSQL. Согласованность обеспечивается порядком операций
+  (Silo → commit строки, при ошибке — компенсация) и cleanup-джобом; строгой
+  распределённой транзакции между БД и Silo нет. Legacy-строки имеют
+  `size_bytes = 0` и `NULL` в размерах/SHA-256, поэтому квота для них считается
+  по количеству объектов, а не по байтам. Bucket scan удаляет только объекты
+  без строки владения; если bucket используется другим приложением, его нужно
+  отключить (`upload.cleanup.bucket-scan-enabled=false`).

@@ -88,4 +88,13 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
     @Query("UPDATE User u SET u.blockedAt = NULL, u.blockedUntil = NULL, u.updatedAt = CURRENT_TIMESTAMP " +
            "WHERE u.deleted = false AND u.blockedUntil IS NOT NULL AND u.blockedUntil < :now")
     int unblockExpiredUsers(@Param("now") LocalDateTime now);
+
+    /**
+     * Detaches a deleted image from every profile that still points at it.
+     * Bulk UPDATE keeps the operation atomic with the ownership tombstone and
+     * avoids loading every matching user.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("UPDATE User u SET u.avatarUrl = NULL WHERE u.avatarUrl = :url")
+    int clearAvatarUrl(@Param("url") String url);
 }

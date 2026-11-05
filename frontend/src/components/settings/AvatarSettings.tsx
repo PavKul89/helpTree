@@ -16,8 +16,8 @@ import { useToast } from '../Toast';
 import { SettingsSection } from './SettingsSection';
 
 const MAX_AVATAR_SIZE = 10 * 1024 * 1024;
-const ALLOWED_AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-const ALLOWED_AVATAR_EXTENSIONS = '.jpg,.jpeg,.png,.webp,.gif';
+const ALLOWED_AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/gif'];
+const ALLOWED_AVATAR_EXTENSIONS = '.jpg,.jpeg,.png,.gif';
 
 const formatFileSize = (bytes: number): string => {
   if (bytes < 1024 * 1024) {
@@ -31,7 +31,7 @@ const validateAvatarFile = (file: File): string | null => {
     return 'Файл пустой. Выберите другое изображение.';
   }
   if (!ALLOWED_AVATAR_TYPES.includes(file.type)) {
-    return 'Поддерживаются только JPG, PNG, WebP и GIF.';
+    return 'Поддерживаются только JPG, PNG и GIF.';
   }
   if (file.size > MAX_AVATAR_SIZE) {
     return 'Размер файла не должен превышать 10 МБ.';
@@ -133,7 +133,7 @@ export const AvatarSettings: React.FC<AvatarSettingsProps> = ({
       id="avatar"
       eyebrow="Фотография профиля"
       title="Аватар"
-      description="Фото отображается в профиле, меню и рядом с вашими сообщениями. Поддерживаются JPG, PNG, WebP и GIF размером до 10 МБ."
+      description="Фото отображается в профиле, меню и рядом с вашими сообщениями. Поддерживаются JPG, PNG и GIF размером до 10 МБ."
       icon={<Camera size={22} />}
     >
       <div className="settings-avatar-layout">

@@ -29,7 +29,7 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const MAX_TOTAL_SIZE = 50 * 1024 * 1024;
 const MAX_TITLE_LENGTH = 200;
 const MAX_DESCRIPTION_LENGTH = 2000;
-const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'] as const;
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif'] as const;
 
 type PostFormMode = 'create' | 'edit';
 
@@ -501,7 +501,7 @@ export const PostForm = ({
       const key = getFileKey(file);
 
       if (!ALLOWED_IMAGE_TYPES.includes(file.type as (typeof ALLOWED_IMAGE_TYPES)[number])) {
-        errors.push(`«${file.name}»: поддерживаются только JPG, PNG, WebP и GIF.`);
+        errors.push(`«${file.name}»: поддерживаются только JPG, PNG и GIF.`);
         return;
       }
 
@@ -896,7 +896,7 @@ export const PostForm = ({
               <input
                 className="post-form-file-input"
                 type="file"
-                accept="image/jpeg,image/png,image/webp,image/gif"
+                accept="image/jpeg,image/png,image/gif"
                 multiple
                 disabled={isSubmitting}
                 onChange={(event) => {
@@ -910,7 +910,7 @@ export const PostForm = ({
               <strong>Перетащите фотографии сюда</strong>
               <span>или нажмите, чтобы выбрать файлы на устройстве</span>
               <span className="post-form-upload-rules">
-                JPG, PNG, WebP или GIF · до 10 МБ каждое · суммарно до 50 МБ
+                JPG, PNG или GIF · до 10 МБ каждое · суммарно до 50 МБ
               </span>
             </label>
 

@@ -81,7 +81,6 @@ public class SecurityConfig {
                         "/api/auth/password/reset/confirm",
                         "/api/auth/email/verification/confirm",
                         "/api/auth/email/change/confirm").permitAll()
-                .requestMatchers("/api/images/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/posts/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/stats").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/search").permitAll()

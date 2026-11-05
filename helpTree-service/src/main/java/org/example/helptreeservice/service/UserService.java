@@ -6,6 +6,7 @@ import org.example.helptreeservice.dto.users.UpdateUserRequest;
 import org.example.helptreeservice.dto.users.UserDto;
 import org.example.helptreeservice.dto.users.UserPublicDto;
 import org.example.helptreeservice.entity.User;
+import org.example.helptreeservice.enums.ImagePurpose;
 import org.example.helptreeservice.enums.Role;
 import org.example.helptreeservice.enums.UserStatus;
 import org.example.helptreeservice.exception.ConflictException;
@@ -543,11 +544,20 @@ public class UserService {
 
     public String uploadAvatar(Long userId, MultipartFile file) {
         log.info("Загрузка аватара для пользователя ID: {}", userId);
-        User user = getUserEntityById(userId);
-        String avatarUrl = imageService.upload(file);
+        User user = getUserEntityByIdForUpdate(userId);
+        String previousAvatar = user.getAvatarUrl();
+
+        String avatarUrl = imageService.upload(file, userId, ImagePurpose.AVATAR);
         user.setAvatarUrl(avatarUrl);
         userRepository.save(user);
         publicProfileCache.evictAfterCommit(userId);
+
+        // The old object is released after the new avatar is assigned, so a
+        // shared post image is never removed just because the avatar changed.
+        if (previousAvatar != null && !previousAvatar.equals(avatarUrl)) {
+            imageService.releaseReplacedAvatar(userId, previousAvatar);
+        }
+
         log.info("Аватар для пользователя ID {} загружен: {}", userId, avatarUrl);
         return avatarUrl;
     }

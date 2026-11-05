@@ -28,6 +28,8 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
 
 @RestControllerAdvice
 @Slf4j
@@ -366,6 +368,37 @@ public class GlobalExceptionHandler {
                 .path(request.getRequestURI())
                 .build();
         return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE).body(error);
+    }
+
+    @ExceptionHandler({CompletionException.class, ExecutionException.class})
+    public ResponseEntity<ErrorResponse> handleAsyncFailure(Exception ex, HttpServletRequest request) {
+        Throwable cause = ex;
+        while ((cause instanceof CompletionException || cause instanceof ExecutionException)
+                && cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+        if (cause instanceof NotFoundException e) {
+            return handleNotFoundException(e, request);
+        }
+        if (cause instanceof ConflictException e) {
+            return handleConflictException(e, request);
+        }
+        if (cause instanceof BadRequestException e) {
+            return handleBadRequestException(e, request);
+        }
+        if (cause instanceof ForbiddenException e) {
+            return handleForbiddenException(e, request);
+        }
+        if (cause instanceof UnauthorizedException e) {
+            return handleUnauthorizedException(e, request);
+        }
+        if (cause instanceof MaxUploadSizeExceededException e) {
+            return handleMaxUploadSizeExceeded(e, request);
+        }
+        // Unwrap the original exception so the generic handler logs the real
+        // cause instead of "CompletionException: ...".
+        return handleGenericException(
+                cause instanceof Exception exception ? exception : new RuntimeException(cause), request);
     }
 
     @ExceptionHandler(Exception.class)
