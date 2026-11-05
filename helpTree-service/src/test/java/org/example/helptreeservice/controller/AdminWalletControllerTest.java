@@ -43,7 +43,7 @@ class AdminWalletControllerTest {
 
     @Test
     void reconciliationShouldForbidNonAdmin() {
-        assertThrows(ForbiddenException.class, () -> controller.getReconciliation());
+        assertThrows(ForbiddenException.class, () -> controller.getReconciliation(0, 20));
         verifyNoInteractions(reconciliationService);
     }
 
@@ -57,20 +57,37 @@ class AdminWalletControllerTest {
     @Test
     void reconciliationShouldReturnAnomaliesToAdmin() {
         when(authService.isAdmin()).thenReturn(true);
-        when(reconciliationService.findAnomalies()).thenReturn(List.of(
-                BalanceAnomalyDto.builder()
-                        .userId(5L)
-                        .balance(10L)
-                        .ledgerTotal(9L)
-                        .difference(1L)
-                        .detectedAt(LocalDateTime.now())
-                        .build()));
+        when(paginationConfig.getMaxPageSize()).thenReturn(100);
+        when(reconciliationService.findAnomalies(any(Pageable.class))).thenReturn(
+                new PageImpl<>(List.of(
+                        BalanceAnomalyDto.builder()
+                                .userId(5L)
+                                .balance(10L)
+                                .ledgerTotal(9L)
+                                .difference(1L)
+                                .detectedAt(LocalDateTime.now())
+                                .build())));
 
-        var response = controller.getReconciliation();
+        var response = controller.getReconciliation(0, 20);
 
         assertEquals(200, response.getStatusCode().value());
-        assertEquals(1, response.getBody().size());
-        assertEquals(5L, response.getBody().get(0).getUserId());
+        assertEquals(1, response.getBody().getContent().size());
+        assertEquals(5L, response.getBody().getContent().get(0).getUserId());
+        assertEquals(1, response.getBody().getTotalElements());
+    }
+
+    @Test
+    void reconciliationShouldClampPageSize() {
+        when(authService.isAdmin()).thenReturn(true);
+        when(paginationConfig.getMaxPageSize()).thenReturn(100);
+        when(reconciliationService.findAnomalies(any(Pageable.class))).thenReturn(Page.empty());
+
+        controller.getReconciliation(0, 5000);
+
+        ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
+        verify(reconciliationService).findAnomalies(captor.capture());
+        assertEquals(100, captor.getValue().getPageSize());
+        assertTrue(captor.getValue().getSort().isUnsorted());
     }
 
     @Test

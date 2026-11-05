@@ -8,6 +8,8 @@ import org.example.helptreeservice.event.BalanceAnomalyEvent;
 import org.example.helptreeservice.repository.CoinTransactionRepository;
 import org.example.helptreeservice.repository.projection.BalanceMismatchProjection;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,6 +40,13 @@ public class WalletReconciliationService {
         return transactionRepository.findBalanceMismatches().stream()
                 .map(projection -> toDto(projection, now))
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public Page<BalanceAnomalyDto> findAnomalies(Pageable pageable) {
+        LocalDateTime now = LocalDateTime.now();
+        return transactionRepository.findBalanceMismatches(pageable)
+                .map(projection -> toDto(projection, now));
     }
 
     @Scheduled(cron = "${app.economy.reconciliation-cron:0 0 4 * * *}")

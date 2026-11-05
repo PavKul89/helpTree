@@ -19,6 +19,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataAccessException;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -195,6 +196,11 @@ class WalletConcurrencyIntegrationTest {
         assertEquals(7L, anomaly.getBalance());
         assertEquals(0L, anomaly.getLedgerTotal());
         assertEquals(7L, anomaly.getDifference());
+
+        var page = reconciliationService.findAnomalies(PageRequest.of(0, 1));
+        assertTrue(page.getTotalElements() >= 1);
+        assertEquals(1, page.getSize());
+        assertTrue(page.getContent().size() <= 1);
 
         reconciliationService.reconcile();
 

@@ -3,6 +3,7 @@ package org.example.helptreeservice.controller;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import org.example.helptreeservice.config.PaginationConfig;
+import org.example.helptreeservice.dto.common.PageResponse;
 import org.example.helptreeservice.dto.wallet.AdminCoinAuditDto;
 import org.example.helptreeservice.dto.wallet.BalanceAnomalyDto;
 import org.example.helptreeservice.entity.AdminCoinAudit;
@@ -36,9 +37,13 @@ public class AdminWalletController {
     private final PaginationConfig paginationConfig;
 
     @GetMapping("/reconciliation")
-    public ResponseEntity<List<BalanceAnomalyDto>> getReconciliation() {
+    public ResponseEntity<PageResponse<BalanceAnomalyDto>> getReconciliation(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
         requireAdmin();
-        return ResponseEntity.ok(reconciliationService.findAnomalies());
+        Pageable pageable = resolveReconciliationPageable(page, size);
+        return ResponseEntity.ok(PageResponse.from(
+                reconciliationService.findAnomalies(pageable)));
     }
 
     @GetMapping("/audits")
@@ -79,6 +84,21 @@ public class AdminWalletController {
         }
         int resolvedSize = Math.min(size, paginationConfig.getMaxPageSize());
         return PageRequest.of(page, resolvedSize, Sort.by(Sort.Direction.DESC, "createdAt"));
+    }
+
+    /**
+     * Anomalies are aggregated by user id; the native query already orders by
+     * it, so the Pageable must stay unsorted.
+     */
+    private Pageable resolveReconciliationPageable(int page, int size) {
+        if (page < 0) {
+            throw new BadRequestException("Параметр page не может быть отрицательным");
+        }
+        if (size < 1) {
+            throw new BadRequestException("Параметр size должен быть положительным");
+        }
+        int resolvedSize = Math.min(size, paginationConfig.getMaxPageSize());
+        return PageRequest.of(page, resolvedSize);
     }
 
     private AdminCoinAuditDto toDto(AdminCoinAudit audit) {

@@ -49,4 +49,31 @@ public interface CoinTransactionRepository extends JpaRepository<CoinTransaction
             ORDER BY u.id
             """, nativeQuery = true)
     List<BalanceMismatchProjection> findBalanceMismatches();
+
+    /**
+     * Paginated variant for the admin endpoint. The scheduled reconciliation
+     * still uses the unpaginated list because it must log every anomaly.
+     */
+    @Query(value = """
+            SELECT u.id AS "userId",
+                   u.help_coins AS "balance",
+                   COALESCE(SUM(ct.amount), 0) AS "ledgerTotal"
+            FROM users u
+            LEFT JOIN coin_transactions ct ON ct.user_id = u.id
+            WHERE COALESCE(u.deleted, FALSE) = FALSE
+            GROUP BY u.id, u.help_coins
+            HAVING u.help_coins <> COALESCE(SUM(ct.amount), 0)
+            ORDER BY u.id
+            """, countQuery = """
+            SELECT COUNT(*)
+            FROM (
+                SELECT u.id
+                FROM users u
+                LEFT JOIN coin_transactions ct ON ct.user_id = u.id
+                WHERE COALESCE(u.deleted, FALSE) = FALSE
+                GROUP BY u.id, u.help_coins
+                HAVING u.help_coins <> COALESCE(SUM(ct.amount), 0)
+            ) mismatches
+            """, nativeQuery = true)
+    Page<BalanceMismatchProjection> findBalanceMismatches(Pageable pageable);
 }
