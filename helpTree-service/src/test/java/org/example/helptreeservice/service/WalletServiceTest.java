@@ -39,6 +39,7 @@ class WalletServiceTest {
     @Mock private CoinTransactionRepository transactionRepository;
     @Mock private AdminCoinAuditRepository adminAuditRepository;
     @Mock private RatingService ratingService;
+    @Mock private PublicProfileCache publicProfileCache;
 
     private EconomyConfig economyConfig;
     private WalletService walletService;
@@ -50,7 +51,7 @@ class WalletServiceTest {
         PaginationConfig paginationConfig = new PaginationConfig();
         walletService = new WalletService(
                 userRepository, transactionRepository, adminAuditRepository,
-                ratingService, economyConfig, paginationConfig);
+                ratingService, economyConfig, paginationConfig, publicProfileCache);
 
         user = new User();
         user.setId(1L);

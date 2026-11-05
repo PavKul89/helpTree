@@ -3,6 +3,7 @@ package org.example.helptreeservice.repository;
 import jakarta.persistence.LockModeType;
 import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.enums.Role;
+import org.example.helptreeservice.repository.projection.GraphUserProjection;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -13,6 +14,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -51,6 +53,16 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
 
     @Query("SELECT u.id FROM User u WHERE u.id = :userId")
     Long findUserIdOnly(@Param("userId") Long userId);
+
+    /**
+     * Public graph node projection. Selecting entity fields keeps PII out of the
+     * persistence context and the response, and the single IN query replaces a
+     * per-node lookup.
+     */
+    @Query("SELECT u.id AS id, u.name AS name, u.avatarUrl AS avatarUrl, "
+            + "u.helpedCount AS helpedCount, u.debtCount AS debtCount, u.rating AS rating "
+            + "FROM User u WHERE u.id IN :ids")
+    List<GraphUserProjection> findGraphUsersByIds(@Param("ids") Collection<Long> ids);
 
     @Query(value = "SELECT post_id FROM user_favorites WHERE user_id = :userId", nativeQuery = true)
     List<Long> findFavoritePostIds(@Param("userId") Long userId);

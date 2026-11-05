@@ -294,9 +294,11 @@ export const adminApi = {
     return response.data;
   },
 
-  getUserActivities: async (id: number, limit: number = 50): Promise<Activity[]> => {
-    const response = await api.get<Activity[]>(`/api/users/${id}/activities`, { params: { limit } });
-    return response.data;
+  getUserActivities: async (id: number, size: number = 50): Promise<Activity[]> => {
+    const response = await api.get<PageResponse<Activity>>(`/api/users/${id}/activities`, {
+      params: { size },
+    });
+    return response.data.content;
   },
 
   getUserReviews: async (

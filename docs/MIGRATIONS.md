@@ -1,8 +1,9 @@
-# Миграции базы данных (Block 6–8)
+# Миграции базы данных (Block 6–10)
 
 Документ описывает политику миграций, восстановление схемы после V33,
-безопасную стратегию для V3, порядок проверки/отката и проекцию статистики
-рейтинга (V43).
+безопасную стратегию для V3, порядок проверки/отката, проекцию статистики
+рейтинга (V43), серверную карту/поиск (V46) и индексы производительности
+Block 10 (V47).
 
 ## 1. Политика
 
@@ -226,6 +227,42 @@ V46 — аддитивная миграция Block 9. Она не удаляе�
 инварианты очереди (нормализованный ключ, `FOUND` с координатами), а также
 наличие backfill-координат у видимых постов.
 
+### 5.4. Индексы производительности (V47)
+
+V47 — аддитивная миграция Block 10. Она не переписывает и не удаляет строки;
+единственное изменение схемы — индексы, обслуживающие ленту активности,
+рекурсивный граф помощи и retention истории рейтингов.
+
+Лента активности (`ActivityRepository`):
+
+- `idx_helps_helper_activity` — `(helper_id, COALESCE(confirmed_at,
+  completed_at, accepted_at, created_at) DESC, id DESC)`, partial по
+  `COALESCE(deleted, FALSE) = FALSE`;
+- `idx_helps_receiver_activity` — тот же порядок для `receiver_id`;
+- `idx_posts_user_activity` — `(user_id, created_at DESC, id DESC)`, partial;
+- `idx_achievements_user_earned` — `(user_id, earned_at DESC)`, partial по
+  `earned_at IS NOT NULL`.
+
+Граф помощи (`HelpRepository.findUserGraphEdges` / `countUserGraphEdges`):
+
+- `idx_helps_confirmed_edges` — `(helper_id, receiver_id, id)`, partial по
+  `status = 'CONFIRMED' AND COALESCE(deleted, FALSE) = FALSE`;
+- `idx_helps_confirmed_order` — `(status, confirmed_at ASC, id ASC)`, partial по
+  живым строкам; используется глобальным графом и count-запросом.
+
+Retention истории рейтингов:
+
+- `idx_rating_history_retention` — `(calculated_at ASC, id ASC)`; позволяет
+  подзапросу `DELETE ... LIMIT` выбирать идентификаторы без heap-fetch.
+
+Индексы намеренно partial: legacy-строки могут иметь `deleted = NULL`, поэтому
+условие записано как `COALESCE(deleted, FALSE) = FALSE`, а не `deleted =
+FALSE`. Это совпадает с предикатами приложения и исключает soft-deleted
+историю из индекса.
+
+Проверка: `scripts/fixtures/verify_block10_schema.sql` проверяет наличие всех
+индексов V47 и их partial-условия/порядок колонок.
+
 ## 6. Проверка миграций
 ### 6.1 Чистая база
 
@@ -254,6 +291,10 @@ docker exec postgres psql -U helpTree -d helptree_clean_test `
 docker cp scripts/fixtures/verify_block9_schema.sql postgres:/tmp/verify_block9_schema.sql
 docker exec postgres psql -U helpTree -d helptree_clean_test `
   -v ON_ERROR_STOP=1 -f /tmp/verify_block9_schema.sql
+
+docker cp scripts/fixtures/verify_block10_schema.sql postgres:/tmp/verify_block10_schema.sql
+docker exec postgres psql -U helpTree -d helptree_clean_test `
+  -v ON_ERROR_STOP=1 -f /tmp/verify_block10_schema.sql
 ```
 
 ### 6.2 Копия существующей базы
@@ -286,6 +327,10 @@ docker exec postgres psql -U helpTree -d helptree_copy_test `
 docker cp scripts/fixtures/verify_block9_schema.sql postgres:/tmp/verify_block9_schema.sql
 docker exec postgres psql -U helpTree -d helptree_copy_test `
   -v ON_ERROR_STOP=1 -f /tmp/verify_block9_schema.sql
+
+docker cp scripts/fixtures/verify_block10_schema.sql postgres:/tmp/verify_block10_schema.sql
+docker exec postgres psql -U helpTree -d helptree_copy_test `
+  -v ON_ERROR_STOP=1 -f /tmp/verify_block10_schema.sql
 ```
 
 Проверьте, что количество строк в `users`, `posts`, `helps`, `chats`,
@@ -312,6 +357,7 @@ psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block6_constraints.sql
 psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block7_schema.sql
 psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block8_schema.sql
 psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block9_schema.sql
+psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block10_schema.sql
 ```
 
 ## 7. Backup перед миграцией
@@ -325,7 +371,7 @@ docker cp postgres:/tmp/helpTree_db_pre_v41.dump .\helpTree_db_pre_v41.dump
 
 Для production используйте штатный backup PostgreSQL (`pg_basebackup` или
 `pg_dump -Fc`) и проверяйте restore на отдельной базе. Не запускайте
-V41–V46 без проверенной точки восстановления.
+V41–V47 без проверенной точки восстановления.
 
 ## 8. Rollback / recovery
 
@@ -362,7 +408,10 @@ V45 — тоже аддитивная (колонки, constraints, индекс
 отдельного rollback-скрипта не имеет. Старый код не обращается к новым
 таблицам/индексам, поэтому откат приложения безопасен; удаление
 `geocoding_cache` приведёт лишь к повторному заполнению очереди при следующей
-миграции. Для точного состояния до V43 восстановите backup.
+миграции. V47 — только индексы; отдельного rollback-скрипта не имеет. Откат
+кода безопасен: старые версии не зависят от новых индексов, а `DROP INDEX`
+не требуется для работы приложения. Для точного состояния до V43 восстановите
+backup.
 
 ## 9. Ограничения и замечания
 
@@ -390,3 +439,10 @@ V45 — тоже аддитивная (колонки, constraints, индекс
   (`app.geocoding.enabled=false`) новые города не получат координаты до
   повторного включения. Wildcard-символы `%`/`_` в поиске вырезаются до
   передачи в SQL.
+- V47 создаёт только индексы и не меняет данные. На большой базе
+  `CREATE INDEX` (без `CONCURRENTLY`) берёт блокировку записи на время
+  построения; для production предпочтите выполнить эквивалентные
+  `CREATE INDEX CONCURRENTLY` вручную, затем `flyway repair` не требуется,
+  так как имена и определения совпадают. Retention-удаление истории рейтингов
+  выполняется приложением батчами (`RatingHistoryCleanupService`), а не внутри
+  миграции.

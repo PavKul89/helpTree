@@ -21,13 +21,17 @@ class ScheduledRatingServiceTest {
 
     @Mock private UserRatingStatsRepository statsRepository;
     @Mock private RatingCalculationService calculationService;
+    @Mock private RatingHistoryCleanupService historyCleanupService;
 
     private ScheduledRatingService service;
 
     @BeforeEach
     void setUp() {
-        service = new ScheduledRatingService(statsRepository, calculationService);
+        service = new ScheduledRatingService(statsRepository, calculationService, historyCleanupService);
         ReflectionTestUtils.setField(service, "batchSize", 2);
+        ReflectionTestUtils.setField(service, "historyRetentionDays", 365);
+        ReflectionTestUtils.setField(service, "historyCleanupBatchSize", 1000);
+        ReflectionTestUtils.setField(service, "historyMaxBatchesPerRun", 10);
     }
 
     private UserRatingStats stats(long id, long userId) {
@@ -77,5 +81,38 @@ class ScheduledRatingServiceTest {
         verifyNoInteractions(calculationService);
         verify(statsRepository, times(1))
                 .findStaleStatsAfter(any(), eq(0L), any(Pageable.class));
+    }
+
+    @Test
+    void cleanupShouldDeleteInBatchesUntilBelowBatchSize() {
+        when(historyCleanupService.deleteBatch(any(), eq(1000)))
+                .thenReturn(1000, 1000, 10);
+
+        service.cleanupOldHistory();
+
+        verify(historyCleanupService, times(3)).deleteBatch(any(), eq(1000));
+    }
+
+    @Test
+    void cleanupShouldStopAtTheConfiguredBatchCap() {
+        ReflectionTestUtils.setField(service, "historyMaxBatchesPerRun", 2);
+        when(historyCleanupService.deleteBatch(any(), eq(1000))).thenReturn(1000);
+
+        service.cleanupOldHistory();
+
+        verify(historyCleanupService, times(2)).deleteBatch(any(), eq(1000));
+    }
+
+    @Test
+    void cleanupShouldNeverDeleteInsideTheRetentionWindow() {
+        when(historyCleanupService.deleteBatch(any(), eq(1000))).thenReturn(0);
+
+        service.cleanupOldHistory();
+
+        org.mockito.ArgumentCaptor<java.time.LocalDateTime> cutoff =
+                org.mockito.ArgumentCaptor.forClass(java.time.LocalDateTime.class);
+        verify(historyCleanupService).deleteBatch(cutoff.capture(), eq(1000));
+        org.junit.jupiter.api.Assertions.assertTrue(
+                cutoff.getValue().isBefore(java.time.LocalDateTime.now().minusDays(364)));
     }
 }

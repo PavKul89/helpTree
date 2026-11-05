@@ -19,13 +19,14 @@ import org.example.helptreeservice.repository.HelpRepository;
 import org.example.helptreeservice.repository.HelpStatusHistoryRepository;
 import org.example.helptreeservice.repository.PostRepository;
 import org.example.helptreeservice.repository.UserRepository;
-import org.example.helptreeservice.repository.projection.ConfirmedHelpGraphProjection;
+import org.example.helptreeservice.repository.projection.GraphUserProjection;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -33,6 +34,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
@@ -89,6 +91,10 @@ class HelpServiceTest {
                 .thenAnswer(invocation -> invocation.getArgument(0));
         lenient().when(postRepository.save(any(Post.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
+
+        ReflectionTestUtils.setField(helpService, "defaultMaxEdges", 500);
+        ReflectionTestUtils.setField(helpService, "hardMaxEdges", 2000);
+        ReflectionTestUtils.setField(helpService, "maxDepth", 10);
     }
 
     @Test
@@ -403,9 +409,13 @@ class HelpServiceTest {
 
     @Test
     void getHelpGraph_shouldUseHelpIdAsEdgeIdentityAndKeepDirectionAndPost() {
-        ConfirmedHelpGraphProjection act = graphAct(100L, 1L, "Helper", 2L, "Receiver", 10L, "Post");
-        when(helpRepository.findConfirmedHelpGraphProjection()).thenReturn(List.of(act));
-        when(userRepository.findAllById(any())).thenReturn(List.of(user(1L), user(2L)));
+        GraphUserProjection firstUser = graphUser(1L);
+        GraphUserProjection secondUser = graphUser(2L);
+        when(helpRepository.findUserGraphEdges(eq(1L), any(), anyInt()))
+                .thenReturn(List.<Object[]>of(graphRow(100L, 1L, "Helper", 2L, "Receiver", 10L, "Post")));
+        when(helpRepository.countUserGraphEdges(eq(1L), any())).thenReturn(1L);
+        when(userRepository.findGraphUsersByIds(any()))
+                .thenReturn(List.of(firstUser, secondUser));
 
         org.example.helptreeservice.dto.graph.HelpGraphDto graph =
                 helpService.getHelpGraph(1L, null, null);
@@ -425,12 +435,13 @@ class HelpServiceTest {
 
     @Test
     void getHelpGraph_shouldKeepTotalHelpsWhenMaxEdgesTruncatesResponse() {
-        ConfirmedHelpGraphProjection first =
-                graphAct(100L, 1L, "Helper", 2L, "Receiver", 10L, "Post");
-        ConfirmedHelpGraphProjection second =
-                graphAct(101L, 1L, "Helper", 2L, "Receiver", 11L, "Other post");
-        when(helpRepository.findConfirmedHelpGraphProjection()).thenReturn(List.of(first, second));
-        when(userRepository.findAllById(any())).thenReturn(List.of(user(1L), user(2L)));
+        GraphUserProjection firstUser = graphUser(1L);
+        GraphUserProjection secondUser = graphUser(2L);
+        when(helpRepository.findUserGraphEdges(eq(1L), any(), eq(1)))
+                .thenReturn(List.<Object[]>of(graphRow(100L, 1L, "Helper", 2L, "Receiver", 10L, "Post")));
+        when(helpRepository.countUserGraphEdges(eq(1L), any())).thenReturn(2L);
+        when(userRepository.findGraphUsersByIds(any()))
+                .thenReturn(List.of(firstUser, secondUser));
 
         org.example.helptreeservice.dto.graph.HelpGraphDto graph =
                 helpService.getHelpGraph(1L, null, 1);
@@ -442,17 +453,14 @@ class HelpServiceTest {
     }
 
     @Test
-    void getHelpGraph_shouldRespectDepthFromSelectedUser() {
-        ConfirmedHelpGraphProjection first =
-                graphAct(1L, 1L, "One", 2L, "Two", 10L, "P1");
-        ConfirmedHelpGraphProjection second =
-                graphAct(2L, 2L, "Two", 3L, "Three", 11L, "P2");
-        ConfirmedHelpGraphProjection third =
-                graphAct(3L, 3L, "Three", 4L, "Four", 12L, "P3");
-        when(helpRepository.findConfirmedHelpGraphProjection())
-                .thenReturn(List.of(first, second, third));
-        when(userRepository.findAllById(any()))
-                .thenReturn(List.of(user(1L), user(2L)));
+    void getHelpGraph_shouldPassTheBoundedDepthToTheDatabase() {
+        GraphUserProjection firstUser = graphUser(1L);
+        GraphUserProjection secondUser = graphUser(2L);
+        when(helpRepository.findUserGraphEdges(eq(1L), eq(1), anyInt()))
+                .thenReturn(List.<Object[]>of(graphRow(1L, 1L, "One", 2L, "Two", 10L, "P1")));
+        when(helpRepository.countUserGraphEdges(eq(1L), eq(1))).thenReturn(1L);
+        when(userRepository.findGraphUsersByIds(any()))
+                .thenReturn(List.of(firstUser, secondUser));
 
         org.example.helptreeservice.dto.graph.HelpGraphDto graph =
                 helpService.getHelpGraph(1L, 1, null);
@@ -462,24 +470,41 @@ class HelpServiceTest {
         assertEquals(1L, graph.getEdges().get(0).getId());
     }
 
-    private ConfirmedHelpGraphProjection graphAct(Long helpId,
-                                                  Long helperId,
-                                                  String helperName,
-                                                  Long receiverId,
-                                                  String receiverName,
-                                                  Long postId,
-                                                  String postTitle) {
-        ConfirmedHelpGraphProjection act = mock(ConfirmedHelpGraphProjection.class);
-        lenient().when(act.getHelpId()).thenReturn(helpId);
-        lenient().when(act.getHelperId()).thenReturn(helperId);
-        lenient().when(act.getHelperName()).thenReturn(helperName);
-        lenient().when(act.getReceiverId()).thenReturn(receiverId);
-        lenient().when(act.getReceiverName()).thenReturn(receiverName);
-        lenient().when(act.getPostId()).thenReturn(postId);
-        lenient().when(act.getPostTitle()).thenReturn(postTitle);
-        lenient().when(act.getStatus()).thenReturn(HelpStatus.CONFIRMED);
-        lenient().when(act.getConfirmedAt()).thenReturn(LocalDateTime.now());
-        return act;
+    @Test
+    void getHelpGraph_shouldClampDepthAndEdgeLimitToServerMaximums() {
+        when(helpRepository.findUserGraphEdges(eq(1L), eq(10), eq(2000)))
+                .thenReturn(List.of());
+        when(helpRepository.countUserGraphEdges(eq(1L), eq(10))).thenReturn(0L);
+
+        org.example.helptreeservice.dto.graph.HelpGraphDto graph =
+                helpService.getHelpGraph(1L, 999, 999_999);
+
+        assertEquals(0, graph.getEdges().size());
+        assertFalse(graph.isTruncated());
+        verify(helpRepository).findUserGraphEdges(1L, 10, 2000);
+    }
+
+    private Object[] graphRow(Long helpId,
+                              Long helperId,
+                              String helperName,
+                              Long receiverId,
+                              String receiverName,
+                              Long postId,
+                              String postTitle) {
+        return new Object[]{
+                helpId, helperId, helperName, receiverId, receiverName,
+                postId, postTitle, "CONFIRMED", LocalDateTime.now()
+        };
+    }
+
+    private GraphUserProjection graphUser(Long id) {
+        GraphUserProjection user = mock(GraphUserProjection.class);
+        lenient().when(user.getId()).thenReturn(id);
+        lenient().when(user.getName()).thenReturn("User " + id);
+        lenient().when(user.getHelpedCount()).thenReturn(0);
+        lenient().when(user.getDebtCount()).thenReturn(0);
+        lenient().when(user.getRating()).thenReturn(3.0);
+        return user;
     }
 
     private HelpRequest request(Long postId) {

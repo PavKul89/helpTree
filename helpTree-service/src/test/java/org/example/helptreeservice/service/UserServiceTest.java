@@ -52,6 +52,8 @@ class UserServiceTest {
     private GeocodingService geocodingService;
     @Mock
     private AuthSessionService authSessionService;
+    @Mock
+    private PublicProfileCache publicProfileCache;
 
     private UserService userService;
 
@@ -68,7 +70,8 @@ class UserServiceTest {
                 achievementService,
                 geocodingService,
                 authSessionService,
-                new org.example.helptreeservice.config.EconomyConfig()
+                new org.example.helptreeservice.config.EconomyConfig(),
+                publicProfileCache
         );
     }
 
@@ -188,6 +191,7 @@ class UserServiceTest {
 
         assertTrue(user.getDeleted());
         verify(authSessionService).revokeAllSessionsForUser(1L, "ACCOUNT_DELETED");
+        verify(publicProfileCache).evictAfterCommit(1L);
     }
 
     @Test
@@ -347,6 +351,7 @@ class UserServiceTest {
         assertTrue(user.getBlockedUntil().isAfter(LocalDateTime.now()));
         verify(authSessionService).revokeAllSessionsForUser(1L, "ACCOUNT_BLOCKED");
         verify(ratingService).recalculateUsers(List.of(1L), "Блокировка за долг");
+        verify(publicProfileCache).evictAfterCommit(1L);
     }
 
     @Test
@@ -362,6 +367,7 @@ class UserServiceTest {
         assertNull(user.getBlockedUntil());
         verify(userRepository).save(user);
         verify(ratingService).recalculateUsers(List.of(1L), "Ручная разблокировка");
+        verify(publicProfileCache).evictAfterCommit(1L);
     }
 
     @Test
@@ -395,5 +401,6 @@ class UserServiceTest {
         assertTrue(stats.getLastCalculated().isAfter(LocalDateTime.now().minusMinutes(1)));
         verify(userRepository).save(user);
         verify(ratingStatsRepository).save(stats);
+        verify(publicProfileCache).evictAfterCommit(1L);
     }
 }

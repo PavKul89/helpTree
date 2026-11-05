@@ -9,6 +9,7 @@ import jakarta.validation.constraints.Size;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
+import org.hibernate.annotations.BatchSize;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -19,6 +20,7 @@ import java.util.List;
     @Index(name = "idx_users_email", columnList = "email"),
     @Index(name = "idx_users_deleted", columnList = "deleted")
 })
+@BatchSize(size = 50)
 @Data
 @NoArgsConstructor
 @AllArgsConstructor

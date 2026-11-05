@@ -59,6 +59,7 @@ public class RatingCalculationService {
     private static final double DEBT_PENALTY = 0.3;
     private static final double BLOCK_PENALTY = 0.7;
     private static final String RATING_CACHE = "userRating";
+    private static final String PUBLIC_PROFILE_CACHE = "publicUserProfile";
 
     private static final List<HelpStatus> ACTIVE_STATUSES =
             List.of(HelpStatus.ACCEPTED, HelpStatus.COMPLETED);
@@ -216,9 +217,15 @@ public class RatingCalculationService {
      */
     private void evictRatingCacheAfterCommit(Long userId) {
         Runnable evict = () -> {
-            Cache cache = cacheManager.getCache(RATING_CACHE);
-            if (cache != null) {
-                cache.evict(userId);
+            Cache ratingCache = cacheManager.getCache(RATING_CACHE);
+            if (ratingCache != null) {
+                ratingCache.evict(userId);
+            }
+            // The public profile embeds rating and debt counters, so it becomes
+            // stale at exactly the same moment as the rating projection.
+            Cache profileCache = cacheManager.getCache(PUBLIC_PROFILE_CACHE);
+            if (profileCache != null) {
+                profileCache.evict(userId);
             }
         };
 

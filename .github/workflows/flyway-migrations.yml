@@ -75,6 +75,9 @@ jobs:
         run: |
           psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block6_schema.sql
           psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block7_schema.sql
+          psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block8_schema.sql
+          psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block9_schema.sql
+          psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block10_schema.sql
 
   legacy-data-copy:
     name: Migrate a V40 data copy
@@ -111,7 +114,7 @@ jobs:
       - name: Load representative legacy data
         run: psql -v ON_ERROR_STOP=1 -f scripts/fixtures/legacy_v40_data.sql
 
-      - name: Apply Block 6 and Block 7 migrations
+      - name: Apply remaining migrations
         run: ./mvnw -B -pl helpTree-service flyway:migrate
 
       - name: Validate applied history
@@ -123,3 +126,6 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block6_legacy.sql
           psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block6_constraints.sql
           psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block7_schema.sql
+          psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block8_schema.sql
+          psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block9_schema.sql
+          psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block10_schema.sql

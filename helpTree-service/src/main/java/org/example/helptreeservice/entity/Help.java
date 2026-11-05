@@ -6,6 +6,7 @@ import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
+import org.hibernate.annotations.BatchSize;
 import java.time.LocalDateTime;
 
 @Entity
@@ -16,6 +17,7 @@ import java.time.LocalDateTime;
     @Index(name = "idx_helps_status", columnList = "status"),
     @Index(name = "idx_helps_deleted", columnList = "deleted")
 })
+@BatchSize(size = 50)
 @Data
 @NoArgsConstructor
 @AllArgsConstructor

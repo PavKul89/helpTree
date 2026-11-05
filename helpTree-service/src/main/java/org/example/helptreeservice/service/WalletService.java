@@ -64,6 +64,7 @@ public class WalletService {
     private final RatingService ratingService;
     private final EconomyConfig economyConfig;
     private final PaginationConfig paginationConfig;
+    private final PublicProfileCache publicProfileCache;
 
     // ------------------------------------------------------------------ read
 
@@ -338,6 +339,7 @@ public class WalletService {
                 user.setDebtStartedAt(null);
             }
             userRepository.save(user);
+            publicProfileCache.evictAfterCommit(userId);
             // Both the debt penalty and the active block penalty disappear with
             // this purchase, so rebuild the projection now.
             ratingService.recalculateUsers(List.of(userId), "Покупка разблокировки");
@@ -386,6 +388,7 @@ public class WalletService {
         if (applied.applied()) {
             user.setNicknameColor(color);
             userRepository.save(user);
+            publicProfileCache.evictAfterCommit(userId);
         }
 
         log.info("Цвет ника изменён на {} для пользователя {}", color, userId);

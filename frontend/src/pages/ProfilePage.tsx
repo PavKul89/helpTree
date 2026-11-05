@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowUpRight,
@@ -56,17 +56,6 @@ const getInitials = (name: string): string =>
     .join('')
     .slice(0, 2)
     .toLocaleUpperCase('ru');
-
-const isPublicActivity = (activity: Activity): boolean => {
-  if (activity.type === 'ACHIEVEMENT_EARNED') return true;
-  if (activity.type === 'POST_CREATED') {
-    return ['OPEN', 'IN_PROGRESS', 'COMPLETED'].includes(activity.status || '');
-  }
-  return (
-    (activity.type === 'HELP_GIVEN' || activity.type === 'HELP_RECEIVED') &&
-    activity.status === 'CONFIRMED'
-  );
-};
 
 export const ProfilePage = () => {
   const { userId: routeUserId } = useParams<{ userId?: string }>();
@@ -152,7 +141,7 @@ export const ProfilePage = () => {
           await Promise.allSettled([
             postsApi.getAll({ userId: targetId, size: PROFILE_POST_PAGE_SIZE, page: 0 }),
             achievementApi.getAllAchievements(targetId),
-            activityApi.getAllActivities(targetId, 20),
+            activityApi.getAllActivities(targetId, { size: 20 }),
             reviewApi.getAllByUser(targetId),
           ]);
 
@@ -167,7 +156,7 @@ export const ProfilePage = () => {
           setAchievements(achievementResult.value.filter((item) => item.isEarned !== false));
         }
         if (activityResult.status === 'fulfilled') {
-          setActivities(activityResult.value.filter(isPublicActivity));
+          setActivities(activityResult.value.content);
         }
         if (reviewResult.status === 'fulfilled') setReviews(reviewResult.value);
 
@@ -194,10 +183,8 @@ export const ProfilePage = () => {
     };
   }, [currentUser?.id, invalidUserId, parsedUserId, routeUserId]);
 
-  const publicActivities = useMemo(
-    () => activities.filter(isPublicActivity),
-    [activities]
-  );
+  // Visibility is enforced by the server; do not filter activity in the browser.
+  const publicActivities = activities;
 
   const handleStartChat = useCallback(async () => {
     if (!profileUser || isOwnProfile) return;
@@ -313,7 +300,9 @@ export const ProfilePage = () => {
         const result = await achievementApi.getAllAchievements(profileUser.id);
         setAchievements(result.filter((item) => item.isEarned !== false));
       } else if (section === 'activities') {
-        setActivities((await activityApi.getAllActivities(profileUser.id, 20)).filter(isPublicActivity));
+        setActivities(
+          (await activityApi.getAllActivities(profileUser.id, { size: 20 })).content
+        );
       } else {
         setReviews(await reviewApi.getAllByUser(profileUser.id));
       }

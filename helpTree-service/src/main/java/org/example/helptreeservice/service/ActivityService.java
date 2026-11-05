@@ -2,159 +2,139 @@ package org.example.helptreeservice.service;
 
 import lombok.RequiredArgsConstructor;
 import org.example.helptreeservice.dto.activity.ActivityDto;
-import org.example.helptreeservice.dto.achievement.AchievementDto;
-import org.example.helptreeservice.entity.Achievement;
-import org.example.helptreeservice.entity.Help;
-import org.example.helptreeservice.entity.Post;
-import org.example.helptreeservice.entity.User;
-import org.example.helptreeservice.enums.ActivityType;
+import org.example.helptreeservice.dto.common.PageResponse;
 import org.example.helptreeservice.enums.AchievementType;
+import org.example.helptreeservice.enums.ActivityType;
+import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.NotFoundException;
-import org.example.helptreeservice.repository.AchievementRepository;
-import org.example.helptreeservice.repository.HelpRepository;
-import org.example.helptreeservice.repository.PostRepository;
+import org.example.helptreeservice.repository.ActivityRepository;
 import org.example.helptreeservice.repository.UserRepository;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.stream.Collectors;
+import java.sql.Timestamp;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.util.Locale;
 
+/**
+ * Activity feed assembled by one database query.
+ *
+ * <p>There is no in-memory merge and no per-source top-N load. Public viewers
+ * only receive events that are safe to show on a public profile: confirmed
+ * helps, public post statuses and achievements. Participant identifiers and
+ * names, as well as debt blocks, are returned only to the owner or an admin.</p>
+ */
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class ActivityService {
 
-    private final HelpRepository helpRepository;
-    private final PostRepository postRepository;
-    private final AchievementRepository achievementRepository;
+    private static final String ALL = "ALL";
+
+    private final ActivityRepository activityRepository;
     private final UserRepository userRepository;
+    private final AuthorizationService authorizationService;
 
-    public List<ActivityDto> getUserActivities(Long userId, int limit) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new NotFoundException("User not found"));
-
-        // Every source contributes at most the requested number of rows: a row
-        // outside a source's own top-N can never be in the global top-N.
-        int perSource = Math.max(1, limit);
-        List<ActivityDto> activities = new ArrayList<>();
-
-        activities.addAll(getHelpGivenActivities(user, perSource));
-        activities.addAll(getHelpReceivedActivities(user, perSource));
-        activities.addAll(getPostCreatedActivities(user, perSource));
-        activities.addAll(getAchievementActivities(user, perSource));
-        activities.addAll(getBlockedActivities(user));
-
-        return activities.stream()
-                .sorted(Comparator.comparing(ActivityDto::getTimestamp).reversed())
-                .limit(limit)
-                .collect(Collectors.toList());
-    }
-
-    private List<ActivityDto> getHelpGivenActivities(User user, int limit) {
-        List<Help> helps = helpRepository.findByHelperWithDetails(user, PageRequest.of(0, limit)).getContent();
-        return helps.stream()
-                .filter(help -> help.getStatus() != null)
-                .map(help -> ActivityDto.builder()
-                        .type(ActivityType.HELP_GIVEN.name())
-                        .typeLabel(ActivityType.HELP_GIVEN.getLabel())
-                        .emoji(ActivityType.HELP_GIVEN.getEmoji())
-                        .title("Помог пользователю")
-                        .description(help.getPost() != null ? help.getPost().getTitle() : null)
-                        .timestamp(getHelpTimestamp(help))
-                        .relatedUserId(help.getReceiver() != null ? help.getReceiver().getId() : null)
-                        .relatedUserName(help.getReceiver() != null ? help.getReceiver().getName() : null)
-                        .relatedPostId(help.getPost() != null ? help.getPost().getId() : null)
-                        .relatedPostTitle(help.getPost() != null ? help.getPost().getTitle() : null)
-                        .category(help.getPost() != null ? help.getPost().getCategory() : null)
-                        .status(help.getStatus() != null ? help.getStatus().name() : null)
-                        .build())
-                .collect(Collectors.toList());
-    }
-
-    private List<ActivityDto> getHelpReceivedActivities(User user, int limit) {
-        List<Help> helps = helpRepository.findByReceiverWithDetails(user, PageRequest.of(0, limit)).getContent();
-        return helps.stream()
-                .filter(help -> help.getStatus() != null)
-                .map(help -> ActivityDto.builder()
-                        .type(ActivityType.HELP_RECEIVED.name())
-                        .typeLabel(ActivityType.HELP_RECEIVED.getLabel())
-                        .emoji(ActivityType.HELP_RECEIVED.getEmoji())
-                        .title("Получил помощь от " + (help.getHelper() != null ? help.getHelper().getName() : ""))
-                        .description(help.getPost() != null ? help.getPost().getTitle() : null)
-                        .timestamp(getHelpTimestamp(help))
-                        .relatedUserId(help.getHelper() != null ? help.getHelper().getId() : null)
-                        .relatedUserName(help.getHelper() != null ? help.getHelper().getName() : null)
-                        .relatedPostId(help.getPost() != null ? help.getPost().getId() : null)
-                        .relatedPostTitle(help.getPost() != null ? help.getPost().getTitle() : null)
-                        .category(help.getPost() != null ? help.getPost().getCategory() : null)
-                        .status(help.getStatus() != null ? help.getStatus().name() : null)
-                        .build())
-                .collect(Collectors.toList());
-    }
-
-    private java.time.LocalDateTime getHelpTimestamp(Help help) {
-        if (help.getConfirmedAt() != null) return help.getConfirmedAt();
-        if (help.getCompletedAt() != null) return help.getCompletedAt();
-        if (help.getAcceptedAt() != null) return help.getAcceptedAt();
-        return help.getCreatedAt();
-    }
-
-    private List<ActivityDto> getPostCreatedActivities(User user, int limit) {
-        List<Post> posts = postRepository.findByUserId(user.getId(), PageRequest.of(0, limit)).getContent();
-        return posts.stream()
-                .filter(post -> post.getDeleted() == null || !post.getDeleted())
-                .map(post -> ActivityDto.builder()
-                        .type(ActivityType.POST_CREATED.name())
-                        .typeLabel(ActivityType.POST_CREATED.getLabel())
-                        .emoji(ActivityType.POST_CREATED.getEmoji())
-                        .title("Создал запрос о помощи")
-                        .description(post.getTitle())
-                        .timestamp(post.getCreatedAt())
-                        .relatedPostId(post.getId())
-                        .relatedPostTitle(post.getTitle())
-                        .category(post.getCategory())
-                        .status(post.getStatus() != null ? post.getStatus().name() : null)
-                        .build())
-                .collect(Collectors.toList());
-    }
-
-    private List<ActivityDto> getAchievementActivities(User user, int limit) {
-        List<Achievement> achievements = achievementRepository
-                .findByUserIdOrderByEarnedAtDesc(user.getId(), PageRequest.of(0, limit))
-                .getContent();
-        return achievements.stream()
-                .filter(a -> a.getEarnedAt() != null)
-                .map(achievement -> {
-                    AchievementType type = achievement.getType();
-                    return ActivityDto.builder()
-                            .type(ActivityType.ACHIEVEMENT_EARNED.name())
-                            .typeLabel(ActivityType.ACHIEVEMENT_EARNED.getLabel())
-                            .emoji(ActivityType.ACHIEVEMENT_EARNED.getEmoji())
-                            .title("Получил достижение: " + type.getName())
-                            .description(type.getDescription())
-                            .timestamp(achievement.getEarnedAt())
-                            .category(type.getRarity())
-                            .build();
-                })
-                .collect(Collectors.toList());
-    }
-
-    private List<ActivityDto> getBlockedActivities(User user) {
-        if (user.getBlockedAt() == null) {
-            return new ArrayList<>();
+    public PageResponse<ActivityDto> getUserActivities(Long userId,
+                                                       String type,
+                                                       int page,
+                                                       int size) {
+        if (!userRepository.existsByIdAndDeletedFalse(userId)) {
+            throw new NotFoundException("User not found");
         }
 
-        return List.of(ActivityDto.builder()
-                .type(ActivityType.USER_BLOCKED.name())
-                .typeLabel(ActivityType.USER_BLOCKED.getLabel())
-                .emoji(ActivityType.USER_BLOCKED.getEmoji())
-                .title("Заблокирован за долг")
-                .description("Ваш аккаунт заблокирован из-за большого количества долгов. Помогите другим пользователям, чтобы разблокировать аккаунт.")
-                .timestamp(user.getBlockedAt())
-                .build());
+        String eventType = resolveType(type);
+        // canManageUser is true for the owner and for admins. Everyone else gets
+        // the public projection enforced by the SQL visibility predicates below.
+        boolean includePrivate = authorizationService.canManageUser(userId);
+
+        Page<Object[]> rows = activityRepository.findUserActivity(
+                userId, includePrivate, eventType, PageRequest.of(page, size));
+
+        return PageResponse.from(rows.map(row -> toDto(row, includePrivate)));
+    }
+
+    private String resolveType(String type) {
+        if (type == null || type.isBlank() || ALL.equalsIgnoreCase(type.trim())) {
+            return ALL;
+        }
+        String normalized = type.trim().toUpperCase(Locale.ROOT);
+        try {
+            ActivityType.valueOf(normalized);
+            return normalized;
+        } catch (IllegalArgumentException ex) {
+            throw new BadRequestException("Неизвестный тип активности: " + type);
+        }
+    }
+
+    private ActivityDto toDto(Object[] row, boolean includePrivate) {
+        ActivityType type = ActivityType.valueOf((String) row[0]);
+        Long relatedUserId = includePrivate ? asLong(row[3]) : null;
+        String relatedUserName = includePrivate ? (String) row[4] : null;
+        Long relatedPostId = asLong(row[5]);
+        String relatedPostTitle = (String) row[6];
+        String category = (String) row[7];
+        String status = (String) row[8];
+        String detail = (String) row[9];
+
+        ActivityDto.ActivityDtoBuilder builder = ActivityDto.builder()
+                .type(type.name())
+                .typeLabel(type.getLabel())
+                .emoji(type.getEmoji())
+                .timestamp(asDateTime(row[2]))
+                .relatedUserId(relatedUserId)
+                .relatedUserName(relatedUserName)
+                .relatedPostId(relatedPostId)
+                .relatedPostTitle(relatedPostTitle)
+                .category(category)
+                .status(status);
+
+        switch (type) {
+            case HELP_GIVEN -> builder
+                    .title("Помог пользователю")
+                    .description(detail);
+            case HELP_RECEIVED -> builder
+                    .title("Получил помощь")
+                    .description(detail);
+            case POST_CREATED -> builder
+                    .title("Создал запрос о помощи")
+                    .description(detail);
+            case ACHIEVEMENT_EARNED -> {
+                AchievementType achievement = detail != null
+                        ? AchievementType.valueOf(detail)
+                        : null;
+                builder.title(achievement != null
+                                ? "Получил достижение: " + achievement.getName()
+                                : "Получил достижение")
+                        .description(achievement != null ? achievement.getDescription() : null)
+                        .category(achievement != null ? achievement.getRarity() : null);
+            }
+            case USER_BLOCKED -> builder
+                    .title("Заблокирован за долг")
+                    .description("Аккаунт заблокирован из-за большого количества долгов. "
+                            + "Помогите другим пользователям, чтобы разблокировать аккаунт.");
+        }
+
+        return builder.build();
+    }
+
+    private Long asLong(Object value) {
+        return value instanceof Number number ? number.longValue() : null;
+    }
+
+    private LocalDateTime asDateTime(Object value) {
+        if (value instanceof LocalDateTime dateTime) {
+            return dateTime;
+        }
+        if (value instanceof Timestamp timestamp) {
+            return timestamp.toLocalDateTime();
+        }
+        if (value instanceof OffsetDateTime offsetDateTime) {
+            return offsetDateTime.toLocalDateTime();
+        }
+        return null;
     }
 }

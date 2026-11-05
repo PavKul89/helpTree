@@ -47,4 +47,20 @@ public class PageResponse<T> {
                 .empty(page.isEmpty())
                 .build();
     }
+
+    /** Empty page with the same envelope shape as a database-backed page. */
+    public static <T> PageResponse<T> empty(int number, int size) {
+        return PageResponse.<T>builder()
+                .content(List.of())
+                .number(number)
+                .size(size)
+                .totalElements(0)
+                .totalPages(0)
+                .hasNext(false)
+                .numberOfElements(0)
+                .first(true)
+                .last(true)
+                .empty(true)
+                .build();
+    }
 }

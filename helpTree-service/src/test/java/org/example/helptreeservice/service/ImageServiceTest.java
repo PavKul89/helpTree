@@ -22,6 +22,7 @@ import java.util.concurrent.Executor;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -66,6 +67,24 @@ class ImageServiceTest {
                 "file", "tree.svg", "image/svg+xml", new byte[]{1});
 
         assertThrows(BadRequestException.class, () -> imageService.upload(file));
+    }
+
+    @Test
+    void uploadAsyncRunsOnTheInjectedExecutor() throws Exception {
+        ReflectionTestUtils.setField(imageService, "bucketInitialized", true);
+        doAnswer(invocation -> {
+            invocation.getArgument(0, Runnable.class).run();
+            return null;
+        }).when(imageUploadExecutor).execute(any(Runnable.class));
+
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "tree.png", "image/png", new byte[]{1, 2, 3});
+
+        String url = imageService.uploadAsync(file).get(5, java.util.concurrent.TimeUnit.SECONDS);
+
+        assertTrue(url.matches("https://images\\.example\\.com/helptree-images/[0-9a-f-]{36}\\.png"));
+        verify(imageUploadExecutor).execute(any(Runnable.class));
+        verify(siloClient).putObject(any(PutObjectArgs.class));
     }
 
     @Test

@@ -1,6 +1,17 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ClipboardList, FileText, User, HandHeart, Gift, Plus, Trophy, Ban } from 'lucide-react';
+import {
+  ChevronLeft,
+  ChevronRight,
+  ClipboardList,
+  FileText,
+  User,
+  HandHeart,
+  Gift,
+  Plus,
+  Trophy,
+  Ban,
+} from 'lucide-react';
 import { activityApi, Activity } from '../api/activityApi';
 import { useAuth } from '../context/AuthContext';
 import { Spinner } from '../components/Spinner';
@@ -16,17 +27,37 @@ const ACTIVITY_ICONS: Record<string, React.ElementType> = {
   'USER_BLOCKED': Ban,
 };
 
+const ACTIVITY_FILTERS = [
+  { value: 'ALL', label: 'Все события' },
+  { value: 'HELP_GIVEN', label: 'Помог' },
+  { value: 'HELP_RECEIVED', label: 'Получил помощь' },
+  { value: 'POST_CREATED', label: 'Создал запрос' },
+  { value: 'ACHIEVEMENT_EARNED', label: 'Достижения' },
+  { value: 'USER_BLOCKED', label: 'Блокировки' },
+];
+
+const PAGE_SIZE = 20;
+
 export const ActivityPage = () => {
   const { userId } = useParams<{ userId?: string }>();
   const { user: currentUser } = useAuth();
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
   const [isOwnProfile, setIsOwnProfile] = useState(false);
+  const [filterType, setFilterType] = useState('ALL');
+  const [page, setPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalElements, setTotalElements] = useState(0);
+  const [hasNext, setHasNext] = useState(false);
+
+  useEffect(() => {
+    setPage(0);
+  }, [userId]);
 
   useEffect(() => {
     let cancelled = false;
-    const targetUserId = userId && !isNaN(Number(userId)) 
-      ? Number(userId) 
+    const targetUserId = userId && !isNaN(Number(userId))
+      ? Number(userId)
       : currentUser?.id;
 
     if (!targetUserId) {
@@ -39,9 +70,16 @@ export const ActivityPage = () => {
     const loadActivities = async () => {
       setLoading(true);
       try {
-        const data = await activityApi.getUserActivities(targetUserId, 50);
+        const data = await activityApi.getUserActivities(targetUserId, {
+          page,
+          size: PAGE_SIZE,
+          type: filterType,
+        });
         if (!cancelled) {
-          setActivities(data);
+          setActivities(data.content);
+          setTotalPages(data.totalPages);
+          setTotalElements(data.totalElements);
+          setHasNext(data.hasNext);
         }
       } catch (err) {
         console.error('Error loading activities:', err);
@@ -54,7 +92,7 @@ export const ActivityPage = () => {
 
     loadActivities();
     return () => { cancelled = true; };
-  }, [userId, currentUser?.id]);
+  }, [userId, currentUser?.id, filterType, page]);
 
   const getActivityColor = (type: string) => {
     switch (type) {
@@ -97,6 +135,24 @@ export const ActivityPage = () => {
           {isOwnProfile && (
             <span style={styles.subtitle}>Ваша лента событий</span>
           )}
+          <div style={styles.filters}>
+            <label style={styles.filterLabel} htmlFor="activity-type">Тип события</label>
+            <select
+              id="activity-type"
+              value={filterType}
+              onChange={(event) => {
+                setFilterType(event.target.value);
+                setPage(0);
+              }}
+              style={styles.filterSelect}
+            >
+              {ACTIVITY_FILTERS.map((filter) => (
+                <option key={filter.value} value={filter.value}>
+                  {filter.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <div style={styles.content}>
@@ -182,6 +238,38 @@ export const ActivityPage = () => {
               ))}
             </div>
           )}
+
+          {(page > 0 || hasNext) && (
+            <div style={styles.pagination}>
+              <button
+                type="button"
+                onClick={() => setPage((current) => Math.max(0, current - 1))}
+                disabled={page === 0}
+                style={{
+                  ...styles.pageButton,
+                  opacity: page === 0 ? 0.45 : 1,
+                  cursor: page === 0 ? 'default' : 'pointer',
+                }}
+              >
+                <ChevronLeft size={16} /> Назад
+              </button>
+              <span style={styles.pageInfo}>
+                Страница {page + 1} из {Math.max(totalPages, 1)} · {totalElements} событий
+              </span>
+              <button
+                type="button"
+                onClick={() => setPage((current) => current + 1)}
+                disabled={!hasNext}
+                style={{
+                  ...styles.pageButton,
+                  opacity: hasNext ? 1 : 0.45,
+                  cursor: hasNext ? 'pointer' : 'default',
+                }}
+              >
+                Вперёд <ChevronRight size={16} />
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -228,6 +316,26 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '15px',
     marginTop: '10px',
     display: 'block',
+  },
+  filters: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    marginTop: '18px',
+  },
+  filterLabel: {
+    color: '#b7c5b8',
+    fontSize: '13px',
+    fontWeight: 600,
+  },
+  filterSelect: {
+    background: 'rgba(9, 34, 26, 0.9)',
+    color: '#f5f4ea',
+    border: '1px solid rgba(180, 225, 155, 0.28)',
+    borderRadius: '10px',
+    padding: '8px 12px',
+    fontSize: '14px',
+    outline: 'none',
   },
   content: {
     padding: '16px 20px 12px 20px',
@@ -353,5 +461,30 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#b7c5b8',
     textTransform: 'uppercase',
     letterSpacing: '0.06em',
+  },
+  pagination: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '12px',
+    padding: '18px 12px 10px',
+    borderTop: '1px solid rgba(180, 225, 155, 0.12)',
+    marginTop: '8px',
+  },
+  pageButton: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    background: 'rgba(255,255,255,0.06)',
+    color: '#f5f4ea',
+    border: '1px solid rgba(180, 225, 155, 0.22)',
+    borderRadius: '10px',
+    padding: '8px 12px',
+    fontSize: '13px',
+    fontWeight: 600,
+  },
+  pageInfo: {
+    color: '#b7c5b8',
+    fontSize: '13px',
   },
 };

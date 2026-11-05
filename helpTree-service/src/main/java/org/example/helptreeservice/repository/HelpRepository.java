@@ -5,7 +5,6 @@ import org.example.helptreeservice.entity.Help;
 import org.example.helptreeservice.entity.Post;
 import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.enums.HelpStatus;
-import org.example.helptreeservice.repository.projection.ConfirmedHelpGraphProjection;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
@@ -122,19 +121,72 @@ public interface HelpRepository extends JpaRepository<Help, Long> {
     List<Object[]> countHelpsByHelper();
 
     /**
-     * Typed projection of the graph source of truth: confirmed, non-deleted
-     * help acts. One row is one help act, therefore {@code helpId} is the only
-     * valid edge identity. A user id can repeat for the same helper and must
-     * never be used as the edge id.
+     * One row is one confirmed help act. The edge identity is the help id, never
+     * a user id, because the same helper can have many separate acts.
+     *
+     * <p>The recursive CTE runs in the database and is bounded by {@code depth}
+     * and a hard {@code LIMIT}. Cycle detection is delegated to PostgreSQL's
+     * {@code CYCLE} clause, so a cyclic graph cannot make the query run away.</p>
      */
-    @Query("SELECT h.id AS helpId, h.helper.id AS helperId, h.helper.name AS helperName, " +
-           "h.receiver.id AS receiverId, h.receiver.name AS receiverName, " +
-           "h.post.id AS postId, h.post.title AS postTitle, h.status AS status, " +
-           "h.confirmedAt AS confirmedAt " +
-           "FROM Help h WHERE h.status = 'CONFIRMED' " +
-           "AND (h.deleted = false OR h.deleted IS NULL) " +
-           "ORDER BY h.confirmedAt ASC, h.id ASC")
-    List<ConfirmedHelpGraphProjection> findConfirmedHelpGraphProjection();
+    String REACHABLE_CTE = """
+            WITH RECURSIVE reachable(id, depth) AS (
+                SELECT CAST(:userId AS bigint), 0
+                UNION ALL
+                SELECT h.receiver_id, r.depth + 1
+                FROM helps h
+                JOIN reachable r ON h.helper_id = r.id
+                WHERE h.status = 'CONFIRMED'
+                  AND COALESCE(h.deleted, FALSE) = FALSE
+                  AND (CAST(:depth AS integer) IS NULL OR r.depth < CAST(:depth AS integer))
+            )
+            CYCLE id SET is_cycle USING path
+            """;
+
+    String GRAPH_EDGE_SELECT = """
+            SELECT h.id AS help_id,
+                   h.helper_id AS helper_id,
+                   hu.name AS helper_name,
+                   h.receiver_id AS receiver_id,
+                   ru.name AS receiver_name,
+                   h.post_id AS post_id,
+                   p.title AS post_title,
+                   CAST(h.status AS text) AS status,
+                   h.confirmed_at AS confirmed_at
+            FROM helps h
+            JOIN posts p ON p.id = h.post_id
+            JOIN users hu ON hu.id = h.helper_id
+            JOIN users ru ON ru.id = h.receiver_id
+            """;
+
+    String GRAPH_USER_FILTER = """
+            WHERE h.status = 'CONFIRMED'
+              AND COALESCE(h.deleted, FALSE) = FALSE
+              AND h.helper_id IN (SELECT id FROM reachable)
+              AND h.receiver_id IN (SELECT id FROM reachable)
+            """;
+
+    @Query(value = REACHABLE_CTE + GRAPH_EDGE_SELECT + GRAPH_USER_FILTER
+            + " ORDER BY h.confirmed_at ASC, h.id ASC LIMIT CAST(:limit AS integer)",
+            nativeQuery = true)
+    List<Object[]> findUserGraphEdges(@Param("userId") Long userId,
+                                      @Param("depth") Integer depth,
+                                      @Param("limit") int limit);
+
+    @Query(value = REACHABLE_CTE + "SELECT COUNT(*) FROM helps h " + GRAPH_USER_FILTER,
+            nativeQuery = true)
+    long countUserGraphEdges(@Param("userId") Long userId,
+                             @Param("depth") Integer depth);
+
+    @Query(value = GRAPH_EDGE_SELECT
+            + " WHERE h.status = 'CONFIRMED' AND COALESCE(h.deleted, FALSE) = FALSE"
+            + " ORDER BY h.confirmed_at ASC, h.id ASC LIMIT CAST(:limit AS integer)",
+            nativeQuery = true)
+    List<Object[]> findGlobalGraphEdges(@Param("limit") int limit);
+
+    @Query(value = "SELECT COUNT(*) FROM helps h "
+            + "WHERE h.status = 'CONFIRMED' AND COALESCE(h.deleted, FALSE) = FALSE",
+            nativeQuery = true)
+    long countGlobalGraphEdges();
 
     @Query("SELECT COUNT(h) FROM Help h " +
            "WHERE h.post.user.id = :userId AND h.createdAt > :since " +

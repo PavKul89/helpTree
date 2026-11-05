@@ -19,9 +19,19 @@ public class ScheduledRatingService {
 
     private final UserRatingStatsRepository statsRepository;
     private final RatingCalculationService calculationService;
+    private final RatingHistoryCleanupService historyCleanupService;
 
     @Value("${rating.calculation.batch-size:100}")
     private int batchSize;
+
+    @Value("${rating.history.retention-days:365}")
+    private int historyRetentionDays;
+
+    @Value("${rating.history.cleanup-batch-size:1000}")
+    private int historyCleanupBatchSize;
+
+    @Value("${rating.history.max-batches-per-run:1000}")
+    private int historyMaxBatchesPerRun;
 
     /**
      * Rebuilds stale rating projections.
@@ -81,14 +91,27 @@ public class ScheduledRatingService {
         }
     }
 
-    @Scheduled(cron = "0 0 2 * * ?")
+    @Scheduled(cron = "${rating.history.cleanup-cron:0 0 2 * * ?}")
     public void cleanupOldHistory() {
-        log.info("Начало очистки старой истории рейтингов");
+        LocalDateTime cutoff = LocalDateTime.now().minusDays(Math.max(1, historyRetentionDays));
+        log.info("Начало очистки истории рейтингов старше {} (retention={} дн.)",
+                cutoff, historyRetentionDays);
 
-        LocalDateTime oneYearAgo = LocalDateTime.now().minusYears(1);
+        long totalDeleted = 0L;
+        int batches = 0;
 
         try {
-            log.info("Очистка истории рейтингов до {}", oneYearAgo);
+            int deleted;
+            do {
+                deleted = historyCleanupService.deleteBatch(cutoff, historyCleanupBatchSize);
+                totalDeleted += deleted;
+                batches++;
+                // A backlog is drained over several scheduled runs. Capping the
+                // work per run keeps the maintenance window bounded.
+            } while (deleted == historyCleanupBatchSize && batches < historyMaxBatchesPerRun);
+
+            log.info("Очистка истории рейтингов завершена: удалено={}, батчей={}, cutoff={}",
+                    totalDeleted, batches, cutoff);
 
         } catch (Exception e) {
             log.error("Ошибка при очистке истории рейтингов", e);

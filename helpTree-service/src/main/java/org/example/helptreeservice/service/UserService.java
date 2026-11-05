@@ -19,6 +19,7 @@ import org.example.helptreeservice.repository.UserSpecification;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -47,6 +48,7 @@ public class UserService {
     private final GeocodingService geocodingService;
     private final AuthSessionService authSessionService;
     private final EconomyConfig economyConfig;
+    private final PublicProfileCache publicProfileCache;
 
     public UserDto createUser(CreateUserRequest request) {
         return createUserWithRole(request, Role.USER);
@@ -219,6 +221,7 @@ public class UserService {
             if (changed) {
                 user.setUpdatedAt(LocalDateTime.now());
                 User updatedUser = userRepository.save(user);
+                publicProfileCache.evictAfterCommit(id);
                 log.info("Данные пользователя с ID: {} успешно обновлены", id);
                 return userMapper.toDto(updatedUser);
             } else {
@@ -268,6 +271,7 @@ public class UserService {
             user.setDeletedAt(LocalDateTime.now());
             user.setUpdatedAt(LocalDateTime.now());
             userRepository.save(user);
+            publicProfileCache.evictAfterCommit(id);
 
             // A deleted account must lose all active access and refresh tokens now.
             authSessionService.revokeAllSessionsForUser(id, "ACCOUNT_DELETED");
@@ -326,6 +330,7 @@ public class UserService {
         user.setRole(newRole);
         user.setUpdatedAt(LocalDateTime.now());
         userRepository.save(user);
+        publicProfileCache.evictAfterCommit(id);
 
         authSessionService.revokeAllSessionsForUser(id, "ROLE_CHANGED");
         log.info("Роль пользователя {} изменена на {}", id, newRole);
@@ -347,6 +352,7 @@ public class UserService {
             user.setDeletedAt(null);
             user.setUpdatedAt(LocalDateTime.now());
             userRepository.save(user);
+            publicProfileCache.evictAfterCommit(id);
 
             log.info("Пользователь с ID: {} успешно восстановлен", id);
             log.debug("Детали восстановленного пользователя: email={}", user.getEmail());
@@ -403,6 +409,7 @@ public class UserService {
         receiver.setDebtCount(debt + economyConfig.getDebtPerReceivedHelp());
         receiver.setUpdatedAt(LocalDateTime.now());
         userRepository.save(receiver);
+        publicProfileCache.evictAfterCommit(receiverId);
 
         log.info("Счетчик долгов для получателя ID {} успешно обновлен", receiverId);
     }
@@ -428,6 +435,7 @@ public class UserService {
                     log.info("Пользователь {} автоматически разблокирован (debtCount: {})", helperId, user.getDebtCount());
                 }
                 userRepository.saveAndFlush(user);
+                publicProfileCache.evictAfterCommit(helperId);
             }
             log.info("Данные помощника ID {} успешно обновлены", helperId);
         } catch (Exception e) {
@@ -454,6 +462,13 @@ public class UserService {
         return user.getDebtCount() <= 3;
     }
 
+    /**
+     * Public profiles are read on almost every page and change rarely. The
+     * cache is evicted after commit by every write path (profile, rating,
+     * avatar, debt, block); a short TTL in {@code CacheConfig} bounds the
+     * window if an eviction is ever missed.
+     */
+    @Cacheable(value = PublicProfileCache.CACHE_NAME, key = "#id")
     public UserPublicDto getUserPublicById(Long id) {
         log.info("Публичные данные пользователя ID: {}", id);
         User user = getUserEntityById(id);
@@ -477,6 +492,7 @@ public class UserService {
             user.setRating(rating);
             user.setUpdatedAt(LocalDateTime.now());
             userRepository.save(user);
+            publicProfileCache.evictAfterCommit(id);
 
             // Keep the projection consistent with the manual override and give
             // the scheduled rebuild a full freshness window.
@@ -531,6 +547,7 @@ public class UserService {
         String avatarUrl = imageService.upload(file);
         user.setAvatarUrl(avatarUrl);
         userRepository.save(user);
+        publicProfileCache.evictAfterCommit(userId);
         log.info("Аватар для пользователя ID {} загружен: {}", userId, avatarUrl);
         return avatarUrl;
     }
@@ -599,6 +616,7 @@ public class UserService {
                 user.setBlockedAt(LocalDateTime.now());
                 user.setBlockedUntil(LocalDateTime.now().plusDays(economyConfig.getDebtBlockDays()));
                 userRepository.save(user);
+                publicProfileCache.evictAfterCommit(user.getId());
                 blockedUserIds.add(user.getId());
                 // Debt blocking must immediately invalidate already issued tokens.
                 authSessionService.revokeAllSessionsForUser(user.getId(), "ACCOUNT_BLOCKED");
@@ -631,6 +649,7 @@ public class UserService {
         user.setBlockedAt(null);
         user.setBlockedUntil(null);
         userRepository.save(user);
+        publicProfileCache.evictAfterCommit(userId);
         // Remove the block penalty from the projection immediately.
         ratingService.recalculateUsers(List.of(userId), "Ручная разблокировка");
         log.info("Пользователь {} разблокирован", userId);
@@ -644,6 +663,7 @@ public class UserService {
         // stale blocked values in the persistence context for the recalculation.
         List<Long> unblockedIds = userRepository.findIdsWithExpiredBlocks(now);
         int unblocked = userRepository.unblockExpiredUsers(now);
+        unblockedIds.forEach(publicProfileCache::evictAfterCommit);
         ratingService.recalculateUsers(unblockedIds, "Автоматическая разблокировка");
         if (unblocked > 0) {
             log.info("Авто-разблокировано {} пользователей", unblocked);

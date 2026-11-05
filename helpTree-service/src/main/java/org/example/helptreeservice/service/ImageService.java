@@ -9,7 +9,6 @@ import io.minio.SetBucketPolicyArgs;
 import lombok.extern.slf4j.Slf4j;
 import org.example.helptreeservice.exception.BadRequestException;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -94,9 +93,14 @@ public class ImageService {
         return urls;
     }
 
-    @Async("imageUploadExecutor")
+    /**
+     * Explicit offload instead of {@code @Async}: a call from
+     * {@link #uploadMultipleAsync} is a self-invocation and would bypass the
+     * Spring proxy, silently running on the caller thread. Submitting directly
+     * to the injected executor always uses the intended pool.
+     */
     public CompletableFuture<String> uploadAsync(MultipartFile file) {
-        return CompletableFuture.completedFuture(upload(file));
+        return CompletableFuture.supplyAsync(() -> upload(file), imageUploadExecutor);
     }
 
     public CompletableFuture<List<String>> uploadMultipleAsync(List<MultipartFile> files) {

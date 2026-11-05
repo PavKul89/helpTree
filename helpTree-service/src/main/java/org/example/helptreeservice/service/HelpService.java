@@ -21,9 +21,10 @@ import org.example.helptreeservice.repository.HelpRepository;
 import org.example.helptreeservice.repository.HelpStatusHistoryRepository;
 import org.example.helptreeservice.repository.PostRepository;
 import org.example.helptreeservice.repository.UserRepository;
-import org.example.helptreeservice.repository.projection.ConfirmedHelpGraphProjection;
+import org.example.helptreeservice.repository.projection.GraphUserProjection;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -54,6 +55,15 @@ public class HelpService {
     private final EconomyConfig economyConfig;
     private final HelpStatusHistoryRepository statusHistoryRepository;
     private final HelpGraphMetrics helpGraphMetrics;
+
+    @Value("${app.graph.default-max-edges:500}")
+    private int defaultMaxEdges;
+
+    @Value("${app.graph.max-edges:2000}")
+    private int hardMaxEdges;
+
+    @Value("${app.graph.max-depth:10}")
+    private int maxDepth;
 
     private static final List<HelpStatus> ACTIVE_HELP_STATUSES =
             List.of(HelpStatus.ACCEPTED, HelpStatus.COMPLETED);
@@ -641,63 +651,76 @@ public class HelpService {
         log.info("Построение графа помощи для userId={}, depth={}, maxEdges={}",
                 userId, depth, maxEdges);
 
-        List<ConfirmedHelpGraphProjection> confirmedHelps =
-                helpRepository.findConfirmedHelpGraphProjection();
+        int edgeLimit = resolveMaxEdges(maxEdges);
+        Integer effectiveDepth = userId == null ? null : resolveDepth(depth);
 
-        Integer effectiveDepth = depth != null && depth >= 0 ? depth : null;
-        int effectiveMaxEdges = maxEdges != null && maxEdges > 0 ? maxEdges : Integer.MAX_VALUE;
+        List<Object[]> rows = userId == null
+                ? helpRepository.findGlobalGraphEdges(edgeLimit)
+                : helpRepository.findUserGraphEdges(userId, effectiveDepth, edgeLimit);
+        long totalCount = userId == null
+                ? helpRepository.countGlobalGraphEdges()
+                : helpRepository.countUserGraphEdges(userId, effectiveDepth);
 
-        Set<Long> selectedUserIds = selectGraphUsers(userId, effectiveDepth, confirmedHelps);
+        int totalHelps = (int) Math.min(totalCount, Integer.MAX_VALUE);
+        boolean truncated = totalHelps > edgeLimit;
 
-        Map<Long, User> usersMap = userRepository.findAllById(selectedUserIds).stream()
-                .collect(Collectors.toMap(User::getId, user -> user));
+        List<GraphEdge> selectedEdges = rows.stream()
+                .map(this::toGraphEdge)
+                .toList();
+
+        // The root stays in the graph even when it has no outgoing confirmed
+        // help yet; every other node is an endpoint of a returned edge.
+        LinkedHashSet<Long> selectedUserIds = new LinkedHashSet<>();
+        if (userId != null) {
+            selectedUserIds.add(userId);
+        }
+        for (GraphEdge edge : selectedEdges) {
+            selectedUserIds.add(edge.helperId());
+            selectedUserIds.add(edge.receiverId());
+        }
+
+        Map<Long, GraphUserProjection> usersMap = selectedUserIds.isEmpty()
+                ? Map.of()
+                : userRepository.findGraphUsersByIds(selectedUserIds).stream()
+                        .collect(Collectors.toMap(GraphUserProjection::getId, user -> user));
+
         Map<Long, org.example.helptreeservice.dto.graph.HelpGraphDto.Node> nodesMap =
                 new LinkedHashMap<>();
         for (Long id : selectedUserIds) {
-            User user = usersMap.get(id);
+            GraphUserProjection user = usersMap.get(id);
             if (user != null) {
                 nodesMap.put(id, toGraphNode(user));
             }
         }
 
-        List<org.example.helptreeservice.dto.graph.HelpGraphDto.Edge> matchingEdges =
-                new ArrayList<>();
-        for (ConfirmedHelpGraphProjection help : confirmedHelps) {
-            if (selectedUserIds.contains(help.getHelperId())
-                    && selectedUserIds.contains(help.getReceiverId())) {
-                matchingEdges.add(org.example.helptreeservice.dto.graph.HelpGraphDto.Edge.builder()
-                        // The edge identity is the help act, not the helper.
-                        .id(help.getHelpId())
-                        .fromUserId(help.getHelperId())
-                        .fromUserName(help.getHelperName() != null ? help.getHelperName() : "")
-                        .toUserId(help.getReceiverId())
-                        .toUserName(help.getReceiverName() != null ? help.getReceiverName() : "")
-                        .postId(help.getPostId())
-                        .postTitle(help.getPostTitle() != null ? help.getPostTitle() : "")
-                        .status(help.getStatus() != null ? help.getStatus().name() : "")
-                        .confirmedAt(help.getConfirmedAt())
-                        .build());
-            }
-        }
-
-        boolean truncated = matchingEdges.size() > effectiveMaxEdges;
         List<org.example.helptreeservice.dto.graph.HelpGraphDto.Edge> returnedEdges =
-                truncated
-                        ? new ArrayList<>(matchingEdges.subList(0, effectiveMaxEdges))
-                        : matchingEdges;
+                selectedEdges.stream()
+                        .map(edge -> org.example.helptreeservice.dto.graph.HelpGraphDto.Edge.builder()
+                                // The edge identity is the help act, not the helper.
+                                .id(edge.helpId())
+                                .fromUserId(edge.helperId())
+                                .fromUserName(edge.helperName() != null ? edge.helperName() : "")
+                                .toUserId(edge.receiverId())
+                                .toUserName(edge.receiverName() != null ? edge.receiverName() : "")
+                                .postId(edge.postId())
+                                .postTitle(edge.postTitle() != null ? edge.postTitle() : "")
+                                .status(edge.status() != null ? edge.status() : "")
+                                .confirmedAt(edge.confirmedAt())
+                                .build())
+                        .toList();
 
         long durationNanos = System.nanoTime() - started;
         helpGraphMetrics.record(userId == null, durationNanos, nodesMap.size(),
-                matchingEdges.size(), returnedEdges.size(), truncated);
+                totalHelps, returnedEdges.size(), truncated);
 
         log.info("Граф помощи построен: users={}, helps={}, returnedEdges={}, truncated={}, buildTimeMs={}",
-                nodesMap.size(), matchingEdges.size(), returnedEdges.size(), truncated,
+                nodesMap.size(), totalHelps, returnedEdges.size(), truncated,
                 Duration.ofNanos(durationNanos).toMillis());
 
         return org.example.helptreeservice.dto.graph.HelpGraphDto.builder()
                 .nodes(new ArrayList<>(nodesMap.values()))
                 .edges(returnedEdges)
-                .totalHelps(matchingEdges.size())
+                .totalHelps(totalHelps)
                 .returnedHelps(returnedEdges.size())
                 .totalUsers(nodesMap.size())
                 .truncated(truncated)
@@ -706,54 +729,55 @@ public class HelpService {
     }
 
     /**
-     * For a user graph: BFS over helper -> receiver edges up to {@code depth}.
-     * For the global graph: every helper and receiver that appears in a
-     * confirmed act.
+     * Depth is always bounded: an explicit value is clamped to
+     * {@code app.graph.max-depth}, and an omitted value defaults to the same
+     * cap. A request can never ask the service to walk an unbounded component.
      */
-    private Set<Long> selectGraphUsers(Long userId,
-                                       Integer depth,
-                                       List<ConfirmedHelpGraphProjection> confirmedHelps) {
-        Set<Long> selected = new HashSet<>();
-        if (userId == null) {
-            for (ConfirmedHelpGraphProjection help : confirmedHelps) {
-                selected.add(help.getHelperId());
-                selected.add(help.getReceiverId());
-            }
-            return selected;
-        }
-
-        Map<Long, List<ConfirmedHelpGraphProjection>> outgoing = new HashMap<>();
-        for (ConfirmedHelpGraphProjection help : confirmedHelps) {
-            outgoing.computeIfAbsent(help.getHelperId(), key -> new ArrayList<>()).add(help);
-        }
-
-        Map<Long, Integer> levelByUser = new HashMap<>();
-        Deque<Long> queue = new ArrayDeque<>();
-        selected.add(userId);
-        levelByUser.put(userId, 0);
-        queue.add(userId);
-
-        while (!queue.isEmpty()) {
-            Long current = queue.removeFirst();
-            int currentLevel = levelByUser.get(current);
-            if (depth != null && currentLevel >= depth) {
-                continue;
-            }
-            for (ConfirmedHelpGraphProjection help : outgoing.getOrDefault(current, List.of())) {
-                Long receiverId = help.getReceiverId();
-                int receiverLevel = currentLevel + 1;
-                Integer knownLevel = levelByUser.get(receiverId);
-                if (knownLevel == null || receiverLevel < knownLevel) {
-                    levelByUser.put(receiverId, receiverLevel);
-                    selected.add(receiverId);
-                    queue.addLast(receiverId);
-                }
-            }
-        }
-        return selected;
+    private Integer resolveDepth(Integer depth) {
+        int requested = depth != null && depth >= 0 ? depth : maxDepth;
+        return Math.min(requested, maxDepth);
     }
 
-    private org.example.helptreeservice.dto.graph.HelpGraphDto.Node toGraphNode(User user) {
+    private int resolveMaxEdges(Integer maxEdges) {
+        int hardCap = Math.max(1, hardMaxEdges);
+        int defaultCap = Math.min(Math.max(1, defaultMaxEdges), hardCap);
+        if (maxEdges == null || maxEdges <= 0) {
+            return defaultCap;
+        }
+        return Math.min(maxEdges, hardCap);
+    }
+
+    private GraphEdge toGraphEdge(Object[] row) {
+        return new GraphEdge(
+                asLong(row[0]),
+                asLong(row[1]),
+                (String) row[2],
+                asLong(row[3]),
+                (String) row[4],
+                asLong(row[5]),
+                (String) row[6],
+                (String) row[7],
+                asDateTime(row[8]));
+    }
+
+    private Long asLong(Object value) {
+        return value instanceof Number number ? number.longValue() : null;
+    }
+
+    private LocalDateTime asDateTime(Object value) {
+        if (value instanceof LocalDateTime dateTime) {
+            return dateTime;
+        }
+        if (value instanceof java.sql.Timestamp timestamp) {
+            return timestamp.toLocalDateTime();
+        }
+        if (value instanceof java.time.OffsetDateTime offsetDateTime) {
+            return offsetDateTime.toLocalDateTime();
+        }
+        return null;
+    }
+
+    private org.example.helptreeservice.dto.graph.HelpGraphDto.Node toGraphNode(GraphUserProjection user) {
         return org.example.helptreeservice.dto.graph.HelpGraphDto.Node.builder()
                 .id(user.getId())
                 .name(user.getName())
@@ -762,6 +786,17 @@ public class HelpService {
                 .debtCount(user.getDebtCount())
                 .rating(user.getRating())
                 .build();
+    }
+
+    private record GraphEdge(Long helpId,
+                             Long helperId,
+                             String helperName,
+                             Long receiverId,
+                             String receiverName,
+                             Long postId,
+                             String postTitle,
+                             String status,
+                             LocalDateTime confirmedAt) {
     }
 
     public org.example.helptreeservice.dto.graph.HelpStatsDto getHelpStats() {

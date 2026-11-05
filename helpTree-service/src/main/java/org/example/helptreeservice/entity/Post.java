@@ -5,6 +5,7 @@ import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
+import org.hibernate.annotations.BatchSize;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -16,6 +17,7 @@ import java.util.List;
     @Index(name = "idx_posts_deleted", columnList = "deleted"),
     @Index(name = "idx_posts_created_at", columnList = "created_at")
 })
+@BatchSize(size = 50)
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -46,6 +48,7 @@ public class Post {
     @ElementCollection
     @CollectionTable(name = "post_images", joinColumns = @JoinColumn(name = "post_id"))
     @Column(name = "image_url", columnDefinition = "TEXT")
+    @BatchSize(size = 50)
     private List<String> imageUrls = new ArrayList<>();
 
     @Column(name = "deleted", nullable = false)
