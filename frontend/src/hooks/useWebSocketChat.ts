@@ -180,9 +180,19 @@ export function useWebSocketChat(options: UseWebSocketChatOptions) {
       // The HTTP upgrade needs a short-lived ticket. Fetch a fresh one for every
       // connection attempt, including automatic reconnects.
       beforeConnect: async () => {
-        const wsTicket = await authApi.getWsTicket();
-        const separator = WS_URL.includes('?') ? '&' : '?';
-        client.brokerURL = `${WS_URL}${separator}ticket=${encodeURIComponent(wsTicket.ticket)}`;
+        try {
+          const wsTicket = await authApi.getWsTicket();
+          const separator = WS_URL.includes('?') ? '&' : '?';
+          client.brokerURL = `${WS_URL}${separator}ticket=${encodeURIComponent(wsTicket.ticket)}`;
+        } catch (error) {
+          // Rejecting here aborts the STOMP connect loop and surfaces as an
+          // unhandled promise rejection (the dev error overlay). The ticket
+          // endpoint is briefly unavailable while the backend restarts, so keep
+          // the loop alive with a ticket-less handshake: the server rejects it
+          // and the normal reconnectDelay schedules the next attempt.
+          console.warn('Не удалось получить тикет WebSocket, повтор подключения позже', error);
+          client.brokerURL = WS_URL;
+        }
       },
       reconnectDelay: 5000,
       heartbeatIncoming: 10000,
