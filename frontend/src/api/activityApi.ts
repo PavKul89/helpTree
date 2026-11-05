@@ -1,5 +1,5 @@
 import api from './axios';
-import type { PageResponse } from './pagination';
+import { normalizePage, type PageResponse } from './pagination';
 
 export interface Activity {
   type: string;
@@ -32,19 +32,20 @@ export const activityApi = {
     userId: number,
     query: ActivityQuery = {}
   ): Promise<PageResponse<Activity>> => {
-    const response = await api.get<PageResponse<Activity>>(
+    const response = await api.get<PageResponse<Activity> | Activity[]>(
       `/api/users/${userId}/activities`,
       { params: query }
     );
-    return response.data;
+    return normalizePage(response.data);
   },
   getAllActivities: async (
     userId: number,
     query: ActivityQuery = {}
   ): Promise<PageResponse<Activity>> => {
-    const response = await api.get<PageResponse<Activity>>('/api/activities', {
-      params: { userId, ...query },
-    });
-    return response.data;
+    const response = await api.get<PageResponse<Activity> | Activity[]>(
+      '/api/activities',
+      { params: { userId, ...query } }
+    );
+    return normalizePage(response.data);
   },
 };

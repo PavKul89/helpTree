@@ -1,6 +1,6 @@
 import api from './axios';
 import { createIdempotencyKey } from '../utils/idempotency';
-import { collectAllPages } from './pagination';
+import { collectAllPages, normalizePage } from './pagination';
 import type { Post, Review } from '../types';
 import type { Achievement } from './achievementApi';
 import type { Activity } from './activityApi';
@@ -295,10 +295,11 @@ export const adminApi = {
   },
 
   getUserActivities: async (id: number, size: number = 50): Promise<Activity[]> => {
-    const response = await api.get<PageResponse<Activity>>(`/api/users/${id}/activities`, {
-      params: { size },
-    });
-    return response.data.content;
+    const response = await api.get<PageResponse<Activity> | Activity[]>(
+      `/api/users/${id}/activities`,
+      { params: { size } }
+    );
+    return normalizePage(response.data).content;
   },
 
   getUserReviews: async (
