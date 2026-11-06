@@ -96,22 +96,22 @@ export const ActivityPage = () => {
 
   const getActivityColor = (type: string) => {
     switch (type) {
-      case 'HELP_GIVEN': return '#10b981';
-      case 'HELP_RECEIVED': return '#06b6d4';
-      case 'POST_CREATED': return '#f59e0b';
-      case 'ACHIEVEMENT_EARNED': return '#a855f7';
-      case 'USER_BLOCKED': return '#ef4444';
-      default: return '#6b7280';
+      case 'HELP_GIVEN': return '#8ccb55';
+      case 'HELP_RECEIVED': return '#84b9a8';
+      case 'POST_CREATED': return '#c8f56a';
+      case 'ACHIEVEMENT_EARNED': return '#b7a3df';
+      case 'USER_BLOCKED': return '#d48c83';
+      default: return '#829688';
     }
   };
 
   const getStatusBadge = (status?: string) => {
     if (!status) return null;
     const colors: Record<string, string> = {
-      OPEN: '#22c55e',
-      IN_PROGRESS: '#f59e0b',
-      COMPLETED: '#06b6d4',
-      CANCELLED: '#ef4444',
+      OPEN: 'rgba(140, 203, 85, 0.22)',
+      IN_PROGRESS: 'rgba(200, 245, 106, 0.18)',
+      COMPLETED: 'rgba(132, 185, 168, 0.22)',
+      CANCELLED: 'rgba(212, 140, 131, 0.2)',
     };
     return (
       <span style={{
@@ -166,76 +166,81 @@ export const ActivityPage = () => {
             </div>
           ) : (
             <div style={styles.timeline}>
-              {activities.map((activity, index) => (
-                <div key={`${activity.type}-${activity.timestamp}-${index}`} style={styles.activityItem}>
-                  <div style={styles.timelineLine}>
-                    <div
-                      style={{
-                        ...styles.timelineDot,
-                        backgroundColor: getActivityColor(activity.type),
-                      }}
-                    >
-                      {(() => {
-                        const IconComp = ACTIVITY_ICONS[activity.type];
-                        return IconComp ? <IconComp size={16} color="#fff" /> : <Trophy size={16} color="#fff" />;
-                      })()}
-                    </div>
-                    {index < activities.length - 1 && <div style={styles.timelineConnector} />}
-                  </div>
-
-                  <div style={styles.activityContent}>
-                    <div style={styles.activityHeader}>
-                      <span style={{
-                        ...styles.activityType,
-                        color: getActivityColor(activity.type),
-                      }}>
-                        {activity.typeLabel}
-                      </span>
-                      <span style={styles.activityTime}>
-                        {getRelativeTime(activity.timestamp)}
-                      </span>
-                    </div>
-
-                    <div style={styles.activityTitle}>{activity.title}</div>
-
-                    {activity.description && (
-                      <div style={styles.activityDescription}>
-                        {activity.description}
+              {activities.map((activity, index) => {
+                const relativeTime = getRelativeTime(activity.timestamp);
+                return (
+                  <div key={`${activity.type}-${activity.timestamp}-${index}`} style={styles.activityItem}>
+                    <div style={styles.timelineLine}>
+                      <div
+                        style={{
+                          ...styles.timelineDot,
+                          backgroundColor: getActivityColor(activity.type),
+                        }}
+                      >
+                        {(() => {
+                          const IconComp = ACTIVITY_ICONS[activity.type];
+                          return IconComp ? <IconComp size={16} color="#fff" /> : <Trophy size={16} color="#fff" />;
+                        })()}
                       </div>
-                    )}
+                      {index < activities.length - 1 && <div style={styles.timelineConnector} />}
+                    </div>
 
-                    <div style={styles.activityMeta}>
-                      {activity.relatedPostTitle && (
-                        <Link
-                          to={`/posts/${activity.relatedPostId}`}
-                          style={styles.metaLink}
-                        >
-                          <FileText size={14} style={{ marginRight: 4 }} />
-                          {activity.relatedPostTitle}
-                        </Link>
-                      )}
-
-                      {activity.relatedUserName && activity.type !== 'ACHIEVEMENT_EARNED' && (
-                        <Link
-                          to={`/profile/${activity.relatedUserId}`}
-                          style={styles.metaLink}
-                        >
-                          <User size={14} style={{ marginRight: 4 }} />
-                          {activity.relatedUserName}
-                        </Link>
-                      )}
-
-                      {activity.status && getStatusBadge(activity.status)}
-
-                      {activity.category && (
-                        <span style={styles.categoryBadge}>
-                          {activity.category}
+                    <div style={styles.activityContent}>
+                      <div style={styles.activityHeader}>
+                        <span style={{
+                          ...styles.activityType,
+                          color: getActivityColor(activity.type),
+                        }}>
+                          {activity.typeLabel}
                         </span>
+                        {relativeTime && (
+                          <time dateTime={activity.timestamp || undefined} style={styles.activityTime}>
+                            {relativeTime}
+                          </time>
+                        )}
+                      </div>
+
+                      <div style={styles.activityTitle}>{activity.title}</div>
+
+                      {activity.description && (
+                        <div style={styles.activityDescription}>
+                          {activity.description}
+                        </div>
                       )}
+
+                      <div style={styles.activityMeta}>
+                        {activity.relatedPostTitle && (
+                          <Link
+                            to={`/posts/${activity.relatedPostId}`}
+                            style={styles.metaLink}
+                          >
+                            <FileText size={14} style={{ marginRight: 4 }} />
+                            {activity.relatedPostTitle}
+                          </Link>
+                        )}
+
+                        {activity.relatedUserName && activity.type !== 'ACHIEVEMENT_EARNED' && (
+                          <Link
+                            to={`/profile/${activity.relatedUserId}`}
+                            style={styles.metaLink}
+                          >
+                            <User size={14} style={{ marginRight: 4 }} />
+                            {activity.relatedUserName}
+                          </Link>
+                        )}
+
+                        {activity.status && getStatusBadge(activity.status)}
+
+                        {activity.category && (
+                          <span style={styles.categoryBadge}>
+                            {activity.category}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
 
@@ -280,7 +285,7 @@ const styles: Record<string, React.CSSProperties> = {
   container: {
     maxWidth: 980,
     margin: '0 auto',
-    padding: '28px 24px 40px',
+    padding: '28px 24px 56px',
     color: '#f5f4ea',
   },
   backLink: {
@@ -292,53 +297,54 @@ const styles: Record<string, React.CSSProperties> = {
     opacity: 0.9,
   },
   mainCard: {
-    background: 'linear-gradient(155deg, rgba(11, 42, 31, 0.92), rgba(8, 35, 26, 0.98))',
+    background: 'linear-gradient(155deg, rgba(16, 45, 32, 0.96), rgba(11, 36, 25, 0.98))',
     border: '1px solid rgba(180, 225, 155, 0.18)',
-    borderRadius: '24px',
+    borderRadius: '22px',
     overflow: 'hidden',
-    boxShadow: '0 18px 44px rgba(0, 0, 0, 0.18)',
+    boxShadow: '0 20px 46px rgba(0, 0, 0, 0.17)',
   },
   header: {
-    padding: '26px 32px 20px',
-    borderBottom: '1px solid rgba(180, 225, 155, 0.14)',
-    background: 'linear-gradient(180deg, rgba(19, 63, 52, 0.15), rgba(0,0,0,0))',
+    padding: '26px 30px 22px',
+    borderBottom: '1px solid rgba(180, 225, 155, 0.11)',
+    background: 'linear-gradient(180deg, rgba(200, 245, 106, 0.035), transparent)',
   },
   title: {
     color: '#f5f4ea',
-    fontSize: 'clamp(2.2rem, 4vw, 3rem)',
-    fontWeight: 700,
-    lineHeight: 1.1,
-    letterSpacing: '-0.06em',
+    fontSize: 'clamp(1.75rem, 3vw, 2.25rem)',
+    fontWeight: 750,
+    lineHeight: 1.15,
+    letterSpacing: '-0.035em',
     margin: 0,
   },
   subtitle: {
     color: '#b7c5b8',
-    fontSize: '15px',
-    marginTop: '10px',
+    fontSize: '13px',
+    marginTop: '8px',
     display: 'block',
   },
   filters: {
     display: 'flex',
     alignItems: 'center',
+    flexWrap: 'wrap',
     gap: '10px',
-    marginTop: '18px',
+    marginTop: '20px',
   },
   filterLabel: {
     color: '#b7c5b8',
-    fontSize: '13px',
-    fontWeight: 600,
+    fontSize: '12px',
+    fontWeight: 700,
   },
   filterSelect: {
-    background: 'rgba(9, 34, 26, 0.9)',
+    background: 'rgba(7, 27, 19, 0.72)',
     color: '#f5f4ea',
-    border: '1px solid rgba(180, 225, 155, 0.28)',
-    borderRadius: '10px',
-    padding: '8px 12px',
-    fontSize: '14px',
+    border: '1px solid rgba(180, 225, 155, 0.2)',
+    borderRadius: '11px',
+    padding: '8px 11px',
+    fontSize: '13px',
     outline: 'none',
   },
   content: {
-    padding: '16px 20px 12px 20px',
+    padding: '18px 26px 16px',
   },
   emptyState: {
     textAlign: 'center',
@@ -364,67 +370,67 @@ const styles: Record<string, React.CSSProperties> = {
   },
   activityItem: {
     display: 'flex',
-    gap: '16px',
-    minHeight: '110px',
+    gap: '14px',
+    minHeight: '96px',
   },
   timelineLine: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    width: '36px',
+    width: '32px',
     flexShrink: 0,
   },
   timelineDot: {
-    width: '32px',
-    height: '32px',
-    borderRadius: '50%',
+    width: '30px',
+    height: '30px',
+    borderRadius: '10px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
-    boxShadow: '0 0 0 6px rgba(200, 245, 106, 0.05)',
-    border: '1px solid rgba(255,255,255,0.08)',
+    boxShadow: '0 0 0 5px rgba(200, 245, 106, 0.035)',
+    border: '1px solid rgba(255,255,255,0.06)',
   },
   timelineConnector: {
     width: '2px',
     flex: 1,
     minHeight: '20px',
-    background: 'linear-gradient(180deg, rgba(180, 225, 155, 0.18), rgba(180, 225, 155, 0.08))',
-    marginTop: '8px',
+    background: 'linear-gradient(180deg, rgba(180, 225, 155, 0.14), rgba(180, 225, 155, 0.06))',
+    marginTop: '7px',
   },
   activityContent: {
     flex: 1,
-    padding: '2px 0 20px',
+    padding: '1px 0 18px',
   },
   activityHeader: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: '12px',
-    marginBottom: '4px',
+    marginBottom: '5px',
   },
   activityType: {
-    fontSize: '12px',
-    fontWeight: 700,
-    textTransform: 'uppercase',
-    letterSpacing: '0.08em',
+    fontSize: '11px',
+    fontWeight: 750,
+    letterSpacing: '0.015em',
   },
   activityTime: {
-    color: '#b7c5b8',
-    fontSize: '12px',
+    color: '#829688',
+    fontSize: '11px',
     whiteSpace: 'nowrap',
+    textDecoration: 'none',
   },
   activityTitle: {
     color: '#f5f4ea',
-    fontSize: '17px',
+    fontSize: '15px',
     fontWeight: 600,
     lineHeight: 1.4,
-    marginBottom: '6px',
+    marginBottom: '5px',
   },
   activityDescription: {
-    color: '#c9d8cb',
-    fontSize: '14px',
-    marginBottom: '10px',
+    color: '#b7c5b8',
+    fontSize: '13px',
+    marginBottom: '9px',
     lineHeight: 1.5,
   },
   activityMeta: {
@@ -444,23 +450,22 @@ const styles: Record<string, React.CSSProperties> = {
     opacity: 0.96,
   },
   statusBadge: {
-    padding: '3px 8px',
-    borderRadius: '6px',
+    padding: '4px 8px',
+    borderRadius: '8px',
     fontSize: '10px',
     fontWeight: 700,
-    color: '#fff',
-    textTransform: 'uppercase',
-    letterSpacing: '0.04em',
+    color: '#f5f4ea',
+    border: '1px solid rgba(255,255,255,0.08)',
+    letterSpacing: '0.01em',
   },
   categoryBadge: {
-    padding: '3px 8px',
-    borderRadius: '6px',
+    padding: '4px 8px',
+    borderRadius: '8px',
     fontSize: '10px',
     fontWeight: 600,
-    background: 'rgba(255,255,255,0.06)',
+    background: 'rgba(200, 245, 106, 0.07)',
     color: '#b7c5b8',
-    textTransform: 'uppercase',
-    letterSpacing: '0.06em',
+    letterSpacing: '0.01em',
   },
   pagination: {
     display: 'flex',

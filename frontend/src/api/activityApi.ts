@@ -7,7 +7,7 @@ export interface Activity {
   emoji: string;
   title: string;
   description?: string;
-  timestamp: string;
+  timestamp: string | null;
   relatedUserId?: number;
   relatedUserName?: string;
   relatedPostId?: number;

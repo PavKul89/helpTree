@@ -1,5 +1,7 @@
-export const getRelativeTime = (dateString: string): string => {
+export const getRelativeTime = (dateString: string | null | undefined): string => {
+  if (!dateString) return '';
   const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return '';
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffSec = Math.floor(diffMs / 1000);
@@ -26,8 +28,10 @@ export const getRelativeTime = (dateString: string): string => {
   }
 };
 
-export const formatDate = (dateString: string): string => {
+export const formatDate = (dateString: string | null | undefined): string => {
+  if (!dateString) return '';
   const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return '';
   return date.toLocaleDateString('ru-RU', {
     year: 'numeric',
     month: 'long',

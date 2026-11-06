@@ -698,7 +698,9 @@ export const ProfilePage = () => {
                     <span className="profile-activity-copy">
                       <strong>{activity.title}</strong>
                       {activity.description && <small>{activity.description}</small>}
-                      <time dateTime={activity.timestamp}>{formatDate(activity.timestamp)}</time>
+                      {activity.timestamp && (
+                        <time dateTime={activity.timestamp}>{formatDate(activity.timestamp)}</time>
+                      )}
                     </span>
                     {activity.relatedPostId && (
                       <Link

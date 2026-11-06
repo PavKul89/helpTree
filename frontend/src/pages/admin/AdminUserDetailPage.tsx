@@ -1109,7 +1109,7 @@ export const AdminUserDetailPage: React.FC = () => {
                   <div>
                     <div className="admin-timeline-head">
                       <strong>{activity.title}</strong>
-                      <span>{formatDateTime(activity.timestamp)}</span>
+                      <span>{activity.timestamp ? formatDateTime(activity.timestamp) : '—'}</span>
                     </div>
                     <p>
                       {activity.typeLabel}
