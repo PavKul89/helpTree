@@ -1,5 +1,6 @@
 package org.example.helptreeservice.security;
 
+import org.example.helptreeservice.filter.RateLimiterFilter;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 
@@ -10,10 +11,22 @@ class SecurityConfigTest {
 
     @Test
     void jwtFilterIsRegisteredOnlyInsideSpringSecurityChain() {
-        SecurityConfig securityConfig = new SecurityConfig(mock(JwtAuthFilter.class));
+        SecurityConfig securityConfig = new SecurityConfig(
+                mock(JwtAuthFilter.class), mock(RateLimiterFilter.class));
 
         FilterRegistrationBean<JwtAuthFilter> registration =
                 securityConfig.jwtAuthFilterRegistration();
+
+        assertFalse(registration.isEnabled());
+    }
+
+    @Test
+    void rateLimiterFilterIsRegisteredOnlyInsideSpringSecurityChain() {
+        SecurityConfig securityConfig = new SecurityConfig(
+                mock(JwtAuthFilter.class), mock(RateLimiterFilter.class));
+
+        FilterRegistrationBean<RateLimiterFilter> registration =
+                securityConfig.rateLimiterFilterRegistration();
 
         assertFalse(registration.isEnabled());
     }

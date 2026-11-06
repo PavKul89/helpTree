@@ -9,9 +9,11 @@ import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.enums.Role;
 import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.ForbiddenException;
+import org.example.helptreeservice.exception.RateLimitExceededException;
 import org.example.helptreeservice.exception.UnauthorizedException;
 import org.example.helptreeservice.repository.UserRepository;
 import org.example.helptreeservice.service.AuthSessionService.IssuedTokens;
+import org.example.helptreeservice.service.ratelimit.LoginProtectionService;
 import org.example.helptreeservice.service.AuthSessionService.SessionInfo;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -51,14 +53,20 @@ class AuthServiceTest {
     private AuthSessionService authSessionService;
     @Mock
     private AccountSecurityService accountSecurityService;
+    @Mock
+    private LoginProtectionService loginProtectionService;
 
     private AuthService service;
 
     @BeforeEach
     void setUp() {
         service = new AuthService(userRepository, userService, passwordService,
-                jwtService, authSessionService, accountSecurityService);
+                jwtService, authSessionService, accountSecurityService, loginProtectionService);
         lenient().when(jwtService.getExpirationTime()).thenReturn(86_400_000L);
+        lenient().when(loginProtectionService.retryAfterSeconds(any(), any()))
+                .thenReturn(Optional.empty());
+        lenient().when(loginProtectionService.recordFailure(any(), any()))
+                .thenReturn(Optional.empty());
     }
 
     private User user(Long id) {
@@ -203,18 +211,50 @@ class AuthServiceTest {
         request.setEmail("bruteforce@test.com");
         request.setPassword("Wrong1");
         when(userRepository.findByEmailIgnoreCase("bruteforce@test.com")).thenReturn(Optional.empty());
+        when(loginProtectionService.recordFailure(null, "bruteforce@test.com"))
+                .thenReturn(Optional.empty(), Optional.empty(), Optional.empty(),
+                        Optional.empty(), Optional.of(900L));
 
         for (int attempt = 1; attempt <= 4; attempt++) {
             assertThrows(UnauthorizedException.class,
                     () -> service.login(request, null, null));
         }
 
-        // Fifth failure both records the last attempt and returns the lockout error.
-        assertThrows(BadRequestException.class,
+        // The fifth failure both records the attempt and returns the lockout.
+        RateLimitExceededException error = assertThrows(RateLimitExceededException.class,
                 () -> service.login(request, null, null));
-        // Any further attempt is rejected before touching the database.
-        assertThrows(BadRequestException.class,
+        assertEquals(900L, error.getRetryAfterSeconds());
+    }
+
+    @Test
+    void login_shouldRejectLockedPairBeforeTouchingTheDatabase() {
+        LoginRequest request = new LoginRequest();
+        request.setEmail("locked@test.com");
+        request.setPassword("Wrong1");
+        when(loginProtectionService.retryAfterSeconds(null, "locked@test.com"))
+                .thenReturn(Optional.of(321L));
+
+        RateLimitExceededException error = assertThrows(RateLimitExceededException.class,
                 () -> service.login(request, null, null));
+
+        assertEquals(321L, error.getRetryAfterSeconds());
+        verify(userRepository, never()).findByEmailIgnoreCase(anyString());
+    }
+
+    @Test
+    void login_shouldClearFailuresAfterSuccessfulAuthentication() {
+        LoginRequest request = new LoginRequest();
+        request.setEmail("user1@test.com");
+        request.setPassword("Current1");
+        User user = user(1L);
+        when(userRepository.findByEmailIgnoreCase("user1@test.com")).thenReturn(Optional.of(user));
+        when(passwordService.matches("Current1", "stored-password")).thenReturn(true);
+        when(authSessionService.createSession(user, "203.0.113.9", "JUnit"))
+                .thenReturn(tokens(user));
+
+        service.login(request, "203.0.113.9", "JUnit");
+
+        verify(loginProtectionService).recordSuccess("203.0.113.9", "user1@test.com");
     }
 
     // ---------------------------------------------------------------

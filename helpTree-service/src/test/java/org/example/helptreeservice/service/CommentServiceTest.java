@@ -18,6 +18,7 @@ import org.example.helptreeservice.mapper.CommentMapper;
 import org.example.helptreeservice.repository.CommentRepository;
 import org.example.helptreeservice.repository.PostRepository;
 import org.example.helptreeservice.repository.UserRepository;
+import org.example.helptreeservice.service.ratelimit.DistributedRateLimiter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -68,7 +69,7 @@ class CommentServiceTest {
                 userRepository,
                 commentMapper,
                 new CommentContentSanitizer(properties),
-                new CommentRateLimiter(properties),
+                new CommentRateLimiter(properties, mock(DistributedRateLimiter.class)),
                 properties);
 
         author = user(1L, "Alice", false, Role.USER);

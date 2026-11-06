@@ -1,9 +1,10 @@
-# Миграции базы данных (Block 6–11)
+# Миграции базы данных (Block 6–12)
 
 Документ описывает политику миграций, восстановление схемы после V33,
 безопасную стратегию для V3, порядок проверки/отката, проекцию статистики
 рейтинга (V43), серверную карту/поиск (V46), индексы производительности
-Block 10 (V47) и владение объектами изображений Block 11 (V48).
+Block 10 (V47), владение объектами изображений Block 11 (V48) и
+распределённые лимиты/блокировку входа Block 12 (V49).
 
 ## 1. Политика
 
@@ -321,6 +322,55 @@ Backfill:
 типы, constraints, partial-индексы, инварианты состояния/ключей и покрытие
 backfill для стандартного bucket.
 
+### 5.6. Распределённые лимиты и блокировка входа (V49)
+
+V49 — аддитивная миграция Block 12. Она переносит состояние rate limiter-а и
+временной блокировки входа из памяти процесса в общую PostgreSQL, потому что
+несколько экземпляров приложения должны видеть одни и те же счётчики.
+Существующие данные не изменяются и не удаляются.
+
+`rate_limit_buckets` — fixed-window счётчик запросов:
+
+- `bucket_key` (`VARCHAR(255)`, primary key) — `rl:<route>:<ip>:<account>`;
+- `window_started_at`, `expires_at` — границы текущего окна; `expires_at`
+  одновременно является TTL для cleanup;
+- `request_count` — число запросов в окне;
+- `chk_rate_limit_buckets_count` требует `request_count > 0`;
+- `idx_rate_limit_buckets_expires_at` ускоряет удаление истёкших строк.
+
+`login_locks` — временная блокировка пары (IP, аккаунт):
+
+- `lock_key` (`VARCHAR(255)`, primary key) — `login-lock:<sha256>`, где хеш
+  считается от нормализованных IP и email; сам email в таблице не хранится;
+- `locked_until` — момент автоматического снятия блокировки;
+- `created_at` (`DEFAULT LOCALTIMESTAMP`) — время создания/продления;
+- `idx_login_locks_locked_until` ускоряет поиск истёкших блокировок.
+
+Обе таблицы работают через атомарный `INSERT ... ON CONFLICT`:
+
+- инкремент счётчика и сброс окна выполняются одним SQL-стейтментом, поэтому
+  два экземпляра не могут одновременно получить одно и то же значение;
+- `acquireLock` использует `GREATEST(locked_until, EXCLUDED.locked_until)`,
+  то есть повторная блокировка не сокращает уже действующую;
+- mutating-операции store выполняются в `REQUIRES_NEW`, чтобы откат бизнес-
+  транзакции (неверный пароль, отклонённый комментарий) не отменял учёт запроса.
+
+Cleanup:
+
+- `RateLimitCleanupScheduler` раз в 5 минут (`app.rate-limit.cleanup-cron`)
+  удаляет истёкшие счётчики и блокировки батчами
+  (`app.rate-limit.cleanup-batch-size`, максимум 10 батчей за запуск);
+- логическое истечение не зависит от cleanup: запросы и вход проверяют
+  `expires_at`/`locked_until` по `LOCALTIMESTAMP`, поэтому просроченная строка
+  игнорируется сразу, даже если физически ещё не удалена.
+
+Проверка: `scripts/fixtures/verify_block12_schema.sql` проверяет таблицы, типы,
+primary key, constraint счётчика, TTL-индексы, длину ключей, формат
+хешированного login-ключа, положительность окна и верхнюю границу блокировки.
+
+Подробности архитектуры, ключей, proxy headers, fail-open и настройки:
+`docs/RATE_LIMITING.md`.
+
 ## 6. Проверка миграций
 ### 6.1 Чистая база
 
@@ -353,6 +403,14 @@ docker exec postgres psql -U helpTree -d helptree_clean_test `
 docker cp scripts/fixtures/verify_block10_schema.sql postgres:/tmp/verify_block10_schema.sql
 docker exec postgres psql -U helpTree -d helptree_clean_test `
   -v ON_ERROR_STOP=1 -f /tmp/verify_block10_schema.sql
+
+docker cp scripts/fixtures/verify_block11_schema.sql postgres:/tmp/verify_block11_schema.sql
+docker exec postgres psql -U helpTree -d helptree_clean_test `
+  -v ON_ERROR_STOP=1 -f /tmp/verify_block11_schema.sql
+
+docker cp scripts/fixtures/verify_block12_schema.sql postgres:/tmp/verify_block12_schema.sql
+docker exec postgres psql -U helpTree -d helptree_clean_test `
+  -v ON_ERROR_STOP=1 -f /tmp/verify_block12_schema.sql
 ```
 
 ### 6.2 Копия существующей базы
@@ -393,6 +451,10 @@ docker exec postgres psql -U helpTree -d helptree_copy_test `
 docker cp scripts/fixtures/verify_block11_schema.sql postgres:/tmp/verify_block11_schema.sql
 docker exec postgres psql -U helpTree -d helptree_copy_test `
   -v ON_ERROR_STOP=1 -f /tmp/verify_block11_schema.sql
+
+docker cp scripts/fixtures/verify_block12_schema.sql postgres:/tmp/verify_block12_schema.sql
+docker exec postgres psql -U helpTree -d helptree_copy_test `
+  -v ON_ERROR_STOP=1 -f /tmp/verify_block12_schema.sql
 ```
 
 Проверьте, что количество строк в `users`, `posts`, `helps`, `chats`,
@@ -421,6 +483,7 @@ psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block8_schema.sql
 psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block9_schema.sql
 psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block10_schema.sql
 psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block11_schema.sql
+psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block12_schema.sql
 ```
 
 ## 7. Backup перед миграцией
@@ -434,7 +497,7 @@ docker cp postgres:/tmp/helpTree_db_pre_v41.dump .\helpTree_db_pre_v41.dump
 
 Для production используйте штатный backup PostgreSQL (`pg_basebackup` или
 `pg_dump -Fc`) и проверяйте restore на отдельной базе. Не запускайте
-V41–V47 без проверенной точки восстановления.
+V41–V49 без проверенной точки восстановления.
 
 ## 8. Rollback / recovery
 
@@ -478,8 +541,14 @@ V45 — тоже аддитивная (колонки, constraints, индекс
 отключите `upload.cleanup.enabled`: старая версия не знает о реестре и не
 обновляет его. Удаление таблицы не удаляет объекты из Silo, но теряет
 информацию о владельцах и размерах; после повторного применения V48 backfill
-восстановит только строки стандартного bucket. Для точного состояния до V43
-восстановите backup.
+восстановит только строки стандартного bucket. V49 — аддитивная (две таблицы и
+два TTL-индекса); отдельного rollback-скрипта не имеет. Откат кода безопасен:
+старая версия пользуется in-memory лимитерами и не читает новые таблицы.
+Удаление `rate_limit_buckets`/`login_locks` лишь сбрасывает действующие
+счётчики и временные блокировки; после повторного применения V49 они начнутся
+заново. Перед откатом кода уменьшите окно несоответствия: старые и новые
+экземпляры не делят состояние, поэтому на время rolling-отката лимиты будут
+считаться отдельно. Для точного состояния до V43 восстановите backup.
 
 ## 9. Ограничения и замечания
 
@@ -522,3 +591,11 @@ V45 — тоже аддитивная (колонки, constraints, индекс
   по количеству объектов, а не по байтам. Bucket scan удаляет только объекты
   без строки владения; если bucket используется другим приложением, его нужно
   отключить (`upload.cleanup.bucket-scan-enabled=false`).
+- V49 делает PostgreSQL обязательным общим хранилищем лимитов. Все экземпляры
+  должны смотреть в одну базу; при недоступности store фильтр и защита входа
+  работают fail-open (запрос пропускается, в лог пишется ERROR), чтобы отказ БД
+  не превращался в полный отказ API. Cleanup не обязателен для корректности:
+  истёкшие строки игнорируются по времени, но без него таблицы растут. Если
+  включён `TRUST_FORWARDED_HEADERS`, reverse proxy обязан перезаписывать
+  `X-Forwarded-For`, а не дописывать клиентское значение, иначе клиент сможет
+  выбирать ключ лимита. Подробности — в `docs/RATE_LIMITING.md`.

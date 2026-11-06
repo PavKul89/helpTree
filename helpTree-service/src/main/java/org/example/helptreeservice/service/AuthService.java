@@ -11,21 +11,19 @@ import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.ForbiddenException;
 import org.example.helptreeservice.exception.NotFoundException;
+import org.example.helptreeservice.exception.RateLimitExceededException;
 import org.example.helptreeservice.exception.UnauthorizedException;
 import org.example.helptreeservice.repository.UserRepository;
-import org.springframework.scheduling.annotation.Scheduled;
+import org.example.helptreeservice.service.ratelimit.LoginProtectionService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
-import java.time.Duration;
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Orchestrates registration, login, token refresh and session self-service.
@@ -37,8 +35,9 @@ import java.util.concurrent.ConcurrentHashMap;
 @RequiredArgsConstructor
 public class AuthService {
 
-    private static final int MAX_FAILED_ATTEMPTS = 5;
-    private static final long LOCKOUT_DURATION_MS = 15 * 60 * 1000L;
+    private static final String INVALID_CREDENTIALS = "Неверный email или пароль";
+    private static final String LOGIN_LOCKED =
+            "Слишком много неудачных попыток входа. Попробуйте позже.";
 
     /**
      * Valid bcrypt hash used only to equalise response time for unknown accounts.
@@ -53,8 +52,7 @@ public class AuthService {
     private final JwtService jwtService;
     private final AuthSessionService authSessionService;
     private final AccountSecurityService accountSecurityService;
-
-    private final ConcurrentHashMap<String, FailedLoginTracker> failedAttempts = new ConcurrentHashMap<>();
+    private final LoginProtectionService loginProtectionService;
 
     @Transactional
     public AuthResponse register(CreateUserRequest request) {
@@ -71,26 +69,26 @@ public class AuthService {
     @Transactional
     public AuthResponse login(LoginRequest request, String ipAddress, String userAgent) {
         String email = normalizeEmail(request.getEmail());
-        FailedLoginTracker tracker = failedAttempts.computeIfAbsent(email, key -> new FailedLoginTracker());
 
-        if (tracker.isLocked()) {
-            long secondsLeft = tracker.secondsUntilUnlock();
-            log.warn("Попытка входа с временно заблокированного email: осталось {}с", secondsLeft);
-            throw new BadRequestException(
-                    "Слишком много неудачных попыток. Попробуйте через " + secondsLeft + " секунд.");
-        }
+        // The lockout key is (client IP, account). It is stored in the shared
+        // database, so every instance sees the same state and the temporary ban
+        // expires by itself.
+        loginProtectionService.retryAfterSeconds(ipAddress, email).ifPresent(secondsLeft -> {
+            log.warn("Попытка входа с временно заблокированного адреса: осталось {}с", secondsLeft);
+            throw new RateLimitExceededException(LOGIN_LOCKED, secondsLeft);
+        });
 
         User user = userRepository.findByEmailIgnoreCase(email).orElse(null);
         if (user == null) {
             // Spend comparable time to avoid leaking whether the account exists.
             passwordService.matches(request.getPassword(), DUMMY_PASSWORD_HASH);
-            registerFailure(tracker, email);
-            throw new UnauthorizedException("Неверный email или пароль");
+            registerFailure(ipAddress, email);
+            throw new UnauthorizedException(INVALID_CREDENTIALS);
         }
 
         if (!passwordService.matches(request.getPassword(), user.getPassword())) {
-            registerFailure(tracker, email);
-            throw new UnauthorizedException("Неверный email или пароль");
+            registerFailure(ipAddress, email);
+            throw new UnauthorizedException(INVALID_CREDENTIALS);
         }
 
         if (Boolean.TRUE.equals(user.getDeleted())) {
@@ -105,7 +103,7 @@ public class AuthService {
             log.info("Пользователь {} вошёл в заблокированный аккаунт для разблокировки", user.getId());
         }
 
-        failedAttempts.remove(email);
+        loginProtectionService.recordSuccess(ipAddress, email);
 
         LocalDateTime previousLastLogin = user.getLastLogin();
         userService.updateLastLogin(user.getId());
@@ -229,12 +227,6 @@ public class AuthService {
         return authSessionService.issueWsTicket(userId, sessionId);
     }
 
-    @Scheduled(cron = "0 */10 * * * *")
-    public void cleanupFailedLoginTrackers() {
-        Instant now = Instant.now();
-        failedAttempts.entrySet().removeIf(entry -> entry.getValue().isExpired(now));
-    }
-
     private AuthResponse toAuthResponse(AuthSessionService.IssuedTokens tokens,
                                         LocalDateTime previousLastLogin) {
         AuthResponse response = new AuthResponse(
@@ -250,16 +242,13 @@ public class AuthService {
         return response;
     }
 
-    private void registerFailure(FailedLoginTracker tracker, String email) {
-        int count = tracker.registerFailure();
-        if (count >= MAX_FAILED_ATTEMPTS) {
-            tracker.lock(LOCKOUT_DURATION_MS);
-            log.warn("Вход временно заблокирован после {} неудачных попыток", count);
-            throw new BadRequestException(
-                    "Слишком много неудачных попыток. Попробуйте через 15 минут.");
-        }
-        log.warn("Неудачная попытка входа: попытка {}/{}", count, MAX_FAILED_ATTEMPTS);
-        throw new UnauthorizedException("Неверный email или пароль");
+    private void registerFailure(String ipAddress, String email) {
+        loginProtectionService.recordFailure(ipAddress, email).ifPresent(secondsLeft -> {
+            log.warn("Вход временно заблокирован после серии неудачных попыток");
+            throw new RateLimitExceededException(LOGIN_LOCKED, secondsLeft);
+        });
+        log.warn("Неудачная попытка входа");
+        throw new UnauthorizedException(INVALID_CREDENTIALS);
     }
 
     private String normalizeEmail(String email) {
@@ -282,38 +271,4 @@ public class AuthService {
         }
     }
 
-    private static final class FailedLoginTracker {
-        private int count;
-        private Instant lockedUntil;
-        private Instant lastFailure;
-
-        synchronized boolean isLocked() {
-            return lockedUntil != null && Instant.now().isBefore(lockedUntil);
-        }
-
-        synchronized long secondsUntilUnlock() {
-            if (lockedUntil == null) {
-                return 0;
-            }
-            return Math.max(0, Duration.between(Instant.now(), lockedUntil).getSeconds());
-        }
-
-        synchronized int registerFailure() {
-            count++;
-            lastFailure = Instant.now();
-            return count;
-        }
-
-        synchronized void lock(long durationMs) {
-            lockedUntil = Instant.now().plusMillis(durationMs);
-        }
-
-        synchronized boolean isExpired(Instant now) {
-            if (lockedUntil != null && lockedUntil.isAfter(now)) {
-                return false;
-            }
-            return lastFailure == null
-                    || lastFailure.isBefore(now.minusMillis(LOCKOUT_DURATION_MS));
-        }
-    }
 }

@@ -1,57 +1,47 @@
 package org.example.helptreeservice.service;
 
-import io.github.resilience4j.ratelimiter.RateLimiter;
-import io.github.resilience4j.ratelimiter.RateLimiterConfig;
+import lombok.RequiredArgsConstructor;
 import org.example.helptreeservice.config.CommentProperties;
 import org.example.helptreeservice.exception.RateLimitExceededException;
+import org.example.helptreeservice.service.ratelimit.DistributedRateLimiter;
+import org.example.helptreeservice.service.ratelimit.RateLimitDecision;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Per-user comment limiter. It is intentionally in-memory for the current
- * single-instance deployment; a horizontally scaled deployment should replace
- * it with a shared limiter (Redis/bucket4j), like ChatRateLimiter.
+ * Per-user comment limiter backed by the shared counter store. The counter is
+ * incremented in its own transaction, so rolling back the comment insert does
+ * not give the caller an unlimited retry budget.
  */
 @Component
+@RequiredArgsConstructor
 public class CommentRateLimiter {
 
     private static final Duration WINDOW = Duration.ofMinutes(1);
 
     private final CommentProperties properties;
-    private final Map<Long, RateLimiter> limiters = new ConcurrentHashMap<>();
-
-    public CommentRateLimiter(CommentProperties properties) {
-        this.properties = properties;
-    }
+    private final DistributedRateLimiter rateLimiter;
 
     public void checkAllowed(Long userId) {
         if (!properties.isRateLimitEnabled() || userId == null) {
             return;
         }
 
-        RateLimiter limiter = limiters.computeIfAbsent(userId, this::createLimiter);
-        if (!limiter.acquirePermission()) {
+        RateLimitDecision decision = rateLimiter.acquire(
+                "comment:user:" + userId,
+                Math.max(1, properties.getPerMinute()),
+                WINDOW);
+        if (!decision.allowed()) {
             throw new RateLimitExceededException(
                     "Слишком много комментариев. Попробуйте позже.",
-                    Math.max(1, WINDOW.getSeconds()));
+                    decision.retryAfterSeconds());
         }
     }
 
     public void reset(Long userId) {
         if (userId != null) {
-            limiters.remove(userId);
+            rateLimiter.reset("comment:user:" + userId);
         }
-    }
-
-    private RateLimiter createLimiter(Long userId) {
-        RateLimiterConfig config = RateLimiterConfig.custom()
-                .limitForPeriod(Math.max(1, properties.getPerMinute()))
-                .limitRefreshPeriod(WINDOW)
-                .timeoutDuration(Duration.ZERO)
-                .build();
-        return RateLimiter.of("comment-user-" + userId, config);
     }
 }

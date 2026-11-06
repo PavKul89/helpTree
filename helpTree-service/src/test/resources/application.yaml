@@ -15,6 +15,12 @@ app:
   admin:
     email: admin@helptree.dev
     password: dev-admin-password-change-in-prod
+  # Unit tests exercise the services directly; the context-level tests must not
+  # depend on shared rate-limit state left behind by another test.
+  rate-limit:
+    enabled: false
+  login-protection:
+    enabled: false
 
 silo:
   endpoint: http://localhost:9000

@@ -233,12 +233,27 @@ app:
     debt-per-received-help: ${ECONOMY_DEBT_PER_HELP:2}
     debt-clear-threshold: ${ECONOMY_DEBT_CLEAR_THRESHOLD:2}
     debt-block-days: ${ECONOMY_DEBT_BLOCK_DAYS:7}
+  # Shared, database-backed request limits and login lockout (Block 12).
+  # Counters are keyed by route + client IP + authenticated account, so
+  # instances agree and users behind one proxy do not share an account bucket.
   rate-limit:
-    enabled: true
-    default-limit: 1000
-    auth-limit: 100
-    create-limit: 50
-    window-seconds: 60
+    enabled: ${RATE_LIMIT_ENABLED:true}
+    window-seconds: ${RATE_LIMIT_WINDOW_SECONDS:60}
+    default-limit: ${RATE_LIMIT_DEFAULT:600}
+    auth-limit: ${RATE_LIMIT_AUTH:60}
+    login-limit: ${RATE_LIMIT_LOGIN:10}
+    register-limit: ${RATE_LIMIT_REGISTER:5}
+    password-reset-limit: ${RATE_LIMIT_PASSWORD_RESET:5}
+    upload-limit: ${RATE_LIMIT_UPLOAD:20}
+    create-limit: ${RATE_LIMIT_CREATE:60}
+    cleanup-cron: "${RATE_LIMIT_CLEANUP_CRON:0 */5 * * * *}"
+    cleanup-batch-size: ${RATE_LIMIT_CLEANUP_BATCH_SIZE:1000}
+  # Failures are counted per (IP, account); a lock expires automatically.
+  login-protection:
+    enabled: ${LOGIN_PROTECTION_ENABLED:true}
+    max-attempts: ${LOGIN_MAX_ATTEMPTS:5}
+    failure-window-minutes: ${LOGIN_FAILURE_WINDOW_MINUTES:15}
+    lockout-minutes: ${LOGIN_LOCKOUT_MINUTES:15}
 
 rating:
   calculation:

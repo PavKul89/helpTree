@@ -1,5 +1,6 @@
 package org.example.helptreeservice.security;
 
+import org.example.helptreeservice.filter.RateLimiterFilter;
 import org.example.helptreeservice.security.JwtAuthFilter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
@@ -26,17 +27,33 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
+    private final RateLimiterFilter rateLimiterFilter;
 
     @Value("${app.cors.allowed-origins:http://localhost:3000,http://localhost:3001,http://localhost:5173}")
     private String allowedOrigins;
 
-    public SecurityConfig(JwtAuthFilter jwtAuthFilter) {
+    public SecurityConfig(JwtAuthFilter jwtAuthFilter, RateLimiterFilter rateLimiterFilter) {
         this.jwtAuthFilter = jwtAuthFilter;
+        this.rateLimiterFilter = rateLimiterFilter;
     }
 
     @Bean
     public FilterRegistrationBean<JwtAuthFilter> jwtAuthFilterRegistration() {
         FilterRegistrationBean<JwtAuthFilter> registration = new FilterRegistrationBean<>(jwtAuthFilter);
+        registration.setEnabled(false);
+        return registration;
+    }
+
+    /**
+     * The limiter must run inside the security chain, immediately after the JWT
+     * filter: only then does it know the authenticated account. Disabling the
+     * servlet auto-registration prevents it from running a second time outside
+     * the chain.
+     */
+    @Bean
+    public FilterRegistrationBean<RateLimiterFilter> rateLimiterFilterRegistration() {
+        FilterRegistrationBean<RateLimiterFilter> registration =
+                new FilterRegistrationBean<>(rateLimiterFilter);
         registration.setEnabled(false);
         return registration;
     }
@@ -69,6 +86,7 @@ public class SecurityConfig {
             .csrf(AbstractHttpConfigurer::disable)
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
+            .addFilterAfter(rateLimiterFilter, JwtAuthFilter.class)
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info", "/actuator/prometheus").permitAll()
                 .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
