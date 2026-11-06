@@ -200,12 +200,14 @@ export const PostDetailPage = () => {
   }, [post?.id, currentUserId]);
 
   const isAuthor = Boolean(post && user?.id === post.userId);
-  const isAuthorBlocked = Boolean(post?.authorBlockedAt);
   const isUserBlocked = Boolean(
     user && (user.blockedUntil ? new Date(user.blockedUntil) > new Date() : user.blockedAt)
   );
-  const canOfferHelp = Boolean(user && post && !isAuthor && post.status === 'OPEN' && !isUserBlocked && !isAuthorBlocked);
-  const isPostBoosted = Boolean(post?.boostedUntil && new Date(post.boostedUntil).getTime() > Date.now());
+  const canOfferHelp = Boolean(user && post && !isAuthor && post.status === 'OPEN' && !isUserBlocked);
+  const isPostBoosted = Boolean(
+    post?.boosted ||
+      (post?.boostedUntil && new Date(post.boostedUntil).getTime() > Date.now())
+  );
   const boostTimeRemaining = (() => {
     if (!post?.boostedUntil) return '';
     const diff = new Date(post.boostedUntil).getTime() - Date.now();
@@ -730,12 +732,10 @@ export const PostDetailPage = () => {
           </div>
         )}
 
-        {!canOfferHelp && user && !isAuthor && post.status === 'OPEN' && (isUserBlocked || isAuthorBlocked) && (
+        {!canOfferHelp && user && !isAuthor && post.status === 'OPEN' && isUserBlocked && (
           <div className="post-detail-notice" role="status">
             <Ban size={17} aria-hidden="true" />
-            {isUserBlocked
-              ? 'Ваш аккаунт заблокирован. Сейчас нельзя откликнуться на заявку.'
-              : 'Автор заявки заблокирован. Сейчас нельзя откликнуться.'}
+            Ваш аккаунт заблокирован. Сейчас нельзя откликнуться на заявку.
           </div>
         )}
 

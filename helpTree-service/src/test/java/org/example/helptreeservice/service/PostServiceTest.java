@@ -3,6 +3,7 @@ package org.example.helptreeservice.service;
 import org.example.helptreeservice.config.EconomyConfig;
 import org.example.helptreeservice.dto.posts.PostBoostResult;
 import org.example.helptreeservice.dto.posts.PostDto;
+import org.example.helptreeservice.dto.posts.PublicPostDto;
 import org.example.helptreeservice.dto.wallet.WalletOperationResult;
 import org.example.helptreeservice.entity.Post;
 import org.example.helptreeservice.entity.User;
@@ -47,6 +48,8 @@ class PostServiceTest {
     private ImageService imageService;
     @Mock
     private WalletService walletService;
+    @Mock
+    private PrivacyPolicy privacyPolicy;
 
     private EconomyConfig economyConfig;
 
@@ -65,13 +68,22 @@ class PostServiceTest {
                 userService,
                 imageService,
                 walletService,
-                economyConfig
+                economyConfig,
+                privacyPolicy
         );
         owner = user(1L, "Owner");
 
         lenient().when(postMapper.toDto(any(Post.class))).thenAnswer(invocation -> {
             Post post = invocation.getArgument(0);
             return PostDto.builder()
+                    .id(post.getId())
+                    .status(post.getStatus())
+                    .userId(post.getUser() != null ? post.getUser().getId() : null)
+                    .build();
+        });
+        lenient().when(postMapper.toPublicDto(any(Post.class))).thenAnswer(invocation -> {
+            Post post = invocation.getArgument(0);
+            return PublicPostDto.builder()
                     .id(post.getId())
                     .status(post.getStatus())
                     .userId(post.getUser() != null ? post.getUser().getId() : null)
@@ -107,7 +119,7 @@ class PostServiceTest {
                         post(3L, PostStatus.COMPLETED, owner)
                 ), pageable, 2));
 
-        Page<PostDto> result = postService.getPostsByUser(1L, false, pageable);
+        Page<PublicPostDto> result = postService.getPostsByUser(1L, false, pageable);
 
         assertEquals(2, result.getTotalElements());
         assertEquals(2, result.getContent().size());
@@ -125,7 +137,7 @@ class PostServiceTest {
                         post(3L, PostStatus.COMPLETED, owner)
                 ), pageable, 3));
 
-        Page<PostDto> result = postService.getPostsByUser(1L, true, pageable);
+        Page<PublicPostDto> result = postService.getPostsByUser(1L, true, pageable);
 
         assertEquals(3, result.getTotalElements());
         assertTrue(result.getContent().stream().anyMatch(dto -> dto.getStatus() == PostStatus.CANCELLED));

@@ -64,6 +64,22 @@ export const postsApi = {
   getAllByUser: async (userId: number, signal?: AbortSignal): Promise<Post[]> =>
     collectAllPages((page, size) => postsApi.getByUser(userId, { page, size }, signal)),
 
+  /**
+   * Authenticated owner view: every status and the full projection. This route
+   * is never public even though it shares the `/api/posts` prefix.
+   */
+  getMine: async (
+    params?: { page?: number; size?: number },
+    signal?: AbortSignal
+  ): Promise<PageResponse<Post>> => {
+    const response = await api.get<PageResponse<Post>>('/api/posts/mine', { params, signal });
+    return response.data;
+  },
+
+  /** Loads every own post in bounded pages. */
+  getAllMine: async (signal?: AbortSignal): Promise<Post[]> =>
+    collectAllPages((page, size) => postsApi.getMine({ page, size }, signal)),
+
   getById: async (id: number): Promise<Post> => {
     const response = await api.get<Post>(`/api/posts/${id}`);
     return response.data;

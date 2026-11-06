@@ -4,6 +4,7 @@ import org.example.helptreeservice.config.EconomyConfig;
 import org.example.helptreeservice.dto.posts.CreatePostRequest;
 import org.example.helptreeservice.dto.posts.PostBoostResult;
 import org.example.helptreeservice.dto.posts.PostDto;
+import org.example.helptreeservice.dto.posts.PublicPostDto;
 import org.example.helptreeservice.dto.posts.UpdatePostRequest;
 import org.example.helptreeservice.dto.wallet.WalletOperationResult;
 import org.example.helptreeservice.entity.Post;
@@ -44,12 +45,57 @@ public class PostService {
     private final ImageService imageService;
     private final WalletService walletService;
     private final EconomyConfig economyConfig;
+    private final PrivacyPolicy privacyPolicy;
 
     private PostDto toDto(Post post) {
         PostDto dto = postMapper.toDto(post);
         dto.setImageUrls(imageService.refreshUrls(post.getImageUrls()));
         dto.setAuthorAvatarUrl(imageService.refreshUrl(dto.getAuthorAvatarUrl()));
         return dto;
+    }
+
+    /**
+     * Public projection: no block flag, no boost expiry and coordinates only at
+     * the privacy grid resolution. Every anonymous or non-owner caller goes
+     * through this method.
+     */
+    private PublicPostDto toPublicDto(Post post) {
+        PublicPostDto dto = postMapper.toPublicDto(post);
+        dto.setImageUrls(imageService.refreshUrls(post.getImageUrls()));
+        dto.setAuthorAvatarUrl(imageService.refreshUrl(dto.getAuthorAvatarUrl()));
+        dto.setLatitude(privacyPolicy.publicCoordinate(dto.getLatitude()));
+        dto.setLongitude(privacyPolicy.publicCoordinate(dto.getLongitude()));
+        return dto;
+    }
+
+    /**
+     * Projects an already loaded full DTO for a public response. Used by the
+     * detail endpoint, which must decide per viewer whether the owner/admin
+     * projection is allowed.
+     */
+    public PublicPostDto toPublicPost(PostDto post) {
+        return PublicPostDto.builder()
+                .id(post.getId())
+                .title(post.getTitle())
+                .description(post.getDescription())
+                .category(post.getCategory())
+                .authorName(post.getAuthorName())
+                .authorAvatarUrl(post.getAuthorAvatarUrl())
+                .createdAt(post.getCreatedAt())
+                .updatedAt(post.getUpdatedAt())
+                .userId(post.getUserId())
+                .authorRating(post.getAuthorRating())
+                .userCity(post.getUserCity())
+                .latitude(privacyPolicy.publicCoordinate(post.getLatitude()))
+                .longitude(privacyPolicy.publicCoordinate(post.getLongitude()))
+                .helperId(post.getHelperId())
+                .helperName(post.getHelperName())
+                .status(post.getStatus())
+                .imageUrls(post.getImageUrls())
+                .boosted(post.isBoosted())
+                .authorNicknameColor(post.getAuthorNicknameColor())
+                .commentsCount(post.getCommentsCount())
+                .build();
     }
 
     @BusinessMetric(
@@ -115,8 +161,12 @@ public class PostService {
         }
     }
 
+    /**
+     * Public posts of one author. The owner/admin flag only widens the status
+     * filter; the projection stays public because this is a public endpoint.
+     */
     @Transactional(readOnly = true)
-    public Page<PostDto> getPostsByUser(Long userId, boolean includeAllStatuses, Pageable pageable) {
+    public Page<PublicPostDto> getPostsByUser(Long userId, boolean includeAllStatuses, Pageable pageable) {
         log.info("Запрос постов пользователя с ID: {}, includeAllStatuses={}, page={}, size={}",
                 userId, includeAllStatuses, pageable.getPageNumber(), pageable.getPageSize());
 
@@ -126,11 +176,11 @@ public class PostService {
             Specification<Post> spec = PostSpecification.filter(
                     userId, null, null, null, null, null, !includeAllStatuses);
 
-            Page<PostDto> posts = postRepository.findAll(spec, pageable).map(this::toDto);
+            Page<PublicPostDto> posts = postRepository.findAll(spec, pageable).map(this::toPublicDto);
 
             log.info("Найдено {} постов для пользователя с ID: {}", posts.getTotalElements(), userId);
             log.debug("ID постов пользователя {} на текущей странице: {}", userId,
-                    posts.getContent().stream().map(PostDto::getId).collect(Collectors.toList()));
+                    posts.getContent().stream().map(PublicPostDto::getId).collect(Collectors.toList()));
 
             return posts;
 
@@ -141,6 +191,24 @@ public class PostService {
             log.error("Ошибка при получении постов пользователя с ID: {}", userId, e);
             throw e;
         }
+    }
+
+    /**
+     * Authenticated owner view: every non-deleted post of the current user in
+     * every status, with the full projection. Reached only through
+     * {@code GET /api/posts/mine}; never through a public path.
+     */
+    @Transactional(readOnly = true)
+    public Page<PostDto> getMyPosts(Long userId, Pageable pageable) {
+        log.info("Запрос собственных постов пользователя с ID: {}, page={}, size={}",
+                userId, pageable.getPageNumber(), pageable.getPageSize());
+
+        userService.getUserEntityById(userId);
+
+        Specification<Post> spec = PostSpecification.filter(
+                userId, null, null, null, null, null, false);
+
+        return postRepository.findAll(spec, pageable).map(this::toDto);
     }
 
     @Transactional(readOnly = true)
@@ -166,7 +234,7 @@ public class PostService {
     }
 
     @Transactional(readOnly = true)
-    public Page<PostDto> getPosts(Long userId, PostStatus status, String title, String authorName, String category, String city, Pageable pageable, boolean excludeCancelled) {
+    public Page<PublicPostDto> getPosts(Long userId, PostStatus status, String title, String authorName, String category, String city, Pageable pageable, boolean excludeCancelled) {
         log.info("Запрос постов с фильтрацией: userId={}, status={}, title={}, authorName={}, category={}, city={}, page={}, size={}, excludeCancelled={}",
                 userId, status, title, authorName, category, city, pageable.getPageNumber(), pageable.getPageSize(), excludeCancelled);
 
@@ -189,12 +257,12 @@ public class PostService {
                 return spec.toPredicate(root, query, cb);
             };
             
-            Page<PostDto> postsPage = postRepository.findAll(boostedSpec, pageable).map(this::toDto);
+            Page<PublicPostDto> postsPage = postRepository.findAll(boostedSpec, pageable).map(this::toPublicDto);
 
             log.info("Найдено постов с фильтрацией: {}, всего страниц: {}",
                     postsPage.getTotalElements(), postsPage.getTotalPages());
             log.debug("Посты на текущей странице: {}",
-                    postsPage.getContent().stream().map(PostDto::getId).collect(Collectors.toList()));
+                    postsPage.getContent().stream().map(PublicPostDto::getId).collect(Collectors.toList()));
 
             return postsPage;
 
@@ -348,15 +416,15 @@ public class PostService {
     }
 
     @Transactional(readOnly = true)
-    public List<PostDto> getPostsByIds(List<Long> ids) {
+    public List<PublicPostDto> getPostsByIds(List<Long> ids) {
         log.info("Запрос постов по списку ID: {}", ids);
         return postRepository.findByIdsWithUser(ids).stream()
-                .map(this::toDto)
+                .map(this::toPublicDto)
                 .collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)
-    public Page<PostDto> getPostsOnMap(PostStatus status,
+    public Page<PublicPostDto> getPostsOnMap(PostStatus status,
                                        String category,
                                        String city,
                                        String search,
@@ -413,7 +481,7 @@ public class PostService {
             return mapSpec.toPredicate(root, query, cb);
         };
 
-        Page<PostDto> posts = postRepository.findAll(orderedSpec, pageable).map(this::toDto);
+        Page<PublicPostDto> posts = postRepository.findAll(orderedSpec, pageable).map(this::toPublicDto);
         log.info("Найдено постов для карты: {}, всего страниц: {}", posts.getTotalElements(), posts.getTotalPages());
         return posts;
     }

@@ -2,6 +2,7 @@ package org.example.helptreeservice.controller;
 
 import org.example.helptreeservice.config.PaginationConfig;
 import org.example.helptreeservice.dto.common.PageResponse;
+import org.example.helptreeservice.dto.graph.HelpGraphDto;
 import org.example.helptreeservice.dto.helps.CancelHelpRequest;
 import org.example.helptreeservice.dto.helps.HelpHistoryEntryDto;
 import org.example.helptreeservice.dto.helps.HelpRequest;
@@ -9,6 +10,7 @@ import org.example.helptreeservice.dto.helps.HelpResponse;
 import org.example.helptreeservice.exception.ForbiddenException;
 import org.example.helptreeservice.service.AuthorizationService;
 import org.example.helptreeservice.service.HelpService;
+import org.example.helptreeservice.service.PrivacyPolicy;
 import org.example.helptreeservice.util.PageRequests;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +32,7 @@ public class HelpController {
 
     private final HelpService helpService;
     private final AuthorizationService authService;
+    private final PrivacyPolicy privacyPolicy;
     private final PaginationConfig paginationConfig;
 
     @PostMapping("/accept")
@@ -81,7 +84,7 @@ public class HelpController {
             @PathVariable Long helperId,
             @RequestParam(required = false) Integer page,
             @RequestParam(required = false) Integer size) {
-        if (!authService.canAccessHelp(helperId, null)) {
+        if (!privacyPolicy.canViewHelp(helperId, null)) {
             throw new ForbiddenException("Вы можете просматривать только свои записи");
         }
         Page<HelpResponse> helps = helpService.getHelpsByHelper(helperId, responsePageable(page, size));
@@ -93,7 +96,7 @@ public class HelpController {
             @PathVariable Long receiverId,
             @RequestParam(required = false) Integer page,
             @RequestParam(required = false) Integer size) {
-        if (!authService.canAccessHelp(null, receiverId)) {
+        if (!privacyPolicy.canViewHelp(null, receiverId)) {
             throw new ForbiddenException("Вы можете просматривать только свои записи");
         }
         Page<HelpResponse> helps = helpService.getHelpsByReceiver(receiverId, responsePageable(page, size));
@@ -101,11 +104,15 @@ public class HelpController {
     }
 
     @GetMapping("/graph")
-    public ResponseEntity<org.example.helptreeservice.dto.graph.HelpGraphDto> getHelpGraph(
+    public ResponseEntity<?> getHelpGraph(
             @RequestParam(required = false) Long userId,
             @RequestParam(required = false) Integer depth,
             @RequestParam(required = false) Integer maxEdges) {
-        return ResponseEntity.ok(helpService.getHelpGraph(userId, depth, maxEdges));
+        HelpGraphDto graph = helpService.getHelpGraph(userId, depth, maxEdges);
+        if (privacyPolicy.canViewPrivateGraph(userId)) {
+            return ResponseEntity.ok(graph);
+        }
+        return ResponseEntity.ok(helpService.toPublicGraph(graph));
     }
 
     @GetMapping("/stats")

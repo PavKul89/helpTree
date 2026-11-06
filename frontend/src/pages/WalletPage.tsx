@@ -352,7 +352,7 @@ export const WalletPage: React.FC = () => {
     boostKeyRef.current = null;
 
     try {
-      const userPosts = await postsApi.getAllByUser(user.id);
+      const userPosts = await postsApi.getAllMine();
       setPosts(userPosts.filter((post) => post.status === 'OPEN'));
     } catch (error) {
       setPostsError(getErrorMessage(error, 'Не удалось загрузить ваши заявки'));

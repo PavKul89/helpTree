@@ -26,7 +26,7 @@ public class PostDto {
     private String helperName;
     private PostStatus status;
     private List<String> imageUrls;
-    private LocalDateTime authorBlockedAt;
+    /** Exact boost expiry; owner/admin only. Never part of the public DTO. */
     private LocalDateTime boostedUntil;
     private boolean boosted;
     private String authorNicknameColor;

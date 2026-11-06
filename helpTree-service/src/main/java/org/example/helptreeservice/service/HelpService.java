@@ -477,8 +477,10 @@ public class HelpService {
     @Transactional(readOnly = true)
     public Page<HelpResponse> getHelpsByPost(Long postId, Pageable pageable) {
         log.info("Запрос откликов по посту ID: {}, page={}, size={}", postId, pageable.getPageNumber(), pageable.getPageSize());
+        // Any signed-in user may read the response list, but cancellation
+        // details stay with the participants and admins.
         return helpRepository.findByPostId(postId, pageable)
-                .map(helpMapper::toResponse);
+                .map(helpMapper::toPublicResponse);
     }
 
     @Transactional(readOnly = true)
@@ -785,6 +787,48 @@ public class HelpService {
                 .helpedCount(user.getHelpedCount())
                 .debtCount(user.getDebtCount())
                 .rating(user.getRating())
+                .build();
+    }
+
+    /**
+     * Public projection of an already built graph. Only social-capital fields
+     * survive: the debt counter, the concrete post and the help status are
+     * private to the graph owner and admins. The controller decides which
+     * projection to return via {@link PrivacyPolicy}.
+     */
+    public org.example.helptreeservice.dto.graph.PublicHelpGraphDto toPublicGraph(
+            org.example.helptreeservice.dto.graph.HelpGraphDto graph) {
+        List<org.example.helptreeservice.dto.graph.PublicHelpGraphDto.Node> nodes =
+                graph.getNodes() == null ? List.of() : graph.getNodes().stream()
+                        .map(node -> org.example.helptreeservice.dto.graph.PublicHelpGraphDto.Node.builder()
+                                .id(node.getId())
+                                .name(node.getName())
+                                .avatarUrl(node.getAvatarUrl())
+                                .helpedCount(node.getHelpedCount())
+                                .rating(node.getRating())
+                                .build())
+                        .toList();
+
+        List<org.example.helptreeservice.dto.graph.PublicHelpGraphDto.Edge> edges =
+                graph.getEdges() == null ? List.of() : graph.getEdges().stream()
+                        .map(edge -> org.example.helptreeservice.dto.graph.PublicHelpGraphDto.Edge.builder()
+                                .id(edge.getId())
+                                .fromUserId(edge.getFromUserId())
+                                .fromUserName(edge.getFromUserName())
+                                .toUserId(edge.getToUserId())
+                                .toUserName(edge.getToUserName())
+                                .confirmedAt(edge.getConfirmedAt())
+                                .build())
+                        .toList();
+
+        return org.example.helptreeservice.dto.graph.PublicHelpGraphDto.builder()
+                .nodes(nodes)
+                .edges(edges)
+                .totalHelps(graph.getTotalHelps())
+                .returnedHelps(graph.getReturnedHelps())
+                .totalUsers(graph.getTotalUsers())
+                .truncated(graph.isTruncated())
+                .buildTimeMs(graph.getBuildTimeMs())
                 .build();
     }
 

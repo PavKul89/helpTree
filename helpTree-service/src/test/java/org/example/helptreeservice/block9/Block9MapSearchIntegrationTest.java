@@ -2,7 +2,7 @@ package org.example.helptreeservice.block9;
 
 import org.example.helptreeservice.dto.common.PageResponse;
 import org.example.helptreeservice.dto.helps.HelpResponse;
-import org.example.helptreeservice.dto.posts.PostDto;
+import org.example.helptreeservice.dto.posts.PublicPostDto;
 import org.example.helptreeservice.dto.search.SearchResultDto;
 import org.example.helptreeservice.dto.users.UserDto;
 import org.example.helptreeservice.entity.Help;
@@ -100,7 +100,7 @@ class Block9MapSearchIntegrationTest {
         createPost(owner, "Block9Needle outside-bbox", "Block9Cat",
                 PostStatus.OPEN, 60.0, 30.0, LocalDateTime.now());
 
-        Page<PostDto> first = postService.getPostsOnMap(
+        Page<PublicPostDto> first = postService.getPostsOnMap(
                 PostStatus.OPEN, "Block9Cat", null, "Block9Needle",
                 53.80, 27.40, 54.00, 27.80,
                 null, null, null,
@@ -111,9 +111,9 @@ class Block9MapSearchIntegrationTest {
         assertTrue(first.hasNext());
         assertEquals(2, first.getTotalPages());
         assertEquals(List.of(newest.getId(), middle.getId()),
-                first.getContent().stream().map(PostDto::getId).toList());
+                first.getContent().stream().map(PublicPostDto::getId).toList());
 
-        Page<PostDto> second = postService.getPostsOnMap(
+        Page<PublicPostDto> second = postService.getPostsOnMap(
                 PostStatus.OPEN, "Block9Cat", null, "Block9Needle",
                 53.80, 27.40, 54.00, 27.80,
                 null, null, null,
@@ -121,9 +121,9 @@ class Block9MapSearchIntegrationTest {
 
         assertFalse(second.hasNext());
         assertEquals(List.of(oldest.getId()),
-                second.getContent().stream().map(PostDto::getId).toList());
+                second.getContent().stream().map(PublicPostDto::getId).toList());
 
-        Page<PostDto> completed = postService.getPostsOnMap(
+        Page<PublicPostDto> completed = postService.getPostsOnMap(
                 PostStatus.COMPLETED, "Block9Cat", null, "Block9Needle",
                 53.80, 27.40, 54.00, 27.80,
                 null, null, null,
@@ -131,7 +131,7 @@ class Block9MapSearchIntegrationTest {
         assertEquals(1, completed.getTotalElements());
         assertEquals("Block9Needle completed", completed.getContent().get(0).getTitle());
 
-        Page<PostDto> wrongCity = postService.getPostsOnMap(
+        Page<PublicPostDto> wrongCity = postService.getPostsOnMap(
                 PostStatus.OPEN, "Block9Cat", "Block9-Unknown", "Block9Needle",
                 53.80, 27.40, 54.00, 27.80,
                 null, null, null,
@@ -147,7 +147,7 @@ class Block9MapSearchIntegrationTest {
         createPost(owner, "Block9Radius far", "Block9RadiusCat",
                 PostStatus.OPEN, 54.30, 27.90, LocalDateTime.now().minusDays(1));
 
-        Page<PostDto> result = postService.getPostsOnMap(
+        Page<PublicPostDto> result = postService.getPostsOnMap(
                 PostStatus.OPEN, "Block9RadiusCat", null, null,
                 null, null, null, null,
                 53.90, 27.56, 5.0,

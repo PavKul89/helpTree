@@ -40,7 +40,10 @@ const getBoostTimeRemaining = (post: Post): string => {
 };
 
 const isBoosted = (post: Post): boolean =>
-  Boolean(post.boostedUntil && new Date(post.boostedUntil).getTime() > Date.now());
+  Boolean(
+    post.boosted ||
+      (post.boostedUntil && new Date(post.boostedUntil).getTime() > Date.now())
+  );
 
 const StatusPill = ({ status, type = 'post' }: { status: string; type?: 'post' | 'help' }) => {
   const color = getStatusColor(status, type);
@@ -92,7 +95,7 @@ export const MyOrdersPage = () => {
     setLoadError(false);
     try {
       const [postsList, helps] = await Promise.all([
-        postsApi.getAllByUser(user.id),
+        postsApi.getAllMine(),
         helpApi.getAllHelpsByHelper(user.id),
       ]);
       setMyPosts(postsList);

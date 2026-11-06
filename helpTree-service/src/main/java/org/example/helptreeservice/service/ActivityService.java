@@ -36,7 +36,7 @@ public class ActivityService {
 
     private final ActivityRepository activityRepository;
     private final UserRepository userRepository;
-    private final AuthorizationService authorizationService;
+    private final PrivacyPolicy privacyPolicy;
 
     public PageResponse<ActivityDto> getUserActivities(Long userId,
                                                        String type,
@@ -47,9 +47,17 @@ public class ActivityService {
         }
 
         String eventType = resolveType(type);
-        // canManageUser is true for the owner and for admins. Everyone else gets
-        // the public projection enforced by the SQL visibility predicates below.
-        boolean includePrivate = authorizationService.canManageUser(userId);
+        // The owner and admins see the full history. Everyone else gets the
+        // public projection enforced by the SQL visibility predicates below.
+        boolean includePrivate = privacyPolicy.canViewPrivateActivity(userId);
+
+        if (!includePrivate
+                && !ALL.equals(eventType)
+                && !privacyPolicy.isPublicActivity(ActivityType.valueOf(eventType))) {
+            // Asking for an owner-only event type as an anonymous viewer is not
+            // an error; there is simply nothing public to return.
+            return PageResponse.empty(page, size);
+        }
 
         Page<Object[]> rows = activityRepository.findUserActivity(
                 userId, includePrivate, eventType, PageRequest.of(page, size));
@@ -72,6 +80,10 @@ public class ActivityService {
 
     private ActivityDto toDto(Object[] row, boolean includePrivate) {
         ActivityType type = ActivityType.valueOf((String) row[0]);
+        // Fail closed if a SQL predicate ever disagrees with the policy.
+        if (!includePrivate && !privacyPolicy.isPublicActivity(type)) {
+            throw new IllegalStateException("Private activity leaked to a public viewer: " + type);
+        }
         Long relatedUserId = includePrivate ? asLong(row[3]) : null;
         String relatedUserName = includePrivate ? (String) row[4] : null;
         Long relatedPostId = asLong(row[5]);

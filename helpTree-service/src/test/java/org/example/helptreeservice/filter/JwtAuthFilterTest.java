@@ -99,7 +99,17 @@ class JwtAuthFilterTest {
         assertTrue(isPublic("/api/posts/map", "GET"));
         assertTrue(isPublic("/api/users/public", "GET"));
         assertTrue(isPublic("/api/users/7/public", "GET"));
+        assertTrue(isPublic("/api/users/7/activities", "GET"));
+        assertTrue(isPublic("/api/activities", "GET"));
+        assertTrue(isPublic("/api/ratings/top", "GET"));
+        assertTrue(isPublic("/api/ratings/user/7", "GET"));
+        assertTrue(isPublic("/api/helps/graph", "GET"));
         assertFalse(isPublic("/api/actuator", "GET"));
+
+        // The owner view and internal rating history are never public.
+        assertFalse(isPublic("/api/posts/mine", "GET"));
+        assertFalse(isPublic("/api/ratings/user/7/history", "GET"));
+        assertFalse(isPublic("/api/ratings/user/7/recalculate", "GET"));
 
         assertFalse(isPublic("/api/posts", "POST"));
         assertFalse(isPublic("/api/posts/1", "PUT"));

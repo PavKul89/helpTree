@@ -34,19 +34,30 @@ public class PublicCachePolicy {
 
     /** Responses that never depend on the caller's identity. */
     private static final List<Pattern> ANONYMOUS_PATHS = List.of(
-            Pattern.compile("^/api/posts(?:/.*)?$"),
+            // Only the public projections: the general feed and the map never
+            // widen fields for the owner. `/api/posts/mine` is deliberately not
+            // listed and therefore never cached.
+            Pattern.compile("^/api/posts$"),
+            Pattern.compile("^/api/posts/map$"),
+            Pattern.compile("^/api/posts/\\d+/comments(?:/.*)?$"),
             Pattern.compile("^/api/stats$"),
             Pattern.compile("^/api/search$"),
             Pattern.compile("^/api/users/public$"),
-            Pattern.compile("^/api/helps/graph$"),
             Pattern.compile("^/api/helps/stats$"),
             Pattern.compile("^/api/reviews(?:/.*)?$"),
-            Pattern.compile("^/api/ratings(?:/.*)?$"),
+            Pattern.compile("^/api/ratings/top$"),
+            Pattern.compile("^/api/ratings/user/\\d+$"),
             Pattern.compile("^/api/achievements$")
     );
 
     /** Same URL, but visibility depends on the owner/admin role. */
     private static final List<Pattern> AUTH_AWARE_PATHS = List.of(
+            // The detail endpoint returns the full projection to the author.
+            Pattern.compile("^/api/posts/\\d+$"),
+            // The author/admin feed may include cancelled posts.
+            Pattern.compile("^/api/posts/user/\\d+$"),
+            // The graph owner receives private debt/post fields.
+            Pattern.compile("^/api/helps/graph$"),
             Pattern.compile("^/api/users/\\d+/public$"),
             Pattern.compile("^/api/activities$"),
             Pattern.compile("^/api/users/\\d+/activities$")

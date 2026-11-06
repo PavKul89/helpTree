@@ -217,7 +217,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             return true;
         }
         if ("GET".equals(method)) {
-            if (path.startsWith("/api/posts/")) {
+            // `/api/posts/mine` is an authenticated owner view even though it
+            // shares the public `/api/posts/**` prefix.
+            if (path.startsWith("/api/posts/") && !"/api/posts/mine".equals(path)) {
                 return true;
             }
             if (path.equals("/api/posts")) {
@@ -229,10 +231,17 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                     || path.equals("/api/helps/stats")) {
                 return true;
             }
-            if (path.matches("/api/users/\\d+/public")) {
+            if (path.matches("/api/users/\\d+/public")
+                    || path.matches("/api/users/\\d+/activities")) {
                 return true;
             }
-            if (path.startsWith("/api/reviews/") || path.startsWith("/api/ratings/")) {
+            if (path.startsWith("/api/reviews/")) {
+                return true;
+            }
+            // Only the aggregate rating and one user's rating are public. The
+            // calculation history requires authentication and owner/admin.
+            if (path.equals("/api/ratings/top")
+                    || path.matches("/api/ratings/user/\\d+")) {
                 return true;
             }
         }

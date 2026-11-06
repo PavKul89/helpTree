@@ -1,5 +1,6 @@
 package org.example.helptreeservice.service;
 
+import org.example.helptreeservice.enums.ActivityType;
 import org.example.helptreeservice.dto.activity.ActivityDto;
 import org.example.helptreeservice.dto.common.PageResponse;
 import org.example.helptreeservice.exception.BadRequestException;
@@ -27,19 +28,20 @@ class ActivityServiceTest {
 
     @Mock private ActivityRepository activityRepository;
     @Mock private UserRepository userRepository;
-    @Mock private AuthorizationService authorizationService;
+    @Mock private PrivacyPolicy privacyPolicy;
 
     private ActivityService activityService;
 
     @BeforeEach
     void setUp() {
-        activityService = new ActivityService(activityRepository, userRepository, authorizationService);
+        activityService = new ActivityService(activityRepository, userRepository, privacyPolicy);
         lenient().when(userRepository.existsByIdAndDeletedFalse(1L)).thenReturn(true);
     }
 
     @Test
     void publicViewerDoesNotReceiveParticipantIdentity() {
-        when(authorizationService.canManageUser(1L)).thenReturn(false);
+        when(privacyPolicy.canViewPrivateActivity(1L)).thenReturn(false);
+        when(privacyPolicy.isPublicActivity(any(ActivityType.class))).thenReturn(true);
         when(activityRepository.findUserActivity(eq(1L), eq(false), eq("ALL"), any(Pageable.class)))
                 .thenReturn(page(row("HELP_GIVEN", LocalDateTime.now())));
 
@@ -58,7 +60,7 @@ class ActivityServiceTest {
 
     @Test
     void ownerReceivesParticipantIdentity() {
-        when(authorizationService.canManageUser(1L)).thenReturn(true);
+        when(privacyPolicy.canViewPrivateActivity(1L)).thenReturn(true);
         when(activityRepository.findUserActivity(eq(1L), eq(true), eq("ALL"), any(Pageable.class)))
                 .thenReturn(page(row("HELP_GIVEN", LocalDateTime.now())));
 
@@ -72,7 +74,7 @@ class ActivityServiceTest {
 
     @Test
     void achievementRowsAreMappedFromTheTypeCode() {
-        when(authorizationService.canManageUser(1L)).thenReturn(true);
+        when(privacyPolicy.canViewPrivateActivity(1L)).thenReturn(true);
         when(activityRepository.findUserActivity(eq(1L), eq(true), eq("ACHIEVEMENT_EARNED"), any(Pageable.class)))
                 .thenReturn(page(new Object[]{
                         "ACHIEVEMENT_EARNED", 5L, LocalDateTime.now(),
@@ -85,6 +87,29 @@ class ActivityServiceTest {
         ActivityDto activity = response.getContent().get(0);
         assertTrue(activity.getTitle().contains("Первая помощь"));
         assertEquals("COMMON", activity.getCategory());
+    }
+
+    @Test
+    void publicViewerRequestingAPrivateTypeReceivesAnEmptyPage() {
+        when(privacyPolicy.canViewPrivateActivity(1L)).thenReturn(false);
+        when(privacyPolicy.isPublicActivity(ActivityType.USER_BLOCKED)).thenReturn(false);
+
+        PageResponse<ActivityDto> response =
+                activityService.getUserActivities(1L, "USER_BLOCKED", 0, 20);
+
+        assertTrue(response.getContent().isEmpty());
+        verifyNoInteractions(activityRepository);
+    }
+
+    @Test
+    void privateRowLeakingToAPublicViewerFailsClosed() {
+        when(privacyPolicy.canViewPrivateActivity(1L)).thenReturn(false);
+        when(privacyPolicy.isPublicActivity(ActivityType.USER_BLOCKED)).thenReturn(false);
+        when(activityRepository.findUserActivity(eq(1L), eq(false), eq("ALL"), any(Pageable.class)))
+                .thenReturn(page(row("USER_BLOCKED", LocalDateTime.now())));
+
+        assertThrows(IllegalStateException.class,
+                () -> activityService.getUserActivities(1L, "ALL", 0, 20));
     }
 
     @Test

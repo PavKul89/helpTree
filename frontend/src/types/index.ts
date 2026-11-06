@@ -28,8 +28,8 @@ export interface UserPublic {
   helpedCount: number;
   debtCount: number;
   avatarUrl?: string;
-  blockedAt?: string;
-  blockedUntil?: string;
+  city?: string;
+  nicknameColor?: string;
 }
 
 export interface Post {
@@ -50,7 +50,7 @@ export interface Post {
   imageUrls?: string[];
   createdAt: string;
   updatedAt: string;
-  authorBlockedAt?: string;
+  /** Present only in the owner/admin projection of the post detail. */
   boostedUntil?: string;
   boosted: boolean;
   commentsCount: number;
@@ -252,7 +252,8 @@ export interface GraphNode {
   name: string;
   avatarUrl?: string;
   helpedCount: number;
-  debtCount: number;
+  /** Owner/admin projection only; the public graph omits it. */
+  debtCount?: number;
   rating: number;
 }
 
@@ -262,8 +263,11 @@ export interface GraphEdge {
   fromUserName: string;
   toUserId: number;
   toUserName: string;
+  /** Owner/admin projection only; the public graph omits it. */
   postId?: number;
-  postTitle: string;
-  status: string;
+  /** Owner/admin projection only; the public graph omits it. */
+  postTitle?: string;
+  /** Owner/admin projection only; the public graph omits it. */
+  status?: string;
   confirmedAt: string;
 }

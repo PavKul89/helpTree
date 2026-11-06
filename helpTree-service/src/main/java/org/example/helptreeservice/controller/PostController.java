@@ -5,12 +5,14 @@ import org.example.helptreeservice.config.PaginationConfig;
 import org.example.helptreeservice.dto.common.PageResponse;
 import org.example.helptreeservice.dto.posts.CreatePostRequest;
 import org.example.helptreeservice.dto.posts.PostDto;
+import org.example.helptreeservice.dto.posts.PublicPostDto;
 import org.example.helptreeservice.dto.posts.UpdatePostRequest;
 import org.example.helptreeservice.enums.PostStatus;
 import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.ForbiddenException;
 import org.example.helptreeservice.service.AuthorizationService;
 import org.example.helptreeservice.service.PostService;
+import org.example.helptreeservice.service.PrivacyPolicy;
 import org.example.helptreeservice.service.UserService;
 import org.example.helptreeservice.util.PageRequests;
 import jakarta.validation.Valid;
@@ -37,6 +39,7 @@ public class PostController {
     private final PostService postService;
     private final AuthorizationService authService;
     private final UserService userService;
+    private final PrivacyPolicy privacyPolicy;
     private final EconomyConfig economyConfig;
     private final PaginationConfig paginationConfig;
 
@@ -54,7 +57,7 @@ public class PostController {
     }
 
     @GetMapping
-    public ResponseEntity<PageResponse<PostDto>> getPosts(
+    public ResponseEntity<PageResponse<PublicPostDto>> getPosts(
             @RequestParam(required = false) Long userId,
             @RequestParam(required = false) PostStatus status,
             @RequestParam(required = false) String title,
@@ -66,18 +69,41 @@ public class PostController {
         // Публичная лента не показывает отменённые посты: для выборки по автору решают его права,
         // для общей ленты — только администратор видит все статусы.
         boolean excludeCancelled = userId != null
-                ? !authService.canManageUser(userId)
-                : !authService.isAdmin();
+                ? !privacyPolicy.canViewAllPostStatuses(userId)
+                : !privacyPolicy.canViewAllPostStatuses(null);
         Pageable safePageable = PageRequests.of(pageable.getPageNumber(), pageable.getPageSize(),
                 paginationConfig, pageable.getSort());
-        Page<PostDto> result = postService.getPosts(
+        Page<PublicPostDto> result = postService.getPosts(
                 userId, status, title, authorName, category, city, safePageable, excludeCancelled);
         return ResponseEntity.ok(PageResponse.from(result));
     }
 
+    /**
+     * Public post detail. The full projection is returned only to the author
+     * and admins; every other caller receives the public projection with
+     * rounded coordinates and no boost expiry.
+     */
     @GetMapping("/{id}")
-    public ResponseEntity<PostDto> getPostById(@PathVariable Long id) {
-        return ResponseEntity.ok(postService.getPostById(id));
+    public ResponseEntity<?> getPostById(@PathVariable Long id) {
+        PostDto post = postService.getPostById(id);
+        if (privacyPolicy.canViewFullPost(post.getUserId())) {
+            return ResponseEntity.ok(post);
+        }
+        return ResponseEntity.ok(postService.toPublicPost(post));
+    }
+
+    /** Authenticated owner view with every status and the full projection. */
+    @GetMapping("/mine")
+    public ResponseEntity<PageResponse<PostDto>> getMyPosts(
+            @PageableDefault(page = 0, size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+        var currentUser = authService.getCurrentUser();
+        if (currentUser == null) {
+            throw new ForbiddenException("Для просмотра своих заявок необходимо войти в систему");
+        }
+        Pageable safePageable = PageRequests.of(pageable.getPageNumber(), pageable.getPageSize(),
+                paginationConfig, pageable.getSort());
+        Page<PostDto> posts = postService.getMyPosts(currentUser.getUserId(), safePageable);
+        return ResponseEntity.ok(PageResponse.from(posts));
     }
 
     @PutMapping("/{id}")
@@ -88,7 +114,7 @@ public class PostController {
         var currentUser = authService.getCurrentUser();
         log.debug("updatePost: postUserId={}, currentUserId={}, currentUser={}", 
                 post.getUserId(), currentUser != null ? currentUser.getUserId() : null, currentUser);
-        if (!authService.canManagePost(post.getUserId())) {
+        if (!privacyPolicy.canManagePost(post.getUserId())) {
             throw new ForbiddenException("Вы можете редактировать только свои посты");
         }
         return ResponseEntity.ok(postService.updatePost(id, request));
@@ -97,7 +123,7 @@ public class PostController {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deletePost(@PathVariable Long id) {
         PostDto post = postService.getPostById(id);
-        if (!authService.canManagePost(post.getUserId())) {
+        if (!privacyPolicy.canManagePost(post.getUserId())) {
             throw new ForbiddenException("Вы можете удалить только свои посты");
         }
         postService.deletePost(id);
@@ -114,18 +140,18 @@ public class PostController {
     }
 
     @GetMapping("/user/{userId}")
-    public ResponseEntity<PageResponse<PostDto>> getPostsByUser(
+    public ResponseEntity<PageResponse<PublicPostDto>> getPostsByUser(
             @PathVariable Long userId,
             @PageableDefault(page = 0, size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-        boolean includeAllStatuses = authService.canManagePost(userId);
+        boolean includeAllStatuses = privacyPolicy.canViewAllPostStatuses(userId);
         Pageable safePageable = PageRequests.of(pageable.getPageNumber(), pageable.getPageSize(),
                 paginationConfig, pageable.getSort());
-        Page<PostDto> posts = postService.getPostsByUser(userId, includeAllStatuses, safePageable);
+        Page<PublicPostDto> posts = postService.getPostsByUser(userId, includeAllStatuses, safePageable);
         return ResponseEntity.ok(PageResponse.from(posts));
     }
 
     @PostMapping("/by-ids")
-    public ResponseEntity<List<PostDto>> getPostsByIds(@RequestBody List<Long> ids) {
+    public ResponseEntity<List<PublicPostDto>> getPostsByIds(@RequestBody List<Long> ids) {
         if (ids.size() > 100) {
             throw new BadRequestException("Максимальный размер пакетного запроса — 100 ID");
         }
@@ -133,7 +159,7 @@ public class PostController {
     }
 
     @GetMapping("/map")
-    public ResponseEntity<PageResponse<PostDto>> getPostsOnMap(
+    public ResponseEntity<PageResponse<PublicPostDto>> getPostsOnMap(
             @RequestParam(required = false) String bbox,
             @RequestParam(required = false) Double latitude,
             @RequestParam(required = false) Double longitude,
@@ -151,7 +177,7 @@ public class PostController {
         }
 
         Pageable pageable = PageRequests.of(page, size, paginationConfig, Sort.unsorted());
-        Page<PostDto> result = postService.getPostsOnMap(
+        Page<PublicPostDto> result = postService.getPostsOnMap(
                 status, category, city, q,
                 parsedBbox.minLat(), parsedBbox.minLng(), parsedBbox.maxLat(), parsedBbox.maxLng(),
                 latitude, longitude, effectiveRadius,

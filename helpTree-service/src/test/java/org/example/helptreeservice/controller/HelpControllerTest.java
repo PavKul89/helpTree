@@ -7,6 +7,7 @@ import org.example.helptreeservice.dto.helps.HelpResponse;
 import org.example.helptreeservice.exception.ForbiddenException;
 import org.example.helptreeservice.service.AuthorizationService;
 import org.example.helptreeservice.service.HelpService;
+import org.example.helptreeservice.service.PrivacyPolicy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,13 +33,14 @@ class HelpControllerTest {
 
     @Mock private HelpService helpService;
     @Mock private AuthorizationService authService;
+    @Mock private PrivacyPolicy privacyPolicy;
     @Mock private PaginationConfig paginationConfig;
 
     private HelpController controller;
 
     @BeforeEach
     void setUp() {
-        controller = new HelpController(helpService, authService, paginationConfig);
+        controller = new HelpController(helpService, authService, privacyPolicy, paginationConfig);
     }
 
     @Test
@@ -116,7 +118,7 @@ class HelpControllerTest {
 
     @Test
     void getHelpsByHelper_shouldReturnTheSharedPageEnvelope() {
-        when(authService.canAccessHelp(5L, null)).thenReturn(true);
+        when(privacyPolicy.canViewHelp(5L, null)).thenReturn(true);
         when(paginationConfig.getMaxPageSize()).thenReturn(100);
         Page<HelpResponse> page = new PageImpl<>(
                 List.of(HelpResponse.builder().id(1L).build()),

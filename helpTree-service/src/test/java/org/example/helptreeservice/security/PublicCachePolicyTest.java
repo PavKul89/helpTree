@@ -28,6 +28,27 @@ class PublicCachePolicyTest {
     }
 
     @Test
+    void postDetailIsAuthAwareBecauseTheOwnerGetsMoreFields() {
+        MockHttpServletRequest request = request("GET", "/api/posts/7");
+
+        assertTrue(policy.isCacheable(request));
+        assertTrue(policy.isAuthAware(request));
+        assertEquals("private, no-cache", policy.cacheControl(request));
+    }
+
+    @Test
+    void ownerPostListAndGraphAreAuthAware() {
+        assertTrue(policy.isAuthAware(request("GET", "/api/posts/user/7")));
+        assertTrue(policy.isAuthAware(request("GET", "/api/helps/graph")));
+    }
+
+    @Test
+    void neverCachesTheOwnerPostEndpointOrRatingHistory() {
+        assertFalse(policy.isCacheable(request("GET", "/api/posts/mine")));
+        assertFalse(policy.isCacheable(request("GET", "/api/ratings/user/7/history")));
+    }
+
+    @Test
     void doesNotCacheWrites() {
         assertFalse(policy.isCacheable(request("POST", "/api/posts")));
         assertFalse(policy.isCacheable(request("DELETE", "/api/posts/1")));
