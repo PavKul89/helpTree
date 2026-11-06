@@ -2,9 +2,12 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
+  Bell,
   Camera,
+  Eye,
   RefreshCw,
   Settings2,
+  ShieldCheck,
   UserCog,
   UserRound,
 } from 'lucide-react';
@@ -22,6 +25,9 @@ import { SettingsSkeleton } from '../components/settings/SettingsSkeleton';
 import { ProfileSettings } from '../components/settings/ProfileSettings';
 import { AvatarSettings } from '../components/settings/AvatarSettings';
 import { AccountSettings } from '../components/settings/AccountSettings';
+import { NotificationSettings } from '../components/settings/NotificationSettings';
+import { PrivacySettings } from '../components/settings/PrivacySettings';
+import { SecuritySettings } from '../components/settings/SecuritySettings';
 import { ConfirmDialog } from '../components/settings/ConfirmDialog';
 import './SettingsPage.css';
 
@@ -39,9 +45,27 @@ const SECTION_ITEMS: SettingsNavigationItem[] = [
     icon: <Camera size={18} />,
   },
   {
+    id: 'notifications',
+    label: 'Уведомления',
+    description: 'Каналы и дайджест',
+    icon: <Bell size={18} />,
+  },
+  {
+    id: 'privacy',
+    label: 'Приватность',
+    description: 'Видимость профиля',
+    icon: <Eye size={18} />,
+  },
+  {
+    id: 'security',
+    label: 'Безопасность',
+    description: 'Пароль и сессии',
+    icon: <ShieldCheck size={18} />,
+  },
+  {
     id: 'account',
     label: 'Аккаунт',
-    description: 'Данные и удаление',
+    description: 'Экспорт, данные и удаление',
     icon: <UserCog size={18} />,
   },
 ];
@@ -50,6 +74,9 @@ const EMPTY_DIRTY_SECTIONS: Record<SettingsSectionId, boolean> = {
   profile: false,
   avatar: false,
   account: false,
+  notifications: false,
+  privacy: false,
+  security: false,
 };
 
 type LoadState = 'loading' | 'error' | 'ready';
@@ -117,6 +144,14 @@ export const SettingsPage: React.FC = () => {
   );
   const handleAvatarDirty = useCallback(
     (dirty: boolean) => setSectionDirty('avatar', dirty),
+    [setSectionDirty]
+  );
+  const handleNotificationsDirty = useCallback(
+    (dirty: boolean) => setSectionDirty('notifications', dirty),
+    [setSectionDirty]
+  );
+  const handlePrivacyDirty = useCallback(
+    (dirty: boolean) => setSectionDirty('privacy', dirty),
     [setSectionDirty]
   );
 
@@ -233,7 +268,7 @@ export const SettingsPage: React.FC = () => {
           </span>
           <h1>Настройки</h1>
           <p>
-            Управляйте личными данными, фотографией профиля и доступом к аккаунту.
+            Управляйте личными данными, уведомлениями, приватностью и доступом к аккаунту.
             Изменения сохраняются на сервере и сразу синхронизируются с приложением.
           </p>
         </div>
@@ -274,6 +309,16 @@ export const SettingsPage: React.FC = () => {
               onDirtyChange={handleAvatarDirty}
             />
           )}
+
+          {activeSection === 'notifications' && (
+            <NotificationSettings onDirtyChange={handleNotificationsDirty} />
+          )}
+
+          {activeSection === 'privacy' && (
+            <PrivacySettings onDirtyChange={handlePrivacyDirty} />
+          )}
+
+          {activeSection === 'security' && <SecuritySettings user={userData} />}
 
           {activeSection === 'account' && (
             <AccountSettings user={userData} onDeleted={handleDeleted} />

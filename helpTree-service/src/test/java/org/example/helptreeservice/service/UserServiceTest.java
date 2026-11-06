@@ -403,4 +403,121 @@ class UserServiceTest {
         verify(ratingStatsRepository).save(stats);
         verify(publicProfileCache).evictAfterCommit(1L);
     }
+
+    // ---------------------------------------------------------------
+    // Deleted accounts and anonymization
+    // ---------------------------------------------------------------
+
+    @Test
+    void anonymizeUser_shouldClearPersonalDataAndRevokeSessions() {
+        User user = user(1L, false);
+        user.setName("Ivan");
+        user.setEmail("ivan@test.com");
+        user.setRole(Role.USER);
+        user.setPhone("+79990000000");
+        user.setCity("Moscow");
+        user.setLatitude(55.75);
+        user.setLongitude(37.62);
+        user.setTelegramChatId("12345");
+        user.setNicknameColor("#FF0000");
+        user.setEmailVerified(true);
+        user.setHelpCoins(500L);
+        user.setFavoritePostIds(new ArrayList<>(List.of(7L)));
+        when(userRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(user));
+        when(passwordService.encode(anyString())).thenReturn("anonymous-password");
+
+        User result = userService.anonymizeUser(1L, "GDPR request");
+
+        assertEquals("Анонимизированный пользователь #1", result.getName());
+        assertEquals("anonymized+1@anon.helptree.local", result.getEmail());
+        assertEquals("anonymous-password", result.getPassword());
+        assertNull(result.getPhone());
+        assertNull(result.getCity());
+        assertNull(result.getLatitude());
+        assertNull(result.getLongitude());
+        assertNull(result.getTelegramChatId());
+        assertNull(result.getNicknameColor());
+        assertFalse(result.getEmailVerified());
+        assertEquals(0L, result.getHelpCoins());
+        assertEquals(0, result.getDebtCount());
+        assertTrue(result.getFavoritePostIds().isEmpty());
+        assertTrue(result.getDeleted());
+        assertNotNull(result.getDeletedAt());
+        assertNotNull(result.getAnonymizedAt());
+        verify(userRepository).save(user);
+        verify(authSessionService).revokeAllSessionsForUser(1L, "ACCOUNT_ANONYMIZED");
+        verify(publicProfileCache).evictAfterCommit(1L);
+    }
+
+    @Test
+    void anonymizeUser_shouldRejectAlreadyAnonymizedAccount() {
+        User user = user(1L, true);
+        user.setAnonymizedAt(LocalDateTime.now());
+        when(userRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(user));
+
+        assertThrows(ConflictException.class,
+                () -> userService.anonymizeUser(1L, "again"));
+
+        verify(userRepository, never()).save(any());
+        verify(authSessionService, never()).revokeAllSessionsForUser(anyLong(), anyString());
+    }
+
+    @Test
+    void anonymizeUser_shouldRejectLastAdministrator() {
+        User admin = user(1L, false);
+        admin.setRole(Role.ADMIN);
+        when(userRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(admin));
+        when(userRepository.findActiveByRoleForUpdate(Role.ADMIN)).thenReturn(List.of(admin));
+
+        assertThrows(ConflictException.class,
+                () -> userService.anonymizeUser(1L, "leaving"));
+
+        assertFalse(admin.getDeleted());
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void anonymizeUser_shouldAllowAdministratorWhenAnotherAdminRemains() {
+        User admin = user(1L, false);
+        admin.setRole(Role.ADMIN);
+        User otherAdmin = user(2L, false);
+        otherAdmin.setRole(Role.ADMIN);
+        when(userRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(admin));
+        when(userRepository.findActiveByRoleForUpdate(Role.ADMIN))
+                .thenReturn(List.of(admin, otherAdmin));
+        when(passwordService.encode(anyString())).thenReturn("anonymous-password");
+
+        userService.anonymizeUser(1L, "leaving");
+
+        assertTrue(admin.getDeleted());
+        assertNotNull(admin.getAnonymizedAt());
+    }
+
+    @Test
+    void restoreUser_shouldRejectAnonymizedAccount() {
+        User user = user(1L, true);
+        user.setAnonymizedAt(LocalDateTime.now());
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        assertThrows(ConflictException.class, () -> userService.restoreUser(1L));
+
+        assertTrue(user.getDeleted());
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void getUserEntityByIdIncludingDeleted_shouldReturnSoftDeletedRow() {
+        User user = user(1L, true);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        assertSame(user, userService.getUserEntityByIdIncludingDeleted(1L));
+    }
+
+    @Test
+    void getUserEntityByIdIncludingDeleted_shouldFailForUnknownId() {
+        when(userRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThrows(NotFoundException.class,
+                () -> userService.getUserEntityByIdIncludingDeleted(99L));
+    }
 }

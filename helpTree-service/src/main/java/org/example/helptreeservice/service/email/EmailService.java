@@ -14,5 +14,7 @@ public interface EmailService {
 
     boolean sendEmailChangeConfirmation(String to, String newEmail, String token);
 
+    boolean sendAccountInvitation(String to, String token);
+
     void sendEmailChangedNotice(String oldEmail, String newEmail);
 }

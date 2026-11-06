@@ -66,6 +66,18 @@ public class SmtpEmailService implements EmailService {
     }
 
     @Override
+    public boolean sendAccountInvitation(String to, String token) {
+        return send(to,
+                "Приглашение в HelpTree",
+                "Здравствуйте!\n\n"
+                        + "Администратор HelpTree создал для вас аккаунт.\n"
+                        + "Чтобы задать пароль и войти, перейдите по ссылке:\n"
+                        + link("/reset-password", token)
+                        + "\n\nСсылка действует ограниченное время. Если вы не ожидали приглашение, "
+                        + "проигнорируйте это письмо.");
+    }
+
+    @Override
     public void sendEmailChangedNotice(String oldEmail, String newEmail) {
         send(oldEmail,
                 "Email в HelpTree изменён",

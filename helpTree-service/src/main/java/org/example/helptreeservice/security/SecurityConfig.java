@@ -70,7 +70,7 @@ public class SecurityConfig {
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
                 .toList());
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);
         config.setMaxAge(3600L);
@@ -110,6 +110,9 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/ratings/**").permitAll()
                 .requestMatchers("/api/achievements").permitAll()
                 .requestMatchers("/api/activities").permitAll()
+                // Defense in depth: the admin controllers re-check the role, but a
+                // misconfigured controller can never be reached by a non-admin.
+                .requestMatchers("/api/admin/**").hasRole("ADMIN")
                 .anyRequest().authenticated()
             );
         return http.build();

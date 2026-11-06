@@ -40,6 +40,28 @@ export interface AdminUser {
   helpCoins?: number;
   vipUntil?: string;
   nicknameColor?: string;
+  emailVerified?: boolean;
+  /** Soft-deleted account: hidden from the active list, still readable by admins. */
+  deleted?: boolean;
+  deletedAt?: string;
+  /** Set when the account was irreversibly anonymized; it can no longer be restored. */
+  anonymizedAt?: string;
+}
+
+/** Append-only administrative audit entry (admin_audit_log). */
+export interface AdminAuditLog {
+  id: number;
+  adminId?: number;
+  action: string;
+  entityType: string;
+  entityId: number;
+  beforeState?: Record<string, unknown>;
+  afterState?: Record<string, unknown>;
+  reason?: string;
+  ipAddress?: string;
+  userAgent?: string;
+  requestId?: string;
+  createdAt: string;
 }
 
 export interface AdminStats {
@@ -69,12 +91,25 @@ export interface AdminHelpStats {
   }>;
 }
 
-export interface CreateUserPayload {
+export interface AdminCreateUserPayload {
   name: string;
   email: string;
   password: string;
   phone: string;
   city: string;
+  role?: AdminUserRole;
+  /** Mandatory justification, stored in the audit log. */
+  reason: string;
+}
+
+export interface AdminInviteUserPayload {
+  name: string;
+  email: string;
+  phone: string;
+  city: string;
+  role?: AdminUserRole;
+  /** Mandatory justification, stored in the audit log. */
+  reason: string;
 }
 
 export interface UpdateUserPayload {
@@ -144,9 +179,13 @@ export interface AdminUsersQuery {
   role?: AdminUserRole;
   status?: AdminUserStatus;
   blocked?: boolean;
-  sort?: 'id' | 'name' | 'email' | 'rating' | 'helpedCount' | 'createdAt';
+  deleted?: boolean;
+  sort?: 'id' | 'name' | 'email' | 'rating' | 'helpedCount' | 'status' | 'createdAt' | 'deletedAt';
   direction?: 'asc' | 'desc';
 }
+
+/** Query accepted by the dedicated deleted-accounts view. */
+export type AdminDeletedUsersQuery = Omit<AdminUsersQuery, 'blocked' | 'deleted'>;
 
 /**
  * Server-side aggregates for the dashboard. No endpoint returns the whole
@@ -189,7 +228,15 @@ export const adminApi = {
 
   // ------------------------------------------------------------------- users
   getUsers: async (query: AdminUsersQuery = {}): Promise<PageResponse<AdminUser>> => {
-    const response = await api.get<PageResponse<AdminUser>>('/api/users', { params: query });
+    const response = await api.get<PageResponse<AdminUser>>('/api/admin/users', { params: query });
+    return response.data;
+  },
+
+  /** Soft-deleted accounts, including anonymized rows (which cannot be restored). */
+  getDeletedUsers: async (query: AdminDeletedUsersQuery = {}): Promise<PageResponse<AdminUser>> => {
+    const response = await api.get<PageResponse<AdminUser>>('/api/admin/users/deleted', {
+      params: query,
+    });
     return response.data;
   },
 
@@ -218,12 +265,27 @@ export const adminApi = {
   },
 
   getUser: async (id: number): Promise<AdminUser> => {
-    const response = await api.get<AdminUser>(`/api/users/${id}`);
+    const response = await api.get<AdminUser>(`/api/admin/users/${id}`);
     return response.data;
   },
 
-  createUser: async (payload: CreateUserPayload): Promise<AdminUser> => {
-    const response = await api.post<AdminUser>('/api/users', payload);
+  createUser: async (payload: AdminCreateUserPayload): Promise<AdminUser> => {
+    const response = await api.post<AdminUser>('/api/admin/users', payload);
+    return response.data;
+  },
+
+  /** Creates an account without a password and emails a 72-hour setup link. */
+  inviteUser: async (payload: AdminInviteUserPayload): Promise<AdminUser> => {
+    const response = await api.post<AdminUser>('/api/admin/users/invite', payload);
+    return response.data;
+  },
+
+  changeRole: async (
+    id: number,
+    role: AdminUserRole,
+    reason: string
+  ): Promise<AdminUser> => {
+    const response = await api.patch<AdminUser>(`/api/admin/users/${id}/role`, { role, reason });
     return response.data;
   },
 
@@ -232,8 +294,35 @@ export const adminApi = {
     return response.data;
   },
 
-  deleteUser: async (id: number): Promise<void> => {
-    await api.delete(`/api/users/${id}`);
+  deleteUser: async (id: number, reason: string): Promise<void> => {
+    await api.delete(`/api/admin/users/${id}`, { params: { reason } });
+  },
+
+  restoreUser: async (id: number, reason: string): Promise<void> => {
+    await api.post(`/api/admin/users/${id}/restore`, { reason });
+  },
+
+  anonymizeUser: async (id: number, reason: string, confirmEmail?: string): Promise<void> => {
+    await api.post(`/api/admin/users/${id}/anonymize`, { reason, confirmEmail });
+  },
+
+  /** Sensitive read: a reason is mandatory and the call is audited. */
+  exportUserData: async (id: number, reason: string): Promise<Record<string, unknown>> => {
+    const response = await api.get<Record<string, unknown>>(`/api/admin/users/${id}/export`, {
+      params: { reason },
+    });
+    return response.data;
+  },
+
+  getUserAudit: async (
+    id: number,
+    params?: { page?: number; size?: number }
+  ): Promise<PageResponse<AdminAuditLog>> => {
+    const response = await api.get<PageResponse<AdminAuditLog>>(
+      `/api/admin/users/${id}/audit`,
+      { params }
+    );
+    return response.data;
   },
 
   updateUserRating: async (id: number, rating: number): Promise<void> => {

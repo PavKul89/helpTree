@@ -25,12 +25,31 @@ public final class UserSpecification {
                                              String city,
                                              Boolean blocked,
                                              boolean includeEmail) {
+        return filter(query, role, status, city, blocked, includeEmail, false);
+    }
+
+    /**
+     * Directory filter with an explicit deletion scope. The public/admin
+     * directories keep the old overload (active users only); the administrative
+     * deleted-accounts view passes {@code deleted=true}.
+     */
+    public static Specification<User> filter(String query,
+                                             Role role,
+                                             UserStatus status,
+                                             String city,
+                                             Boolean blocked,
+                                             boolean includeEmail,
+                                             Boolean deleted) {
         return (root, queryBuilder, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 
-            predicates.add(cb.or(
-                    cb.equal(root.get("deleted"), false),
-                    cb.isNull(root.get("deleted"))));
+            if (Boolean.TRUE.equals(deleted)) {
+                predicates.add(cb.equal(root.get("deleted"), true));
+            } else {
+                predicates.add(cb.or(
+                        cb.equal(root.get("deleted"), false),
+                        cb.isNull(root.get("deleted"))));
+            }
 
             if (StringUtils.hasText(query)) {
                 String pattern = likePattern(query);
@@ -40,6 +59,11 @@ public final class UserSpecification {
                     matches.add(cb.like(cb.lower(root.get("city")), pattern));
                     if (includeEmail) {
                         matches.add(cb.like(cb.lower(root.get("email")), pattern));
+                        matches.add(cb.like(cb.lower(root.get("phone")), pattern));
+                        Long numericId = parseId(query);
+                        if (numericId != null) {
+                            matches.add(cb.equal(root.get("id"), numericId));
+                        }
                     }
                     predicates.add(cb.or(matches.toArray(new Predicate[0])));
                 }
@@ -80,6 +104,18 @@ public final class UserSpecification {
 
             return cb.and(predicates.toArray(new Predicate[0]));
         };
+    }
+
+    private static Long parseId(String value) {
+        String trimmed = value == null ? "" : value.trim();
+        if (trimmed.isEmpty() || trimmed.length() > 18) {
+            return null;
+        }
+        try {
+            return Long.parseLong(trimmed);
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     private static String likePattern(String value) {

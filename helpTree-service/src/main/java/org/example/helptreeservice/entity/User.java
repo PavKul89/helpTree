@@ -86,6 +86,14 @@ public class User {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
+    /**
+     * Terminal marker for the irreversible anonymization flow. Once set, the row
+     * no longer contains personal data, so it must never be restored as a normal
+     * account.
+     */
+    @Column(name = "anonymized_at")
+    private LocalDateTime anonymizedAt;
+
     @ElementCollection(fetch = FetchType.LAZY)
     @CollectionTable(name = "user_favorites", joinColumns = @JoinColumn(name = "user_id"))
     @Column(name = "post_id", nullable = false)
@@ -135,10 +143,24 @@ public class User {
         LocalDateTime now = LocalDateTime.now();
         this.createdAt = now;
         this.updatedAt = now;
+        normalizeEmail();
     }
 
     @PreUpdate
     protected void onUpdate() {
         this.updatedAt = LocalDateTime.now();
+        normalizeEmail();
+    }
+
+    /**
+     * Email is a login identity. Normalizing it at the persistence boundary
+     * guarantees that every write path (registration, admin invite, email
+     * change, anonymization) stores the same representation, so the unique
+     * index on lower(email) behaves consistently.
+     */
+    private void normalizeEmail() {
+        if (this.email != null) {
+            this.email = this.email.trim().toLowerCase(java.util.Locale.ROOT);
+        }
     }
 }

@@ -35,4 +35,7 @@ public class UserDto {
     private LocalDateTime vipUntil;
     private String nicknameColor;
     private Boolean emailVerified;
+    private Boolean deleted;
+    private LocalDateTime deletedAt;
+    private LocalDateTime anonymizedAt;
 }

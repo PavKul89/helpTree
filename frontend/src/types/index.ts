@@ -19,6 +19,10 @@ export interface User {
   debtStartedAt?: string;
   helpCoins?: number;
   vipUntil?: string;
+  emailVerified?: boolean;
+  deleted?: boolean;
+  deletedAt?: string;
+  anonymizedAt?: string;
 }
 
 export interface UserPublic {

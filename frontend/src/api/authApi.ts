@@ -4,6 +4,64 @@ import type { AuthResponse, LoginRequest, RegisterRequest, User, UserPublic, WsT
 
 const API_URL = 'http://localhost:8080';
 
+export type ProfileVisibility = 'PUBLIC' | 'REGISTERED' | 'PRIVATE';
+export type DigestFrequency = 'INSTANT' | 'DAILY' | 'WEEKLY' | 'OFF';
+
+export interface NotificationPreferences {
+  emailEnabled: boolean;
+  pushEnabled: boolean;
+  inAppEnabled: boolean;
+  digestFrequency: DigestFrequency;
+  quietHoursStart?: string | null;
+  quietHoursEnd?: string | null;
+  updatedAt?: string;
+}
+
+export type UpdateNotificationPreferences = Partial<
+  Pick<
+    NotificationPreferences,
+    | 'emailEnabled'
+    | 'pushEnabled'
+    | 'inAppEnabled'
+    | 'digestFrequency'
+    | 'quietHoursStart'
+    | 'quietHoursEnd'
+  >
+>;
+
+export interface PrivacySettings {
+  profileVisibility: ProfileVisibility;
+  showCity: boolean;
+  showEmail: boolean;
+  showPhone: boolean;
+  allowDirectMessages: boolean;
+  searchable: boolean;
+  updatedAt?: string;
+}
+
+export type UpdatePrivacySettings = Partial<
+  Pick<
+    PrivacySettings,
+    | 'profileVisibility'
+    | 'showCity'
+    | 'showEmail'
+    | 'showPhone'
+    | 'allowDirectMessages'
+    | 'searchable'
+  >
+>;
+
+export interface AccountSession {
+  id: string;
+  createdAt: string;
+  lastUsedAt?: string;
+  expiresAt: string;
+  ipAddress?: string;
+  userAgent?: string;
+  deviceName?: string;
+  current: boolean;
+}
+
 const createAuthApi = () => {
   const instance = axios.create({
     baseURL: API_URL,
@@ -44,6 +102,64 @@ export const authApi = {
   getCurrentUser: async (): Promise<User> => {
     const response = await api.get<User>('/api/users/me');
     return response.data;
+  },
+
+  // ------------------------------------------------------- account security
+  changePassword: async (currentPassword: string, newPassword: string): Promise<void> => {
+    await api.post('/api/auth/password/change', { currentPassword, newPassword });
+  },
+
+  requestEmailChange: async (newEmail: string, password: string): Promise<void> => {
+    await api.post('/api/auth/email/change', { newEmail, password });
+  },
+
+  requestEmailVerification: async (): Promise<void> => {
+    await api.post('/api/auth/email/verification/request');
+  },
+
+  getSessions: async (): Promise<AccountSession[]> => {
+    const response = await api.get<AccountSession[]>('/api/auth/sessions');
+    return response.data;
+  },
+
+  revokeSession: async (sessionId: string): Promise<void> => {
+    await api.delete(`/api/auth/sessions/${sessionId}`);
+  },
+
+  logoutAll: async (): Promise<void> => {
+    await api.post('/api/auth/logout-all');
+  },
+
+  // --------------------------------------------------- account preferences
+  getNotificationPreferences: async (): Promise<NotificationPreferences> => {
+    const response = await api.get<NotificationPreferences>('/api/account/notifications');
+    return response.data;
+  },
+
+  updateNotificationPreferences: async (
+    payload: UpdateNotificationPreferences
+  ): Promise<NotificationPreferences> => {
+    const response = await api.put<NotificationPreferences>('/api/account/notifications', payload);
+    return response.data;
+  },
+
+  getPrivacySettings: async (): Promise<PrivacySettings> => {
+    const response = await api.get<PrivacySettings>('/api/account/privacy');
+    return response.data;
+  },
+
+  updatePrivacySettings: async (payload: UpdatePrivacySettings): Promise<PrivacySettings> => {
+    const response = await api.put<PrivacySettings>('/api/account/privacy', payload);
+    return response.data;
+  },
+
+  exportAccountData: async (): Promise<Record<string, unknown>> => {
+    const response = await api.get<Record<string, unknown>>('/api/account/export');
+    return response.data;
+  },
+
+  anonymizeAccount: async (password: string, reason?: string): Promise<void> => {
+    await api.post('/api/account/anonymize', { password, reason });
   },
 
   getUserById: async (id: number): Promise<UserPublic> => {

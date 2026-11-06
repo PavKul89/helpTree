@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 public class AuthConfig {
 
     private int passwordResetTokenMinutes = 30;
+    private int accountInvitationHours = 72;
     private int emailVerificationTokenHours = 24;
     private int emailChangeTokenHours = 24;
     private int sessionTouchMinutes = 1;

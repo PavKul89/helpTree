@@ -39,6 +39,11 @@ public class DisabledEmailService implements EmailService {
     }
 
     @Override
+    public boolean sendAccountInvitation(String to, String token) {
+        return logDisabled("account invitation", to);
+    }
+
+    @Override
     public void sendEmailChangedNotice(String oldEmail, String newEmail) {
         logDisabled("email changed notice", oldEmail);
     }

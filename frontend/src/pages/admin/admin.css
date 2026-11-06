@@ -2775,3 +2775,63 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* -------------------------------------------------------------- scope tabs */
+.admin-scope-tabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--admin-border);
+  border-radius: 12px;
+  background: var(--admin-surface);
+  align-self: flex-start;
+}
+
+.admin-scope-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--admin-muted);
+  font-size: 0.86rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.admin-scope-tab:hover {
+  color: var(--admin-text);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.admin-scope-tab.is-active {
+  background: rgba(200, 245, 106, 0.12);
+  color: var(--admin-lime);
+}
+
+.admin-scope-tab:focus-visible {
+  outline: 2px solid var(--admin-lime);
+  outline-offset: 2px;
+}
+
+.admin-inline-alert--info {
+  border-color: rgba(140, 203, 255, 0.35);
+  background: rgba(140, 203, 255, 0.08);
+  color: #b9dcff;
+}
+
+.admin-warning .admin-button {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.admin-audit-diff {
+  display: inline-block;
+  max-width: 320px;
+  overflow-wrap: anywhere;
+  color: var(--admin-muted);
+  font-size: 11px;
+}

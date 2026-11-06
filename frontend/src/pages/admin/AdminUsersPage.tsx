@@ -1,6 +1,8 @@
 import React, { useDeferredValue, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
+  Archive,
+  ArchiveRestore,
   Ban,
   ChevronRight,
   FilterX,
@@ -33,8 +35,19 @@ import {
 type RoleFilter = 'ALL' | 'USER' | 'ADMIN';
 type StatusFilter = 'ALL' | AdminUserStatus;
 type SortOption = 'created-desc' | 'rating-desc' | 'helped-desc' | 'name-asc';
+type Scope = 'active' | 'deleted';
 
 const PAGE_SIZE = 10;
+
+const SORT_PARAMS: Record<
+  SortOption,
+  { sort: 'createdAt' | 'rating' | 'helpedCount' | 'name'; direction: 'asc' | 'desc' }
+> = {
+  'created-desc': { sort: 'createdAt', direction: 'desc' },
+  'rating-desc': { sort: 'rating', direction: 'desc' },
+  'helped-desc': { sort: 'helpedCount', direction: 'desc' },
+  'name-asc': { sort: 'name', direction: 'asc' },
+};
 
 export const AdminUsersPage: React.FC = () => {
   const { showToast } = useToast();
@@ -46,6 +59,7 @@ export const AdminUsersPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
+  const [scope, setScope] = useState<Scope>('active');
   const [search, setSearch] = useState('');
   const deferredSearch = useDeferredValue(search);
   const [roleFilter, setRoleFilter] = useState<RoleFilter>('ALL');
@@ -54,9 +68,16 @@ export const AdminUsersPage: React.FC = () => {
   const [page, setPage] = useState(0);
 
   const [createOpen, setCreateOpen] = useState(false);
+
   const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null);
+  const [deleteReason, setDeleteReason] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const [restoreTarget, setRestoreTarget] = useState<AdminUser | null>(null);
+  const [restoreReason, setRestoreReason] = useState('');
+  const [restoring, setRestoring] = useState(false);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -65,22 +86,20 @@ export const AdminUsersPage: React.FC = () => {
       setLoading(true);
       setError(null);
       try {
-        const sortParams: Record<SortOption, { sort: 'createdAt' | 'rating' | 'helpedCount' | 'name'; direction: 'asc' | 'desc' }> = {
-          'created-desc': { sort: 'createdAt', direction: 'desc' },
-          'rating-desc': { sort: 'rating', direction: 'desc' },
-          'helped-desc': { sort: 'helpedCount', direction: 'desc' },
-          'name-asc': { sort: 'name', direction: 'asc' },
-        };
-        const { sort: sortField, direction } = sortParams[sort];
-        const data = await adminApi.getUsers({
+        const { sort: sortField, direction } = SORT_PARAMS[sort];
+        const query = {
           page,
           size: PAGE_SIZE,
           q: deferredSearch.trim() || undefined,
           role: roleFilter === 'ALL' ? undefined : roleFilter,
           status: statusFilter === 'ALL' ? undefined : statusFilter,
-          sort: sortField,
+          sort: scope === 'deleted' ? ('deletedAt' as const) : sortField,
           direction,
-        });
+        };
+        const data =
+          scope === 'deleted'
+            ? await adminApi.getDeletedUsers(query)
+            : await adminApi.getUsers(query);
         if (cancelled) return;
         setUsers(data.content);
         setTotal(data.totalElements);
@@ -98,11 +117,11 @@ export const AdminUsersPage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [reloadKey, page, deferredSearch, roleFilter, statusFilter, sort]);
+  }, [reloadKey, page, deferredSearch, roleFilter, statusFilter, sort, scope]);
 
   useEffect(() => {
     setPage(0);
-  }, [deferredSearch, roleFilter, statusFilter, sort]);
+  }, [deferredSearch, roleFilter, statusFilter, sort, scope]);
 
   useEffect(() => {
     if (page > totalPages - 1) setPage(totalPages - 1);
@@ -116,15 +135,16 @@ export const AdminUsersPage: React.FC = () => {
   };
 
   const handleDelete = async () => {
-    if (!deleteTarget || deleting) return;
+    if (!deleteTarget || deleting || !deleteReason.trim()) return;
     setDeleting(true);
     setDeleteError(null);
     try {
-      await adminApi.deleteUser(deleteTarget.id);
+      await adminApi.deleteUser(deleteTarget.id, deleteReason.trim());
       setUsers((previous) => previous.filter((user) => user.id !== deleteTarget.id));
       setTotal((previous) => Math.max(0, previous - 1));
       showToast(`Пользователь «${deleteTarget.name}» удалён.`, 'success');
       setDeleteTarget(null);
+      setDeleteReason('');
       setReloadKey((value) => value + 1);
     } catch (deleteFailure) {
       setDeleteError(getApiErrorMessage(deleteFailure, 'Не удалось удалить пользователя.'));
@@ -133,18 +153,63 @@ export const AdminUsersPage: React.FC = () => {
     }
   };
 
+  const handleRestore = async () => {
+    if (!restoreTarget || restoring || !restoreReason.trim()) return;
+    setRestoring(true);
+    setRestoreError(null);
+    try {
+      await adminApi.restoreUser(restoreTarget.id, restoreReason.trim());
+      setUsers((previous) => previous.filter((user) => user.id !== restoreTarget.id));
+      setTotal((previous) => Math.max(0, previous - 1));
+      showToast(`Пользователь «${restoreTarget.name}» восстановлен.`, 'success');
+      setRestoreTarget(null);
+      setRestoreReason('');
+      setReloadKey((value) => value + 1);
+    } catch (restoreFailure) {
+      setRestoreError(getApiErrorMessage(restoreFailure, 'Не удалось восстановить пользователя.'));
+    } finally {
+      setRestoring(false);
+    }
+  };
+
   const filtersActive =
     search.trim().length > 0 || roleFilter !== 'ALL' || statusFilter !== 'ALL' || sort !== 'created-desc';
+
+  const isDeletedScope = scope === 'deleted';
 
   return (
     <div className="admin-stack">
       <div className="admin-notice">
         <Users size={17} aria-hidden="true" />
         <p>
-          <code>GET /api/users</code> фильтрует, сортирует и разбивает на страницы на сервере.
-          Поиск <code>q</code> охватывает имя, email и город; телефон и ID серверным поиском не
-          поддерживаются. Удалённые аккаунты в этот список не попадают.
+          <code>GET /api/admin/users</code> фильтрует, сортирует и разбивает на страницы на сервере.
+          Поиск <code>q</code> охватывает имя, email, телефон, город и числовой ID. Вкладка
+          «Удалённые» открывает soft-deleted аккаунты; анонимизированные записи видны, но
+          восстановить их уже нельзя.
         </p>
+      </div>
+
+      <div className="admin-scope-tabs" role="tablist" aria-label="Тип аккаунтов">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={!isDeletedScope}
+          className={`admin-scope-tab${!isDeletedScope ? ' is-active' : ''}`}
+          onClick={() => setScope('active')}
+        >
+          <Users size={15} aria-hidden="true" />
+          Активные
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={isDeletedScope}
+          className={`admin-scope-tab${isDeletedScope ? ' is-active' : ''}`}
+          onClick={() => setScope('deleted')}
+        >
+          <Archive size={15} aria-hidden="true" />
+          Удалённые
+        </button>
       </div>
 
       <div className="admin-toolbar-card">
@@ -187,7 +252,11 @@ export const AdminUsersPage: React.FC = () => {
 
             <label className="admin-filter">
               <span>Сортировка</span>
-              <select value={sort} onChange={(event) => setSort(event.target.value as SortOption)}>
+              <select
+                value={sort}
+                onChange={(event) => setSort(event.target.value as SortOption)}
+                disabled={isDeletedScope}
+              >
                 <option value="created-desc">Сначала новые</option>
                 <option value="rating-desc">Рейтинг ↓</option>
                 <option value="helped-desc">Помощь ↓</option>
@@ -228,7 +297,7 @@ export const AdminUsersPage: React.FC = () => {
 
         <div className="admin-toolbar-meta">
           <span>
-            Всего <strong>{formatNumber(total)}</strong>
+            {isDeletedScope ? 'Удалённых' : 'Всего'} <strong>{formatNumber(total)}</strong>
           </span>
           {users.length > 0 && (
             <span>
@@ -250,11 +319,19 @@ export const AdminUsersPage: React.FC = () => {
         />
       ) : users.length === 0 ? (
         <AdminEmptyState
-          title={filtersActive ? 'Ничего не найдено' : 'Пользователей нет'}
+          title={
+            filtersActive
+              ? 'Ничего не найдено'
+              : isDeletedScope
+                ? 'Удалённых аккаунтов нет'
+                : 'Пользователей нет'
+          }
           description={
             filtersActive
               ? 'Измените поисковый запрос или сбросьте фильтры.'
-              : 'Сервер вернул пустой список активных пользователей.'
+              : isDeletedScope
+                ? 'В корзине пусто: ни один аккаунт не был мягко удалён.'
+                : 'Сервер вернул пустой список активных пользователей.'
           }
           action={
             filtersActive ? (
@@ -262,7 +339,7 @@ export const AdminUsersPage: React.FC = () => {
                 <FilterX size={16} aria-hidden="true" />
                 Сбросить фильтры
               </button>
-            ) : (
+            ) : !isDeletedScope ? (
               <button
                 type="button"
                 className="admin-button admin-button--primary"
@@ -271,7 +348,7 @@ export const AdminUsersPage: React.FC = () => {
                 <UserPlus size={16} aria-hidden="true" />
                 Создать пользователя
               </button>
-            )
+            ) : undefined
           }
         />
       ) : (
@@ -294,7 +371,9 @@ export const AdminUsersPage: React.FC = () => {
                   <th scope="col" className="admin-col-optional">Помощь / долг</th>
                   <th scope="col" className="admin-col-optional">HC</th>
                   <th scope="col" className="admin-col-optional">Город</th>
-                  <th scope="col" className="admin-col-wide">Создан</th>
+                  <th scope="col" className="admin-col-wide">
+                    {isDeletedScope ? 'Удалён' : 'Создан'}
+                  </th>
                   <th scope="col">
                     <span className="admin-visually-hidden">Действия</span>
                   </th>
@@ -303,6 +382,7 @@ export const AdminUsersPage: React.FC = () => {
               <tbody>
                 {users.map((user) => {
                   const blocked = isUserBlocked(user);
+                  const anonymized = Boolean(user.anonymizedAt);
                   return (
                     <tr key={user.id}>
                       <td>
@@ -332,6 +412,17 @@ export const AdminUsersPage: React.FC = () => {
                               блок
                             </span>
                           )}
+                          {user.deleted && (
+                            <span className="admin-badge admin-badge--danger" title="Аккаунт мягко удалён">
+                              <Archive size={11} aria-hidden="true" />
+                              удалён
+                            </span>
+                          )}
+                          {anonymized && (
+                            <span className="admin-badge admin-badge--neutral" title="Персональные данные анонимизированы">
+                              анонимизирован
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="admin-col-optional">{formatRating(user.rating)}</td>
@@ -340,7 +431,9 @@ export const AdminUsersPage: React.FC = () => {
                       </td>
                       <td className="admin-col-optional">{formatNumber(user.helpCoins)}</td>
                       <td className="admin-col-optional">{user.city || '—'}</td>
-                      <td className="admin-col-wide">{formatDateTime(user.createdAt)}</td>
+                      <td className="admin-col-wide">
+                        {formatDateTime(isDeletedScope ? user.deletedAt ?? user.createdAt : user.createdAt)}
+                      </td>
                       <td>
                         <div className="admin-row-actions">
                           <Link
@@ -351,18 +444,40 @@ export const AdminUsersPage: React.FC = () => {
                           >
                             <ChevronRight size={17} aria-hidden="true" />
                           </Link>
-                          <button
-                            type="button"
-                            className="admin-icon-btn admin-icon-btn--danger"
-                            onClick={() => {
-                              setDeleteError(null);
-                              setDeleteTarget(user);
-                            }}
-                            aria-label={`Удалить пользователя ${user.name}`}
-                            title="Удалить"
-                          >
-                            <Trash2 size={16} aria-hidden="true" />
-                          </button>
+                          {isDeletedScope ? (
+                            <button
+                              type="button"
+                              className="admin-icon-btn"
+                              onClick={() => {
+                                setRestoreError(null);
+                                setRestoreReason('');
+                                setRestoreTarget(user);
+                              }}
+                              disabled={anonymized}
+                              aria-label={`Восстановить пользователя ${user.name}`}
+                              title={
+                                anonymized
+                                  ? 'Анонимизированный аккаунт нельзя восстановить'
+                                  : 'Восстановить'
+                              }
+                            >
+                              <ArchiveRestore size={16} aria-hidden="true" />
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="admin-icon-btn admin-icon-btn--danger"
+                              onClick={() => {
+                                setDeleteError(null);
+                                setDeleteReason('');
+                                setDeleteTarget(user);
+                              }}
+                              aria-label={`Удалить пользователя ${user.name}`}
+                              title="Удалить"
+                            >
+                              <Trash2 size={16} aria-hidden="true" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -397,17 +512,55 @@ export const AdminUsersPage: React.FC = () => {
         }
         consequences={[
           'Сервер выполнит soft-delete: запись останется в базе, но пользователь исчезнет из активного списка.',
-          'Пользователь не сможет пользоваться аккаунтом; восстановление доступно только через административный API.',
-          'Списка удалённых аккаунтов в интерфейсе нет, поэтому восстановить пользователя из этой панели нельзя.',
+          'Пользователь не сможет пользоваться аккаунтом, а все его сессии будут отозваны.',
+          'Восстановить аккаунт можно на вкладке «Удалённые»; операция и причина попадут в журнал аудита.',
         ]}
         confirmText="Удалить пользователя"
         busy={deleting}
         error={deleteError}
+        reason={deleteReason}
+        onReasonChange={setDeleteReason}
+        reasonRequired
+        reasonPlaceholder="Например: спам-рассылка, подтверждённое нарушение правил"
+        reasonHint="Причина обязательна и сохраняется в admin_audit_log."
         onConfirm={handleDelete}
         onClose={() => {
           if (!deleting) {
             setDeleteTarget(null);
+            setDeleteReason('');
             setDeleteError(null);
+          }
+        }}
+      />
+
+      <AdminConfirmDialog
+        open={Boolean(restoreTarget)}
+        title="Восстановить пользователя?"
+        description={
+          restoreTarget
+            ? `Аккаунт «${restoreTarget.name}» (${restoreTarget.email}) вернётся в активный список.`
+            : undefined
+        }
+        consequences={[
+          'Сервер снимет флаг soft-delete и вернёт аккаунт в активный список.',
+          'Пользователь снова сможет войти, если помнит пароль или восстановит его.',
+          'Операция и причина попадут в журнал аудита.',
+        ]}
+        confirmText="Восстановить"
+        tone="default"
+        busy={restoring}
+        error={restoreError}
+        reason={restoreReason}
+        onReasonChange={setRestoreReason}
+        reasonRequired
+        reasonPlaceholder="Например: апелляция удовлетворена"
+        reasonHint="Причина обязательна и сохраняется в admin_audit_log."
+        onConfirm={handleRestore}
+        onClose={() => {
+          if (!restoring) {
+            setRestoreTarget(null);
+            setRestoreReason('');
+            setRestoreError(null);
           }
         }}
       />

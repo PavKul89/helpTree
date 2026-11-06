@@ -1,7 +1,13 @@
 import React from 'react';
 import { ArrowRight } from 'lucide-react';
 
-export type SettingsSectionId = 'profile' | 'avatar' | 'account';
+export type SettingsSectionId =
+  | 'profile'
+  | 'avatar'
+  | 'account'
+  | 'notifications'
+  | 'privacy'
+  | 'security';
 
 export interface SettingsNavigationItem {
   id: SettingsSectionId;

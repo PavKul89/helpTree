@@ -467,6 +467,55 @@ class AccountSecurityServiceTest {
         verify(accountTokenRepository).deleteExpiredBefore(any(LocalDateTime.class));
     }
 
+    // ---------------------------------------------------------------
+    // Account invitations
+    // ---------------------------------------------------------------
+
+    @Test
+    void sendAccountInvitation_shouldCreatePasswordTokenAndEmailIt() {
+        User user = user(1L);
+        when(emailService.sendAccountInvitation(user.getEmail(), "raw-token")).thenReturn(true);
+
+        service.sendAccountInvitation(user);
+
+        ArgumentCaptor<AccountToken> captor = ArgumentCaptor.forClass(AccountToken.class);
+        verify(accountTokenRepository).save(captor.capture());
+        AccountToken saved = captor.getValue();
+        assertEquals(AccountTokenType.PASSWORD_RESET, saved.getType());
+        assertNull(saved.getPayload());
+        assertTrue(saved.getExpiresAt().isAfter(LocalDateTime.now().plusHours(71)));
+        verify(accountTokenRepository).revokeActiveByUserAndType(
+                eq(1L), eq(AccountTokenType.PASSWORD_RESET), any(LocalDateTime.class));
+        verify(emailService).sendAccountInvitation(user.getEmail(), "raw-token");
+    }
+
+    @Test
+    void sendAccountInvitation_shouldRejectWhenMailIsDisabled() {
+        User user = user(1L);
+        when(emailService.isAvailable()).thenReturn(false);
+
+        assertThrows(BadRequestException.class, () -> service.sendAccountInvitation(user));
+
+        verify(accountTokenRepository, never()).save(any());
+        verify(emailService, never()).sendAccountInvitation(anyString(), anyString());
+    }
+
+    @Test
+    void sendAccountInvitation_shouldFailWhenDeliveryFails() {
+        User user = user(1L);
+        when(emailService.sendAccountInvitation(user.getEmail(), "raw-token")).thenReturn(false);
+
+        assertThrows(BadRequestException.class, () -> service.sendAccountInvitation(user));
+    }
+
+    @Test
+    void sendAccountInvitation_shouldRejectUserWithoutId() {
+        assertThrows(BadRequestException.class,
+                () -> service.sendAccountInvitation(user(null)));
+
+        verify(accountTokenRepository, never()).save(any());
+    }
+
     @Test
     void createAccountToken_shouldStoreOnlyHashAndExpiry() {
         User user = user(1L);

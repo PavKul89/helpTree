@@ -139,10 +139,25 @@ public class UserService {
                                      Role role,
                                      UserStatus status,
                                      Boolean blocked) {
-        log.info("Запрос страницы пользователей: page={}, size={}, q={}, role={}, status={}, blocked={}",
-                pageable.getPageNumber(), pageable.getPageSize(), query, role, status, blocked);
+        return getAllUsers(pageable, query, role, status, blocked, false);
+    }
+
+    /**
+     * Admin directory with an explicit deletion scope. Active-user callers keep
+     * the five-argument overload above; the deleted-accounts view passes
+     * {@code deleted=true}.
+     */
+    @Transactional(readOnly = true)
+    public Page<UserDto> getAllUsers(Pageable pageable,
+                                     String query,
+                                     Role role,
+                                     UserStatus status,
+                                     Boolean blocked,
+                                     Boolean deleted) {
+        log.info("Запрос страницы пользователей: page={}, size={}, q={}, role={}, status={}, blocked={}, deleted={}",
+                pageable.getPageNumber(), pageable.getPageSize(), query, role, status, blocked, deleted);
         return userRepository.findAll(
-                        UserSpecification.filter(query, role, status, null, blocked, true),
+                        UserSpecification.filter(query, role, status, null, blocked, true, deleted),
                         pageable)
                 .map(userMapper::toDto);
     }
@@ -349,6 +364,10 @@ public class UserService {
                 throw new ConflictException("Пользователь не удалён");
             }
 
+            if (user.getAnonymizedAt() != null) {
+                throw new ConflictException("Анонимизированный аккаунт нельзя восстановить");
+            }
+
             user.setDeleted(false);
             user.setDeletedAt(null);
             user.setUpdatedAt(LocalDateTime.now());
@@ -368,6 +387,72 @@ public class UserService {
             log.error("Ошибка при восстановлении пользователя с ID: {}", id, e);
             throw e;
         }
+    }
+
+    @Transactional(readOnly = true)
+    public User getUserEntityByIdIncludingDeleted(Long id) {
+        return userRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Пользователь не найден с id: " + id));
+    }
+
+    /**
+     * Irreversibly removes personal data while keeping the row so historical
+     * helps, reviews and audit entries remain referentially valid. The account is
+     * also soft-deleted and every session is revoked in the same transaction.
+     */
+    @Transactional
+    public User anonymizeUser(Long id, String reason) {
+        User user = userRepository.findByIdForUpdate(id)
+                .orElseThrow(() -> new NotFoundException("Пользователь не найден с id: " + id));
+
+        if (user.getAnonymizedAt() != null) {
+            throw new ConflictException("Аккаунт уже анонимизирован");
+        }
+
+        // The last active administrator must remain usable even when the caller
+        // is an admin or the account owner. A deleted admin is not active.
+        if (user.getRole() == Role.ADMIN && !Boolean.TRUE.equals(user.getDeleted())) {
+            List<User> admins = userRepository.findActiveByRoleForUpdate(Role.ADMIN);
+            if (admins.size() <= 1) {
+                throw new ConflictException("Нельзя анонимизировать последнего администратора");
+            }
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        String anonymousEmail = "anonymized+" + id + "@anon.helptree.local";
+
+        user.setName("Анонимизированный пользователь #" + id);
+        user.setEmail(anonymousEmail);
+        user.setPassword(passwordService.encode(java.util.UUID.randomUUID() + "Aa1"));
+        user.setPhone(null);
+        user.setCity(null);
+        user.setLatitude(null);
+        user.setLongitude(null);
+        user.setBirthDate(null);
+        user.setAvatarUrl(null);
+        user.setTelegramChatId(null);
+        user.setNicknameColor(null);
+        user.setEmailVerified(false);
+        user.setBlockedAt(null);
+        user.setBlockedUntil(null);
+        user.setDebtStartedAt(null);
+        user.setDebtCount(0);
+        user.setHelpCoins(0L);
+        user.setVipUntil(null);
+        user.setFavoritePostIds(new ArrayList<>());
+        user.setDeleted(true);
+        if (user.getDeletedAt() == null) {
+            user.setDeletedAt(now);
+        }
+        user.setAnonymizedAt(now);
+        user.setUpdatedAt(now);
+        userRepository.save(user);
+        publicProfileCache.evictAfterCommit(id);
+
+        authSessionService.revokeAllSessionsForUser(id, "ACCOUNT_ANONYMIZED");
+
+        log.info("Аккаунт {} анонимизирован (reason: {})", id, reason != null ? reason : "—");
+        return user;
     }
 
     @Transactional(readOnly = true)

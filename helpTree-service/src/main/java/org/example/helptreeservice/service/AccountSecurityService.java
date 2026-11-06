@@ -57,6 +57,28 @@ public class AccountSecurityService {
         }
     }
 
+    /**
+     * Creates a single-use password-setup token for an invited account. The
+     * caller has already persisted the user inside the same transaction, so a
+     * delivery failure rolls the invitation back instead of leaving a locked
+     * account nobody can access.
+     */
+    @Transactional
+    public void sendAccountInvitation(User user) {
+        if (user == null || user.getId() == null) {
+            throw new BadRequestException("Пользователь для приглашения не найден");
+        }
+        if (!emailService.isAvailable()) {
+            throw new BadRequestException("Отправка email не настроена: приглашение создать нельзя");
+        }
+        String rawToken = createAccountToken(user, AccountTokenType.PASSWORD_RESET, null,
+                Duration.ofHours(invitationHours()));
+        if (!emailService.sendAccountInvitation(user.getEmail(), rawToken)) {
+            throw new BadRequestException("Не удалось отправить приглашение");
+        }
+        log.info("Приглашение отправлено пользователю {}", user.getId());
+    }
+
     @Transactional
     public void requestEmailVerification(Long userId) {
         User user = requireActiveUser(userId);
@@ -281,6 +303,10 @@ public class AccountSecurityService {
 
     private int passwordResetMinutes() {
         return Math.max(1, authConfig.getPasswordResetTokenMinutes());
+    }
+
+    private int invitationHours() {
+        return Math.max(1, authConfig.getAccountInvitationHours());
     }
 
     private int emailVerificationHours() {

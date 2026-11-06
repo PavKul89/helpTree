@@ -1,25 +1,31 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import {
   Activity as ActivityIcon,
+  ArchiveRestore,
   ArrowLeft,
   Ban,
   CheckCircle2,
   ClipboardList,
   Coins,
+  Download,
   Gift,
   Loader2,
   MessageSquare,
   Pencil,
   RefreshCw,
   ShieldCheck,
+  ShieldOff,
   Star,
   Trash2,
   Trophy,
+  UserCog,
 } from 'lucide-react';
 import {
   adminApi,
+  type AdminAuditLog,
   type AdminUser,
+  type AdminUserRole,
   type RatingResponse,
 } from '../../api/adminApi';
 import type { Achievement } from '../../api/achievementApi';
@@ -52,8 +58,19 @@ type SectionKey = 'wallet' | 'posts' | 'reviews' | 'achievements' | 'activities'
 type SectionErrors = Partial<Record<SectionKey, string>>;
 
 const TX_PAGE_SIZE = 10;
+const AUDIT_PAGE_SIZE = 10;
 const ADMIN_COINS_LIMIT = 1_000_000;
 const ADMIN_COINS_MAX_REASON = 500;
+
+const AUDIT_ACTION_LABELS: Record<string, string> = {
+  USER_CREATED: 'Пользователь создан',
+  USER_INVITED: 'Отправлено приглашение',
+  USER_ROLE_CHANGED: 'Изменена роль',
+  USER_DELETED: 'Аккаунт удалён',
+  USER_RESTORED: 'Аккаунт восстановлен',
+  USER_ANONYMIZED: 'Данные анонимизированы',
+  USER_DATA_EXPORTED: 'Экспорт данных',
+};
 
 const TRANSACTION_LABELS: Record<string, string> = {
   HELP_RECEIVED: 'Помощь получена',
@@ -97,7 +114,6 @@ const Stars: React.FC<{ rating: number }> = ({ rating }) => (
 export const AdminUserDetailPage: React.FC = () => {
   const { userId } = useParams<{ userId: string }>();
   const id = Number(userId);
-  const navigate = useNavigate();
   const { showToast } = useToast();
 
   const [user, setUser] = useState<AdminUser | null>(null);
@@ -137,8 +153,36 @@ export const AdminUserDetailPage: React.FC = () => {
   const [recalcResult, setRecalcResult] = useState<RatingResponse | null>(null);
 
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteReason, setDeleteReason] = useState('');
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const [restoreOpen, setRestoreOpen] = useState(false);
+  const [restoreReason, setRestoreReason] = useState('');
+  const [restoreBusy, setRestoreBusy] = useState(false);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
+
+  const [anonymizeOpen, setAnonymizeOpen] = useState(false);
+  const [anonymizeReason, setAnonymizeReason] = useState('');
+  const [anonymizeEmail, setAnonymizeEmail] = useState('');
+  const [anonymizeBusy, setAnonymizeBusy] = useState(false);
+  const [anonymizeError, setAnonymizeError] = useState<string | null>(null);
+
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportReason, setExportReason] = useState('');
+  const [exportBusy, setExportBusy] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  const [roleValue, setRoleValue] = useState<AdminUserRole>('USER');
+  const [roleReason, setRoleReason] = useState('');
+  const [roleBusy, setRoleBusy] = useState(false);
+  const [roleError, setRoleError] = useState<string | null>(null);
+
+  const [auditPage, setAuditPage] = useState(0);
+  const [audit, setAudit] = useState<PageResponse<AdminAuditLog> | null>(null);
+  const [auditLoading, setAuditLoading] = useState(true);
+  const [auditError, setAuditError] = useState<string | null>(null);
+  const [auditReloadKey, setAuditReloadKey] = useState(0);
 
   const [postTarget, setPostTarget] = useState<Post | null>(null);
   const [postBusy, setPostBusy] = useState(false);
@@ -168,6 +212,9 @@ export const AdminUserDetailPage: React.FC = () => {
         if (cancelled) return;
         setUser(loadedUser);
         setRatingValue(String(loadedUser.rating ?? ''));
+        setRoleValue(loadedUser.role);
+        setRoleReason('');
+        setRoleError(null);
 
         const errors: SectionErrors = {};
         const settle = async <T,>(
@@ -248,6 +295,34 @@ export const AdminUserDetailPage: React.FC = () => {
       cancelled = true;
     };
   }, [id, txPage, txReloadKey]);
+
+  useEffect(() => {
+    if (!Number.isFinite(id) || id <= 0) return;
+
+    let cancelled = false;
+    setAuditLoading(true);
+    setAuditError(null);
+
+    adminApi
+      .getUserAudit(id, { page: auditPage, size: AUDIT_PAGE_SIZE })
+      .then((data) => {
+        if (!cancelled) setAudit(data);
+      })
+      .catch((auditFailure) => {
+        if (!cancelled) {
+          setAuditError(
+            getApiErrorMessage(auditFailure, 'История административных операций недоступна.')
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setAuditLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id, auditPage, auditReloadKey]);
 
   const reviewAverage = useMemo(() => {
     if (reviews.length === 0) return null;
@@ -366,17 +441,116 @@ export const AdminUserDetailPage: React.FC = () => {
   };
 
   const handleDeleteUser = async () => {
-    if (deleteBusy) return;
+    if (deleteBusy || !deleteReason.trim()) return;
     setDeleteBusy(true);
     setDeleteError(null);
     try {
-      await adminApi.deleteUser(id);
+      await adminApi.deleteUser(id, deleteReason.trim());
       showToast(`Пользователь «${user?.name ?? id}» удалён.`, 'success');
-      navigate('/admin/users');
+      setDeleteOpen(false);
+      setDeleteReason('');
+      setReloadKey((value) => value + 1);
+      setAuditReloadKey((value) => value + 1);
     } catch (deleteFailure) {
       setDeleteError(getApiErrorMessage(deleteFailure, 'Не удалось удалить пользователя.'));
     } finally {
       setDeleteBusy(false);
+    }
+  };
+
+  const handleRestoreUser = async () => {
+    if (restoreBusy || !restoreReason.trim()) return;
+    setRestoreBusy(true);
+    setRestoreError(null);
+    try {
+      await adminApi.restoreUser(id, restoreReason.trim());
+      showToast(`Пользователь «${user?.name ?? id}» восстановлен.`, 'success');
+      setRestoreOpen(false);
+      setRestoreReason('');
+      setReloadKey((value) => value + 1);
+      setAuditReloadKey((value) => value + 1);
+    } catch (restoreFailure) {
+      setRestoreError(getApiErrorMessage(restoreFailure, 'Не удалось восстановить пользователя.'));
+    } finally {
+      setRestoreBusy(false);
+    }
+  };
+
+  const handleAnonymizeUser = async () => {
+    if (anonymizeBusy || !anonymizeReason.trim()) return;
+    if (anonymizeEmail.trim().toLowerCase() !== user?.email.toLowerCase()) {
+      setAnonymizeError('Email подтверждения не совпадает с email аккаунта.');
+      return;
+    }
+    setAnonymizeBusy(true);
+    setAnonymizeError(null);
+    try {
+      await adminApi.anonymizeUser(id, anonymizeReason.trim(), anonymizeEmail.trim());
+      showToast('Персональные данные анонимизированы, сессии отозваны.', 'success');
+      setAnonymizeOpen(false);
+      setAnonymizeReason('');
+      setAnonymizeEmail('');
+      setReloadKey((value) => value + 1);
+      setAuditReloadKey((value) => value + 1);
+    } catch (anonymizeFailure) {
+      setAnonymizeError(getApiErrorMessage(anonymizeFailure, 'Не удалось анонимизировать аккаунт.'));
+    } finally {
+      setAnonymizeBusy(false);
+    }
+  };
+
+  const handleExport = async () => {
+    if (exportBusy || !exportReason.trim()) return;
+    setExportBusy(true);
+    setExportError(null);
+    try {
+      const payload = await adminApi.exportUserData(id, exportReason.trim());
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {
+        type: 'application/json;charset=utf-8',
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `user-${id}-export.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      showToast('Экспорт данных подготовлен. Действие записано в аудит.', 'success');
+      setExportOpen(false);
+      setExportReason('');
+      setAuditReloadKey((value) => value + 1);
+    } catch (exportFailure) {
+      setExportError(getApiErrorMessage(exportFailure, 'Не удалось экспортировать данные.'));
+    } finally {
+      setExportBusy(false);
+    }
+  };
+
+  const handleRoleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (roleBusy || !user) return;
+    if (!roleReason.trim()) {
+      setRoleError('Причина изменения роли обязательна.');
+      return;
+    }
+    if (roleValue === user.role) {
+      setRoleError('Новая роль совпадает с текущей.');
+      return;
+    }
+
+    setRoleBusy(true);
+    setRoleError(null);
+    try {
+      const updated = await adminApi.changeRole(id, roleValue, roleReason.trim());
+      setUser(updated);
+      setRoleReason('');
+      showToast(`Роль изменена на ${updated.role}.`, 'success');
+      setAuditReloadKey((value) => value + 1);
+    } catch (roleFailure) {
+      setRoleError(getApiErrorMessage(roleFailure, 'Не удалось изменить роль.'));
+    } finally {
+      setRoleBusy(false);
     }
   };
 
@@ -479,6 +653,18 @@ export const AdminUserDetailPage: React.FC = () => {
                   блокировка
                 </span>
               )}
+              {user.deleted && (
+                <span className="admin-badge admin-badge--danger">
+                  <Trash2 size={12} aria-hidden="true" />
+                  удалён
+                </span>
+              )}
+              {user.anonymizedAt && (
+                <span className="admin-badge admin-badge--neutral">
+                  <ShieldOff size={12} aria-hidden="true" />
+                  анонимизирован
+                </span>
+              )}
               {user.vipUntil && new Date(user.vipUntil).getTime() > Date.now() && (
                 <span className="admin-badge admin-badge--vip">VIP до {formatDateOnly(user.vipUntil)}</span>
               )}
@@ -512,6 +698,18 @@ export const AdminUserDetailPage: React.FC = () => {
             type="button"
             className="admin-button admin-button--secondary"
             onClick={() => {
+              setExportError(null);
+              setExportReason('');
+              setExportOpen(true);
+            }}
+          >
+            <Download size={16} aria-hidden="true" />
+            Экспорт данных
+          </button>
+          <button
+            type="button"
+            className="admin-button admin-button--secondary"
+            onClick={() => {
               setRecalcError(null);
               setRecalcOpen(true);
             }}
@@ -531,6 +729,39 @@ export const AdminUserDetailPage: React.FC = () => {
             {user.blockedAt ? ` Блокировка начата ${formatDateTime(user.blockedAt)}.` : ''}
             {' '}Блокировка управляется долгом и планировщиком; отдельного admin-эндпоинта
             блокировки/разблокировки в API нет.
+          </p>
+        </div>
+      )}
+
+      {user.deleted && !user.anonymizedAt && (
+        <div className="admin-warning" role="status">
+          <ArchiveRestore size={17} aria-hidden="true" />
+          <p>
+            Аккаунт мягко удалён{user.deletedAt ? ` ${formatDateTime(user.deletedAt)}` : ''} и не
+            отображается в активном списке. Его можно восстановить с обязательной причиной.
+          </p>
+          <button
+            type="button"
+            className="admin-button admin-button--secondary admin-button--compact"
+            onClick={() => {
+              setRestoreError(null);
+              setRestoreReason('');
+              setRestoreOpen(true);
+            }}
+          >
+            <ArchiveRestore size={15} aria-hidden="true" />
+            Восстановить
+          </button>
+        </div>
+      )}
+
+      {user.anonymizedAt && (
+        <div className="admin-warning" role="status">
+          <ShieldOff size={17} aria-hidden="true" />
+          <p>
+            Персональные данные анонимизированы {formatDateTime(user.anonymizedAt)}. Аккаунт
+            остаётся в архиве, но восстановление невозможно: email, телефон, город и другие PII
+            удалены безвозвратно.
           </p>
         </div>
       )}
@@ -589,6 +820,63 @@ export const AdminUserDetailPage: React.FC = () => {
                 серверную авторизацию.
               </p>
             </div>
+          </div>
+
+          <div className="admin-operation">
+            <h3>Роль и доступ</h3>
+            <form className="admin-inline-form admin-inline-form--wrap" onSubmit={handleRoleSubmit} noValidate>
+              <label className="admin-field">
+                <span>Новая роль</span>
+                <select
+                  value={roleValue}
+                  onChange={(event) => {
+                    setRoleValue(event.target.value as AdminUserRole);
+                    setRoleError(null);
+                  }}
+                  disabled={roleBusy || Boolean(user.deleted)}
+                  aria-label="Новая роль пользователя"
+                >
+                  <option value="USER">USER</option>
+                  <option value="ADMIN">ADMIN</option>
+                </select>
+              </label>
+              <label className="admin-field admin-field--grow">
+                <span>Причина (обязательно)</span>
+                <input
+                  value={roleReason}
+                  onChange={(event) => {
+                    setRoleReason(event.target.value);
+                    setRoleError(null);
+                  }}
+                  maxLength={1000}
+                  required
+                  disabled={roleBusy || Boolean(user.deleted)}
+                  aria-invalid={Boolean(roleError)}
+                  aria-label="Причина изменения роли"
+                />
+              </label>
+              <button
+                type="submit"
+                className="admin-button admin-button--primary"
+                disabled={roleBusy || Boolean(user.deleted) || roleValue === user.role}
+              >
+                {roleBusy ? (
+                  <Loader2 size={16} className="admin-spinner" aria-hidden="true" />
+                ) : (
+                  <UserCog size={16} aria-hidden="true" />
+                )}
+                {roleBusy ? 'Сохраняем…' : 'Изменить роль'}
+              </button>
+            </form>
+            {roleError && (
+              <div className="admin-inline-alert" role="alert">
+                {roleError}
+              </div>
+            )}
+            <p className="admin-field-hint">
+              <code>PATCH /api/admin/users/{user.id}/role</code>. Сервер запрещает снятие роли у
+              последнего администратора; изменение и причина сохраняются в аудите.
+            </p>
           </div>
 
           <div className="admin-operation">
@@ -786,8 +1074,9 @@ export const AdminUserDetailPage: React.FC = () => {
           </dl>
 
           <p className="admin-field-hint">
-            Смена роли через API не предусмотрена: <code>UpdateUserRequest</code> не содержит поля{' '}
-            <code>role</code>.
+            Роль меняется отдельным защищённым endpoint-ом{' '}
+            <code>PATCH /api/admin/users/{user.id}/role</code> с обязательной причиной.
+            <code>UpdateUserRequest</code> по-прежнему не содержит поля <code>role</code>.
           </p>
         </section>
       </div>
@@ -1137,27 +1426,145 @@ export const AdminUserDetailPage: React.FC = () => {
         </section>
       </div>
 
-      <section className="admin-section admin-section--danger" aria-labelledby="admin-danger-title">
+      <section className="admin-section" aria-labelledby="admin-audit-title">
         <div className="admin-section-head">
           <div>
-            <span className="admin-eyebrow">Опасная зона</span>
-            <h2 id="admin-danger-title">Удаление аккаунта</h2>
+            <span className="admin-eyebrow">Аудит</span>
+            <h2 id="admin-audit-title">Административные операции</h2>
             <p className="admin-section-description">
-              Мягкое удаление через <code>DELETE /api/users/{user.id}</code>. Списка удалённых
-              аккаунтов в интерфейсе нет, восстановление из панели недоступно.
+              <code>GET /api/admin/users/{user.id}/audit</code>. Append-only журнал: кто, когда и
+              почему изменил аккаунт.
             </p>
           </div>
           <button
             type="button"
-            className="admin-button admin-button--danger"
-            onClick={() => {
-              setDeleteError(null);
-              setDeleteOpen(true);
-            }}
+            className="admin-button admin-button--ghost admin-button--compact"
+            onClick={() => setAuditReloadKey((value) => value + 1)}
+            disabled={auditLoading}
           >
-            <Trash2 size={16} aria-hidden="true" />
-            Удалить пользователя
+            <RefreshCw size={15} aria-hidden="true" />
+            Обновить
           </button>
+        </div>
+
+        {auditLoading ? (
+          <AdminLoadingBlock rows={3} />
+        ) : auditError ? (
+          <div className="admin-inline-alert" role="alert">
+            <span>{auditError}</span>
+            <button
+              type="button"
+              className="admin-button admin-button--ghost admin-button--compact"
+              onClick={() => setAuditReloadKey((value) => value + 1)}
+            >
+              Повторить
+            </button>
+          </div>
+        ) : !audit || audit.content.length === 0 ? (
+          <AdminEmptyState
+            title="Записей нет"
+            description="Для этого аккаунта ещё не было административных операций."
+          />
+        ) : (
+          <>
+            <div className="admin-table-wrap">
+              <table className="admin-table admin-table--compact">
+                <thead>
+                  <tr>
+                    <th scope="col">Дата</th>
+                    <th scope="col">Действие</th>
+                    <th scope="col">Администратор</th>
+                    <th scope="col">Причина</th>
+                    <th scope="col" className="admin-col-optional">Изменения</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {audit.content.map((entry) => (
+                    <tr key={entry.id}>
+                      <td>{formatDateTime(entry.createdAt)}</td>
+                      <td>{AUDIT_ACTION_LABELS[entry.action] ?? entry.action}</td>
+                      <td>{entry.adminId ? `#${entry.adminId}` : 'сам пользователь'}</td>
+                      <td>{entry.reason || '—'}</td>
+                      <td className="admin-col-optional">
+                        {entry.beforeState || entry.afterState ? (
+                          <code className="admin-audit-diff">
+                            {entry.beforeState ? JSON.stringify(entry.beforeState) : '∅'} →{' '}
+                            {entry.afterState ? JSON.stringify(entry.afterState) : '∅'}
+                          </code>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Pagination
+              page={auditPage + 1}
+              totalPages={Math.max(1, audit.totalPages)}
+              onPageChange={(nextPage) => setAuditPage(nextPage - 1)}
+              style={{ marginTop: '16px' }}
+            />
+          </>
+        )}
+      </section>
+
+      <section className="admin-section admin-section--danger" aria-labelledby="admin-danger-title">
+        <div className="admin-section-head">
+          <div>
+            <span className="admin-eyebrow">Опасная зона</span>
+            <h2 id="admin-danger-title">Удаление и анонимизация</h2>
+            <p className="admin-section-description">
+              <code>DELETE /api/admin/users/{user.id}?reason=…</code> выполняет мягкое удаление.
+              Восстановление доступно на вкладке «Удалённые», анонимизация необратима и удаляет PII.
+            </p>
+          </div>
+          <div className="admin-profile-actions">
+            {user.deleted && !user.anonymizedAt && (
+              <button
+                type="button"
+                className="admin-button admin-button--secondary"
+                onClick={() => {
+                  setRestoreError(null);
+                  setRestoreReason('');
+                  setRestoreOpen(true);
+                }}
+              >
+                <ArchiveRestore size={16} aria-hidden="true" />
+                Восстановить
+              </button>
+            )}
+            {!user.deleted && (
+              <button
+                type="button"
+                className="admin-button admin-button--danger"
+                onClick={() => {
+                  setDeleteError(null);
+                  setDeleteReason('');
+                  setDeleteOpen(true);
+                }}
+              >
+                <Trash2 size={16} aria-hidden="true" />
+                Удалить пользователя
+              </button>
+            )}
+            {!user.anonymizedAt && (
+              <button
+                type="button"
+                className="admin-button admin-button--danger"
+                onClick={() => {
+                  setAnonymizeError(null);
+                  setAnonymizeReason('');
+                  setAnonymizeEmail('');
+                  setAnonymizeOpen(true);
+                }}
+              >
+                <ShieldOff size={16} aria-hidden="true" />
+                Анонимизировать
+              </button>
+            )}
+          </div>
         </div>
       </section>
 
@@ -1195,18 +1602,127 @@ export const AdminUserDetailPage: React.FC = () => {
         title="Удалить пользователя?"
         description={`Аккаунт «${user.name}» (${user.email}) будет мягко удалён.`}
         consequences={[
-          'Сервер выполнит soft-delete: пользователь исчезнет из списка активных аккаунтов.',
-          'Пользователь потеряет доступ к аккаунту; операция необратима из этой панели.',
-          'Восстановление возможно только через POST /api/users/{id}/restore, но списка удалённых нет.',
+          'Сервер выполнит soft-delete и отзовёт все сессии пользователя.',
+          'Аккаунт исчезнет из активного списка и станет доступен на вкладке «Удалённые».',
+          'Восстановление возможно с обязательной причиной; операция попадёт в аудит.',
         ]}
         confirmText="Удалить пользователя"
         busy={deleteBusy}
         error={deleteError}
+        reason={deleteReason}
+        onReasonChange={setDeleteReason}
+        reasonRequired
+        reasonPlaceholder="Например: подтверждённое нарушение правил"
+        reasonHint="Причина обязательна и сохраняется в admin_audit_log."
         onConfirm={handleDeleteUser}
         onClose={() => {
           if (!deleteBusy) {
             setDeleteOpen(false);
+            setDeleteReason('');
             setDeleteError(null);
+          }
+        }}
+      />
+
+      <AdminConfirmDialog
+        open={restoreOpen}
+        title="Восстановить пользователя?"
+        description={`Аккаунт «${user.name}» (${user.email}) вернётся в активный список.`}
+        consequences={[
+          'Сервер снимет флаг soft-delete и вернёт аккаунт в активный список.',
+          'Пользователь снова сможет войти, если помнит пароль или восстановит его.',
+          'Операция и причина попадут в журнал аудита.',
+        ]}
+        confirmText="Восстановить"
+        tone="default"
+        busy={restoreBusy}
+        error={restoreError}
+        reason={restoreReason}
+        onReasonChange={setRestoreReason}
+        reasonRequired
+        reasonPlaceholder="Например: апелляция удовлетворена"
+        reasonHint="Причина обязательна и сохраняется в admin_audit_log."
+        onConfirm={handleRestoreUser}
+        onClose={() => {
+          if (!restoreBusy) {
+            setRestoreOpen(false);
+            setRestoreReason('');
+            setRestoreError(null);
+          }
+        }}
+      />
+
+      <AdminConfirmDialog
+        open={anonymizeOpen}
+        title="Анонимизировать аккаунт?"
+        description={`Персональные данные «${user.name}» будут удалены безвозвратно.`}
+        consequences={[
+          'Имя, email, телефон, город и координаты заменяются обезличенными значениями.',
+          'Все сессии отзываются, аккаунт помечается удалённым и анонимизированным.',
+          'Восстановление невозможно. Действие и причина сохраняются в аудите.',
+        ]}
+        confirmText="Анонимизировать"
+        busy={anonymizeBusy}
+        error={anonymizeError}
+        reason={anonymizeReason}
+        onReasonChange={setAnonymizeReason}
+        reasonRequired
+        reasonPlaceholder="Например: утверждённый запрос на удаление данных"
+        reasonHint="Причина обязательна и сохраняется в admin_audit_log."
+        onConfirm={handleAnonymizeUser}
+        onClose={() => {
+          if (!anonymizeBusy) {
+            setAnonymizeOpen(false);
+            setAnonymizeReason('');
+            setAnonymizeEmail('');
+            setAnonymizeError(null);
+          }
+        }}
+      >
+        <div className="admin-field admin-field--wide">
+          <label htmlFor="admin-anonymize-email">Введите email аккаунта для подтверждения</label>
+          <input
+            id="admin-anonymize-email"
+            type="email"
+            value={anonymizeEmail}
+            onChange={(event) => {
+              setAnonymizeEmail(event.target.value);
+              setAnonymizeError(null);
+            }}
+            placeholder={user.email}
+            autoComplete="off"
+            aria-invalid={Boolean(anonymizeError)}
+          />
+          <span className="admin-field-hint">
+            Защита от анонимизации не того аккаунта из устаревшей вкладки.
+          </span>
+        </div>
+      </AdminConfirmDialog>
+
+      <AdminConfirmDialog
+        open={exportOpen}
+        title="Экспорт данных пользователя"
+        description={`Будет сформирован JSON с профилем и настройками аккаунта #${user.id}.`}
+        consequences={[
+          'Экспорт не содержит паролей, токенов и данных сессий.',
+          'Факт экспорта и причина сохраняются в журнале аудита.',
+          'Файл скачается в браузер и будет содержать персональные данные.',
+        ]}
+        confirmText="Скачать JSON"
+        tone="default"
+        busy={exportBusy}
+        error={exportError}
+        reason={exportReason}
+        onReasonChange={setExportReason}
+        reasonRequired
+        reasonPlaceholder="Например: запрос субъекта данных"
+        reasonHint="Причина обязательна: экспорт — чувствительная операция."
+        onConfirm={handleExport}
+        onClose={() => {
+          if (!exportBusy) {
+            setExportOpen(false);
+            setExportReason('');
+            setExportError(null);
           }
         }}
       />

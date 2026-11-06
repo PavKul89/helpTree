@@ -1,4 +1,4 @@
-# Миграции базы данных (Block 6–13)
+# Миграции базы данных (Block 6–14)
 
 Документ описывает политику миграций, восстановление схемы после V33,
 безопасную стратегию для V3, порядок проверки/отката, проекцию статистики
@@ -6,8 +6,8 @@
 Block 10 (V47), владение объектами изображений Block 11 (V48),
 распределённые лимиты/блокировку входа Block 12 (V49). Block 13 (политика
 приватности публичных данных) не меняет схему: он затрагивает только
-серверные проекции ответов, поэтому новых миграций нет, последняя версия —
-V49.
+серверные проекции ответов. Block 14 добавляет настройки приватности
+аккаунта и маркер анонимизации (V50), поэтому последняя версия схемы — V50.
 
 ## 1. Политика
 
@@ -374,6 +374,66 @@ primary key, constraint счётчика, TTL-индексы, длину клю�
 Подробности архитектуры, ключей, proxy headers, fail-open и настройки:
 `docs/RATE_LIMITING.md`.
 
+### 5.7. Приватность аккаунта и анонимизация (V50)
+
+V50 — аддитивная миграция Block 14. Она не переписывает существующие строки
+и сохраняет прежнюю видимость профилей: `REGISTERED` означает, что профиль
+доступен авторизованным участникам, как и до V50. Существующие данные не
+удаляются.
+
+Изменения `users`:
+
+- `anonymized_at` (`TIMESTAMP NULL`) — терминальный маркер. Если он заполнен,
+  строка больше не содержит персональных данных: имя заменяется на
+  обезличенное, email — на `anonymized+<id>@anon.helptree.local`, телефон,
+  город, координаты, дата рождения и аватар очищаются. Аккаунт одновременно
+  помечается `deleted = TRUE`, все сессии отзываются, восстановление
+  запрещено. Маркер сохраняется, потому что на пользователя всё ещё могут
+  ссылаться исторические посты, помощи и записи аудита;
+- `idx_users_anonymized_at` — partial-индекс по заполненному маркеру;
+- `idx_users_deleted_at` — partial-индекс `(deleted_at DESC)` для вкладки
+  удалённых аккаунтов и пагинации по `deleted = TRUE`.
+
+Новая таблица `user_privacy_settings`:
+
+- `user_id` — primary key и `FK → users(id) ON DELETE CASCADE`;
+- `profile_visibility` (`VARCHAR(20)`, default `REGISTERED`) — `PUBLIC`,
+  `REGISTERED` или `PRIVATE`; значение ограничено
+  `chk_user_privacy_settings_visibility`;
+- `show_city` (default `TRUE`), `show_email`/`show_phone` (default `FALSE`),
+  `allow_direct_messages`/`searchable` (default `TRUE`);
+- `created_at`/`updated_at` (`DEFAULT CURRENT_TIMESTAMP`);
+- `idx_user_privacy_settings_visibility` — `(profile_visibility, searchable)`
+  для проекций публичного профиля и поиска.
+
+Настройки уведомлений Block 14 использует из уже существующей V42 таблицы
+`notification_preferences`; новая схема для них не требуется. Значения по
+умолчанию (`email/push/inApp = TRUE`, `digestFrequency = INSTANT`) задаются
+сервисом при первом чтении, а не миграцией, чтобы не создавать строки для
+неактивных аккаунтов.
+
+Серверная логика:
+
+- `UserService.anonymizeUser` выполняется в транзакции, блокирует строку
+  (`findByIdForUpdate`), требует причину для admin-операции, запрещает
+  анонимизацию последнего `ADMIN` и повторную анонимизацию;
+- `UserService.restoreUser` отклоняет восстановление, если
+  `anonymized_at IS NOT NULL` (`ConflictException`);
+- нормализация email (`lower(btrim(email))`) и уникальный индекс
+  `uq_users_email_normalized` из V41 остаются единственным источником
+  уникальности; приложение дополнительно нормализует адрес до записи;
+- экспорт данных (`UserDataExportService`) не содержит паролей, refresh-токенов
+  и сессий.
+
+Проверка: `scripts/fixtures/verify_block14_schema.sql` проверяет колонку
+`users.anonymized_at`, таблицу `user_privacy_settings`, её типы, defaults,
+primary key, `CHECK`, каскадный FK и индексы, а также инварианты данных:
+анонимизированная строка всегда soft-deleted и имеет адрес
+`anonymized+<id>@anon.helptree.local`, `deleted_at` не существует без
+`deleted = true`, настройки приватности не содержат сирот и недопустимых
+значений видимости. Дополнительно схема проверяется `flyway:validate` и
+тестами `AdminUserServiceTest`/`AccountSettingsServiceTest`.
+
 ## 6. Проверка миграций
 ### 6.1 Чистая база
 
@@ -458,6 +518,10 @@ docker exec postgres psql -U helpTree -d helptree_copy_test `
 docker cp scripts/fixtures/verify_block12_schema.sql postgres:/tmp/verify_block12_schema.sql
 docker exec postgres psql -U helpTree -d helptree_copy_test `
   -v ON_ERROR_STOP=1 -f /tmp/verify_block12_schema.sql
+
+docker cp scripts/fixtures/verify_block14_schema.sql postgres:/tmp/verify_block14_schema.sql
+docker exec postgres psql -U helpTree -d helptree_copy_test `
+  -v ON_ERROR_STOP=1 -f /tmp/verify_block14_schema.sql
 ```
 
 Проверьте, что количество строк в `users`, `posts`, `helps`, `chats`,
@@ -487,6 +551,7 @@ psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block9_schema.sql
 psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block10_schema.sql
 psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block11_schema.sql
 psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block12_schema.sql
+psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block14_schema.sql
 ```
 
 ## 7. Backup перед миграцией
@@ -500,7 +565,7 @@ docker cp postgres:/tmp/helpTree_db_pre_v41.dump .\helpTree_db_pre_v41.dump
 
 Для production используйте штатный backup PostgreSQL (`pg_basebackup` или
 `pg_dump -Fc`) и проверяйте restore на отдельной базе. Не запускайте
-V41–V49 без проверенной точки восстановления.
+V41–V50 без проверенной точки восстановления.
 
 ## 8. Rollback / recovery
 
@@ -552,6 +617,13 @@ V45 — тоже аддитивная (колонки, constraints, индекс
 заново. Перед откатом кода уменьшите окно несоответствия: старые и новые
 экземпляры не делят состояние, поэтому на время rolling-отката лимиты будут
 считаться отдельно. Для точного состояния до V43 восстановите backup.
+V50 — аддитивная (колонка `anonymized_at`, два partial-индекса и таблица
+`user_privacy_settings`); отдельного rollback-скрипта не имеет. Откат кода
+безопасен: старые версии не читают новые настройки и не создают
+`user_privacy_settings`. Удаление таблицы не восстанавливает уже
+анонимизированные строки: PII стёрты безвозвратно, поэтому перед откатом
+схемы учитывайте, что `anonymized_at` останется в данных, а старый код будет
+считать такие аккаунты обычными удалёнными.
 
 ## 9. Ограничения и замечания
 
@@ -602,3 +674,10 @@ V45 — тоже аддитивная (колонки, constraints, индекс
   включён `TRUST_FORWARDED_HEADERS`, reverse proxy обязан перезаписывать
   `X-Forwarded-For`, а не дописывать клиентское значение, иначе клиент сможет
   выбирать ключ лимита. Подробности — в `docs/RATE_LIMITING.md`.
+- V50 не выполняет backfill `user_privacy_settings`: строка настроек создаётся
+  сервисом при первом чтении или изменении, а отсутствие строки трактуется как
+  значения по умолчанию. Анонимизация необратима и не откатывается миграцией;
+  она стирает PII, отзывает сессии и оставляет обезличенную строку для
+  исторических связей. Настройки приватности применяются к публичным
+  проекциям профиля, но не скрывают данные от администраторов и не заменяют
+  проверку прав на уровне endpoint-ов.
