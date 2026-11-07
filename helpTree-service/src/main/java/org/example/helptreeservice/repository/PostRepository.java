@@ -21,27 +21,48 @@ import java.util.Optional;
 @Repository
 public interface PostRepository extends JpaRepository<Post, Long>, JpaSpecificationExecutor<Post> {
     
+    /**
+     * Public author feed. Hidden/removed posts stay in the author's own view
+     * only, so a plain author list never exposes them.
+     */
     @EntityGraph(attributePaths = {"user", "helper"})
-    @Query("SELECT p FROM Post p WHERE p.user.id = :userId AND (p.deleted = false OR p.deleted IS NULL)")
+    @Query("SELECT p FROM Post p WHERE p.user.id = :userId "
+            + "AND (p.deleted = false OR p.deleted IS NULL) "
+            + "AND p.moderationStatus = org.example.helptreeservice.enums.ModerationStatus.ACTIVE")
     Page<Post> findByUserId(@Param("userId") Long userId, Pageable pageable);
     
     @Query("SELECT p FROM Post p LEFT JOIN FETCH p.user LEFT JOIN FETCH p.helper WHERE p.id = :id")
     Post findByIdWithUser(@Param("id") Long id);
 
-    Optional<Post> findByIdAndDeletedFalse(Long id);
+    /**
+     * Public lookup: a moderated post is treated as absent. Administrative and
+     * owner flows use {@link #findByIdForUpdate(Long)} or
+     * {@link #findByIdWithUser(Long)}, which deliberately ignore visibility.
+     */
+    @Query("SELECT p FROM Post p WHERE p.id = :id "
+            + "AND (p.deleted = false OR p.deleted IS NULL) "
+            + "AND p.moderationStatus = org.example.helptreeservice.enums.ModerationStatus.ACTIVE")
+    Optional<Post> findByIdAndDeletedFalse(@Param("id") Long id);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT p FROM Post p WHERE p.id = :id")
     Optional<Post> findByIdForUpdate(@Param("id") Long id);
 
-    boolean existsByIdAndDeletedFalse(Long id);
+    @Query("SELECT COUNT(p) > 0 FROM Post p WHERE p.id = :id "
+            + "AND (p.deleted = false OR p.deleted IS NULL) "
+            + "AND p.moderationStatus = org.example.helptreeservice.enums.ModerationStatus.ACTIVE")
+    boolean existsByIdAndDeletedFalse(@Param("id") Long id);
     
     long countByUserId(Long userId);
 
-    @Query("SELECT p FROM Post p LEFT JOIN FETCH p.user LEFT JOIN FETCH p.helper WHERE p.id IN :ids AND (p.deleted = false OR p.deleted IS NULL)")
+    @Query("SELECT p FROM Post p LEFT JOIN FETCH p.user LEFT JOIN FETCH p.helper WHERE p.id IN :ids "
+            + "AND (p.deleted = false OR p.deleted IS NULL) "
+            + "AND p.moderationStatus = org.example.helptreeservice.enums.ModerationStatus.ACTIVE")
     List<Post> findByIdsWithUser(@Param("ids") List<Long> ids);
 
-    @Query("SELECT COUNT(p) FROM Post p WHERE p.status = :status AND (p.deleted = false OR p.deleted IS NULL)")
+    @Query("SELECT COUNT(p) FROM Post p WHERE p.status = :status "
+            + "AND (p.deleted = false OR p.deleted IS NULL) "
+            + "AND p.moderationStatus = org.example.helptreeservice.enums.ModerationStatus.ACTIVE")
     long countByStatus(@Param("status") PostStatus status);
 
     /**
@@ -60,6 +81,7 @@ public interface PostRepository extends JpaRepository<Post, Long>, JpaSpecificat
                 updated_at = :now
             WHERE id = :postId
               AND COALESCE(deleted, FALSE) = FALSE
+              AND moderation_status = 'ACTIVE'
               AND status = 'OPEN'
               AND (:privileged = TRUE OR user_id = :payerId)
             """, nativeQuery = true)
@@ -75,8 +97,8 @@ public interface PostRepository extends JpaRepository<Post, Long>, JpaSpecificat
     @Query("UPDATE Post p SET p.boostedUntil = NULL WHERE p.boostedUntil IS NOT NULL AND p.boostedUntil <= :now")
     int clearExpiredBoosts(@Param("now") LocalDateTime now);
 
-    @Query(value = "SELECT * FROM posts p WHERE p.deleted = false ORDER BY CASE WHEN p.boosted_until > CURRENT_TIMESTAMP THEN 1 ELSE 0 END DESC, p.created_at DESC",
-           countQuery = "SELECT COUNT(*) FROM posts p WHERE p.deleted = false",
+    @Query(value = "SELECT * FROM posts p WHERE p.deleted = false AND p.moderation_status = 'ACTIVE' ORDER BY CASE WHEN p.boosted_until > CURRENT_TIMESTAMP THEN 1 ELSE 0 END DESC, p.created_at DESC",
+           countQuery = "SELECT COUNT(*) FROM posts p WHERE p.deleted = false AND p.moderation_status = 'ACTIVE'",
            nativeQuery = true)
     Page<Post> findAllNotDeletedPaginated(Pageable pageable);
 
@@ -86,7 +108,8 @@ public interface PostRepository extends JpaRepository<Post, Long>, JpaSpecificat
      */
     @Modifying(flushAutomatically = true)
     @Query("UPDATE Post p SET p.commentsCount = COALESCE(p.commentsCount, 0) + 1 " +
-           "WHERE p.id = :postId AND (p.deleted = false OR p.deleted IS NULL)")
+           "WHERE p.id = :postId AND (p.deleted = false OR p.deleted IS NULL) " +
+           "AND p.moderationStatus = org.example.helptreeservice.enums.ModerationStatus.ACTIVE")
     int incrementCommentsCount(@Param("postId") Long postId);
 
     @Modifying(flushAutomatically = true)

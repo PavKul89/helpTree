@@ -147,7 +147,7 @@ class CommentThreadIntegrationTest {
                 post.getId(), commentId, request, reporter.getId());
 
         assertEquals(ReportStatus.OPEN, report.getStatus());
-        assertEquals("insult", report.getDetails());
+        assertEquals("insult", report.getDescription());
 
         ResolveReportRequest resolve = new ResolveReportRequest();
         resolve.setAction(ReportAction.DELETE_COMMENT);
@@ -158,13 +158,12 @@ class CommentThreadIntegrationTest {
         assertEquals(admin.getId(), resolved.getResolvedById());
         assertEquals(0, commentsCount(post.getId()), "moderation delete decrements the post counter");
 
+        // A moderation removal is not the author's soft delete: the comment is
+        // excluded from public reads entirely instead of being served as a
+        // tombstone.
         CommentPageResponse comments = commentService.getCommentsByPost(
                 post.getId(), 0, 20, CommentSort.OLDEST);
-        assertEquals(1, comments.getContent().size());
-        CommentResponse tombstone = comments.getContent().get(0);
-        assertTrue(tombstone.isDeleted());
-        assertFalse(tombstone.isDeletedByAuthor());
-        assertNull(tombstone.getContent());
+        assertTrue(comments.getContent().isEmpty(), "removed comment must not be public");
         assertEquals(0, comments.getTotalComments());
     }
 

@@ -160,6 +160,158 @@ export interface AdminAddCoinsResponse {
   applied: boolean;
 }
 
+// ---------------------------------------------------------------- reports
+export type AdminReportTargetType =
+  | 'POST'
+  | 'USER'
+  | 'COMMENT'
+  | 'REVIEW'
+  | 'MESSAGE'
+  | 'HELP'
+  | 'CHAT'
+  | 'REPORT';
+
+export type AdminReportReason =
+  | 'SPAM'
+  | 'ABUSE'
+  | 'HARASSMENT'
+  | 'INAPPROPRIATE'
+  | 'FRAUD'
+  | 'IMPERSONATION'
+  | 'OTHER';
+
+export type AdminReportStatus = 'OPEN' | 'IN_REVIEW' | 'RESOLVED' | 'REJECTED' | 'DUPLICATE';
+export type AdminReportPriority = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
+
+export type AdminReportEventType =
+  | 'CREATED'
+  | 'ASSIGNED'
+  | 'STATUS_CHANGED'
+  | 'NOTE'
+  | 'ESCALATED'
+  | 'RESOLVED'
+  | 'REOPENED'
+  | 'LINKED_DUPLICATE'
+  | 'ACTION_APPLIED';
+
+export type AdminModerationActionType =
+  | 'WARN'
+  | 'MUTE'
+  | 'UNMUTE'
+  | 'BAN'
+  | 'UNBAN'
+  | 'DELETE_CONTENT'
+  | 'HIDE_CONTENT'
+  | 'REMOVE_CONTENT'
+  | 'RESTORE_CONTENT'
+  | 'RESOLVE_REPORT'
+  | 'DISMISS_REPORT'
+  | 'LINK_DUPLICATE'
+  | 'ESCALATE'
+  | 'OTHER';
+
+export type AdminModerationStatus = 'ACTIVE' | 'HIDDEN' | 'REMOVED';
+
+/** Administrative projection of a report (includes the staff-only note). */
+export interface AdminReport {
+  id: number;
+  reporterId?: number;
+  reporterName?: string;
+  reporterEmail?: string;
+  targetType: AdminReportTargetType;
+  targetId: number;
+  reason: AdminReportReason;
+  description?: string;
+  status: AdminReportStatus;
+  priority: AdminReportPriority;
+  assignedModeratorId?: number;
+  assignedModeratorName?: string;
+  resolution?: string;
+  internalNote?: string;
+  duplicateOfId?: number;
+  resolvedById?: number;
+  resolvedByName?: string;
+  resolvedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminReportEvent {
+  id: number;
+  actorId?: number;
+  actorName?: string;
+  eventType: AdminReportEventType;
+  fromStatus?: AdminReportStatus;
+  toStatus?: AdminReportStatus;
+  internalNote?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface AdminModerationAction {
+  id: number;
+  reportId?: number;
+  moderatorId?: number;
+  moderatorName?: string;
+  actionType: AdminModerationActionType;
+  targetType: AdminReportTargetType;
+  targetId: number;
+  reason: string;
+  expiresAt?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface AdminReportTargetPreview {
+  targetType: AdminReportTargetType;
+  targetId: number;
+  exists: boolean;
+  ownerId?: number;
+  ownerName?: string;
+  title?: string;
+  content?: string;
+  moderationStatus?: AdminModerationStatus;
+  deleted?: boolean;
+  createdAt?: string;
+}
+
+export interface AdminReportDetails {
+  report: AdminReport;
+  target: AdminReportTargetPreview;
+  events: AdminReportEvent[];
+  actions: AdminModerationAction[];
+}
+
+export interface AdminReportsQuery {
+  page?: number;
+  size?: number;
+  status?: AdminReportStatus;
+  targetType?: AdminReportTargetType;
+  reason?: AdminReportReason;
+  priority?: AdminReportPriority;
+  assignedModeratorId?: number;
+  reporterId?: number;
+  /** ISO local date-time, inclusive lower bound on report creation. */
+  from?: string;
+  /** ISO local date-time, inclusive upper bound on report creation. */
+  to?: string;
+  /** Server-side free text search across the description and reporter. */
+  q?: string;
+}
+
+export interface UpdateAdminReportPayload {
+  priority?: AdminReportPriority;
+  internalNote?: string;
+}
+
+export interface ApplyModerationActionPayload {
+  actionType: AdminModerationActionType;
+  reason: string;
+  resolution?: string;
+  duplicateOfId?: number;
+  expiresAt?: string;
+}
+
 export interface AdminPostsQuery {
   page?: number;
   size?: number;
@@ -431,5 +583,54 @@ export const adminApi = {
 
   deleteReview: async (id: number): Promise<void> => {
     await api.delete(`/api/reviews/${id}`);
+  },
+
+  // ----------------------------------------------------------------- reports
+  getReports: async (
+    query: AdminReportsQuery = {},
+    signal?: AbortSignal
+  ): Promise<PageResponse<AdminReport>> => {
+    const response = await api.get<PageResponse<AdminReport>>('/api/admin/reports', {
+      params: query,
+      signal,
+    });
+    return response.data;
+  },
+
+  getReportDetails: async (id: number): Promise<AdminReportDetails> => {
+    const response = await api.get<AdminReportDetails>(`/api/admin/reports/${id}`);
+    return response.data;
+  },
+
+  updateReport: async (
+    id: number,
+    payload: UpdateAdminReportPayload
+  ): Promise<AdminReport> => {
+    const response = await api.patch<AdminReport>(`/api/admin/reports/${id}`, payload);
+    return response.data;
+  },
+
+  /** Assigns the current administrator by default and moves OPEN to IN_REVIEW. */
+  assignReport: async (id: number, moderatorId?: number): Promise<AdminReport> => {
+    const response = await api.post<AdminReport>(
+      `/api/admin/reports/${id}/assign`,
+      moderatorId ? { moderatorId } : {}
+    );
+    return response.data;
+  },
+
+  /**
+   * Applies a decision or sanction. The server writes the report event and the
+   * moderation action in one transaction and closes the report.
+   */
+  applyReportAction: async (
+    id: number,
+    payload: ApplyModerationActionPayload
+  ): Promise<AdminModerationAction> => {
+    const response = await api.post<AdminModerationAction>(
+      `/api/admin/reports/${id}/actions`,
+      payload
+    );
+    return response.data;
   },
 };

@@ -1,5 +1,6 @@
 package org.example.helptreeservice.entity;
 
+import org.example.helptreeservice.enums.ModerationStatus;
 import org.example.helptreeservice.enums.PostStatus;
 import jakarta.persistence.*;
 import lombok.Data;
@@ -56,6 +57,14 @@ public class Post {
 
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
+
+    /**
+     * Moderator-controlled visibility. It is independent from {@code deleted}:
+     * the author's deletion and a moderation decision must stay distinguishable.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "moderation_status", nullable = false, length = 20)
+    private ModerationStatus moderationStatus = ModerationStatus.ACTIVE;
 
     private Double latitude;
     private Double longitude;

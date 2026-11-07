@@ -6,6 +6,7 @@ import jakarta.persistence.criteria.Path;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
 import org.example.helptreeservice.entity.Post;
+import org.example.helptreeservice.enums.ModerationStatus;
 import org.example.helptreeservice.enums.PostStatus;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -39,16 +40,20 @@ class PostSpecificationTest {
     @Mock
     private Path<Object> statusPath;
     @Mock
+    private Path<Object> moderationPath;
+    @Mock
     private Predicate deletedPredicate;
     @Mock
     private Predicate statusPredicate;
     @Mock
     private Predicate cancelledPredicate;
     @Mock
+    private Predicate moderationPredicate;
+    @Mock
     private Predicate combinedPredicate;
 
     @SuppressWarnings({"unchecked", "rawtypes"})
-    private List<Predicate> apply(PostStatus status, boolean excludeCancelled) {
+    private List<Predicate> apply(PostStatus status, boolean excludeCancelled, boolean excludeModerated) {
         when(root.get("deleted")).thenReturn((Path) deletedPath);
         when(root.get("status")).thenReturn((Path) statusPath);
         when(cb.equal(deletedPath, false)).thenReturn(deletedPredicate);
@@ -58,10 +63,14 @@ class PostSpecificationTest {
         if (excludeCancelled) {
             when(cb.notEqual(statusPath, PostStatus.CANCELLED)).thenReturn(cancelledPredicate);
         }
+        if (excludeModerated) {
+            when(root.get("moderationStatus")).thenReturn((Path) moderationPath);
+            when(cb.equal(moderationPath, ModerationStatus.ACTIVE)).thenReturn(moderationPredicate);
+        }
         when(cb.and(any(Predicate[].class))).thenReturn(combinedPredicate);
 
         Specification<Post> spec = PostSpecification.filter(
-                null, status, null, null, null, null, excludeCancelled);
+                null, status, null, null, null, null, excludeCancelled, excludeModerated);
 
         assertSame(combinedPredicate, spec.toPredicate(root, query, cb));
 
@@ -72,21 +81,23 @@ class PostSpecificationTest {
 
     @Test
     void publicFilter_shouldHideCancelledWhenExplicitlyRequested() {
-        List<Predicate> predicates = apply(PostStatus.CANCELLED, true);
+        List<Predicate> predicates = apply(PostStatus.CANCELLED, true, true);
 
         assertTrue(predicates.contains(deletedPredicate));
         assertTrue(predicates.contains(statusPredicate));
         assertTrue(predicates.contains(cancelledPredicate));
+        assertTrue(predicates.contains(moderationPredicate));
         verify(cb).notEqual(statusPath, PostStatus.CANCELLED);
     }
 
     @Test
     void ownerFilter_shouldAllowCancelledWhenExplicitlyRequested() {
-        List<Predicate> predicates = apply(PostStatus.CANCELLED, false);
+        List<Predicate> predicates = apply(PostStatus.CANCELLED, false, false);
 
         assertTrue(predicates.contains(deletedPredicate));
         assertTrue(predicates.contains(statusPredicate));
         assertFalse(predicates.contains(cancelledPredicate));
+        assertFalse(predicates.contains(moderationPredicate));
         verify(cb, never()).notEqual(statusPath, PostStatus.CANCELLED);
     }
 }

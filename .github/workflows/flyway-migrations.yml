@@ -78,6 +78,10 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block8_schema.sql
           psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block9_schema.sql
           psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block10_schema.sql
+          psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block11_schema.sql
+          psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block12_schema.sql
+          psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block14_schema.sql
+          psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block15_schema.sql
 
   legacy-data-copy:
     name: Migrate a V40 data copy
@@ -129,3 +133,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block8_schema.sql
           psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block9_schema.sql
           psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block10_schema.sql
+          psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block11_schema.sql
+          psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block12_schema.sql
+          psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block14_schema.sql
+          psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block15_schema.sql

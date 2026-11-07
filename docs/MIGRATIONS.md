@@ -1,4 +1,4 @@
-# Миграции базы данных (Block 6–14)
+# Миграции базы данных (Block 6–15)
 
 Документ описывает политику миграций, восстановление схемы после V33,
 безопасную стратегию для V3, порядок проверки/отката, проекцию статистики
@@ -7,7 +7,9 @@ Block 10 (V47), владение объектами изображений Block
 распределённые лимиты/блокировку входа Block 12 (V49). Block 13 (политика
 приватности публичных данных) не меняет схему: он затрагивает только
 серверные проекции ответов. Block 14 добавляет настройки приватности
-аккаунта и маркер анонимизации (V50), поэтому последняя версия схемы — V50.
+аккаунта и маркер анонимизации (V50). Block 15 завершает домен жалоб и
+модерации (V51) и добавляет корректирующий индекс публичной выдачи (V52),
+поэтому последняя версия схемы — V52.
 
 ## 1. Политика
 
@@ -434,6 +436,72 @@ primary key, `CHECK`, каскадный FK и индексы, а также и�
 значений видимости. Дополнительно схема проверяется `flyway:validate` и
 тестами `AdminUserServiceTest`/`AccountSettingsServiceTest`.
 
+### 5.8. Жалобы и модерация (V51, V52)
+
+V51 — аддитивная миграция Block 15 с двумя переименованиями. Существующие
+строки не удаляются, история жалоб сохраняется.
+
+Изменения `reports`:
+
+- `details` → `description` (`TEXT NULL`), прежний смысл описания от автора;
+- `assigned_to_id` → `assigned_moderator_id` (`BIGINT NULL`, FK → `users`);
+- новые `internal_note` (`TEXT NULL`, видна только администраторам),
+  `duplicate_of_id` (`BIGINT NULL`, FK → `reports(id) ON DELETE SET NULL`) и
+  `idempotency_key` (`VARCHAR(100) NULL`);
+- `chk_reports_target_type` принимает `REVIEW` и по-прежнему не принимает
+  `REPORT`; `HELP`/`CHAT` оставлены для исторических записей;
+- `chk_reports_description_length` ограничивает описание 2000 символами;
+- `chk_reports_idempotency_key` требует 1–100 непробельных символов;
+- `uq_reports_reporter_idempotency` — partial unique index по
+  `(reporter_id, idempotency_key)`, где оба значения не NULL;
+- `idx_reports_duplicate_of`, `idx_reports_reason` и
+  `idx_reports_priority_created` (partial по открытым статусам) ускоряют
+  очередь и связи дубликатов. Существующий
+  `uq_reports_open_reporter_target` из V42 остаётся защитой от двух открытых
+  жалоб одного автора на один объект.
+
+Изменения `report_events`:
+
+- `note` → `internal_note`;
+- `chk_report_events_type` расширен до `CREATED`, `ASSIGNED`,
+  `STATUS_CHANGED`, `NOTE`, `ESCALATED`, `RESOLVED`, `REOPENED`,
+  `LINKED_DUPLICATE`, `ACTION_APPLIED`.
+
+Изменения `moderation_actions`:
+
+- `chk_moderation_actions_target_type` принимает `REVIEW` и `REPORT`;
+- `chk_moderation_actions_type` принимает `HIDE_CONTENT`, `REMOVE_CONTENT`,
+  `RESTORE_CONTENT`, `RESOLVE_REPORT`, `LINK_DUPLICATE` и `ESCALATE` в
+  дополнение к прежним санкциям.
+
+Изменения контента:
+
+- `posts`, `comments`, `reviews` получают
+  `moderation_status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE'` с CHECK
+  `ACTIVE/HIDDEN/REMOVED`;
+- `idx_*_moderation_status` ускоряют фильтр статуса;
+- partial-индексы `idx_comments_public_thread` и
+  `idx_reviews_public_recipient` покрывают только `ACTIVE` и не удалённые
+  строки;
+- `idx_user_blocks_active_moderation` ускоряет проверку активной блокировки с
+  `source = 'MODERATION'`.
+
+V52 исправляет коллизию имён: V51 создавала `idx_posts_public_feed` с
+предикатом `moderation_status = 'ACTIVE'`, но этот индекс уже существовал с
+V46 без такого предиката, и `CREATE INDEX IF NOT EXISTS` молча оставил старую
+версию. Применённые миграции не переписываются, поэтому V52 добавляет
+`idx_posts_public_moderated_feed` под новым именем. Индекс V46 сохранён: он
+обслуживает выборки без фильтра модерации, включая административные.
+
+Продуктовые правила, статусы, права и контракт API описаны в
+`docs/REPORTS_MODERATION.md`. Проверка:
+`scripts/fixtures/verify_block15_schema.sql` проверяет переименования, типы,
+CHECK-контракты, unique/partial-индексы, FK `duplicate_of_id`, значения
+`moderation_status` и инварианты `resolved_at`/self-duplicate. Дополнительно
+схема проверяется `flyway:validate`, `ReportServiceTest`,
+`ModerationServiceTest`, `PostSpecificationTest` и
+`CommentThreadIntegrationTest`.
+
 ## 6. Проверка миграций
 ### 6.1 Чистая база
 
@@ -474,6 +542,14 @@ docker exec postgres psql -U helpTree -d helptree_clean_test `
 docker cp scripts/fixtures/verify_block12_schema.sql postgres:/tmp/verify_block12_schema.sql
 docker exec postgres psql -U helpTree -d helptree_clean_test `
   -v ON_ERROR_STOP=1 -f /tmp/verify_block12_schema.sql
+
+docker cp scripts/fixtures/verify_block14_schema.sql postgres:/tmp/verify_block14_schema.sql
+docker exec postgres psql -U helpTree -d helptree_clean_test `
+  -v ON_ERROR_STOP=1 -f /tmp/verify_block14_schema.sql
+
+docker cp scripts/fixtures/verify_block15_schema.sql postgres:/tmp/verify_block15_schema.sql
+docker exec postgres psql -U helpTree -d helptree_clean_test `
+  -v ON_ERROR_STOP=1 -f /tmp/verify_block15_schema.sql
 ```
 
 ### 6.2 Копия существующей базы
@@ -522,6 +598,10 @@ docker exec postgres psql -U helpTree -d helptree_copy_test `
 docker cp scripts/fixtures/verify_block14_schema.sql postgres:/tmp/verify_block14_schema.sql
 docker exec postgres psql -U helpTree -d helptree_copy_test `
   -v ON_ERROR_STOP=1 -f /tmp/verify_block14_schema.sql
+
+docker cp scripts/fixtures/verify_block15_schema.sql postgres:/tmp/verify_block15_schema.sql
+docker exec postgres psql -U helpTree -d helptree_copy_test `
+  -v ON_ERROR_STOP=1 -f /tmp/verify_block15_schema.sql
 ```
 
 Проверьте, что количество строк в `users`, `posts`, `helps`, `chats`,
@@ -534,8 +614,9 @@ docker exec postgres psql -U helpTree -d helptree_copy_test `
 `verify_block6_schema.sql` проверяет схему, `verify_block6_legacy.sql` —
 сохранность строк и нормализацию, `verify_block6_constraints.sql` — что
 невалидные записи действительно отклоняются, `verify_block7_schema.sql` —
-колонки/индексы V43 и совпадение проекции с фактами. Эти же файлы
-используются в GitHub Actions:
+колонки/индексы V43 и совпадение проекции с фактами. `verify_block14_schema.sql`
+и `verify_block15_schema.sql` проверяют контракты приватности/анонимизации и
+жалоб/модерации соответственно. Эти же файлы используются в GitHub Actions:
 
 ```bash
 ./mvnw -B -pl helpTree-service flyway:migrate -Dflyway.target=40
@@ -552,6 +633,7 @@ psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block10_schema.sql
 psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block11_schema.sql
 psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block12_schema.sql
 psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block14_schema.sql
+psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block15_schema.sql
 ```
 
 ## 7. Backup перед миграцией
@@ -565,7 +647,7 @@ docker cp postgres:/tmp/helpTree_db_pre_v41.dump .\helpTree_db_pre_v41.dump
 
 Для production используйте штатный backup PostgreSQL (`pg_basebackup` или
 `pg_dump -Fc`) и проверяйте restore на отдельной базе. Не запускайте
-V41–V50 без проверенной точки восстановления.
+V41–V52 без проверенной точки восстановления.
 
 ## 8. Rollback / recovery
 
@@ -624,6 +706,16 @@ V50 — аддитивная (колонка `anonymized_at`, два partial-и�
 анонимизированные строки: PII стёрты безвозвратно, поэтому перед откатом
 схемы учитывайте, что `anonymized_at` останется в данных, а старый код будет
 считать такие аккаунты обычными удалёнными.
+V51 — аддитивная с переименованиями (`details → description`,
+`assigned_to_id → assigned_moderator_id`, `report_events.note →
+internal_note`) и новыми колонками/индексами; отдельного rollback-скрипта не
+имеет. После отката кода старые версии ожидают прежние имена колонок, поэтому
+одного отката приложения недостаточно: либо восстановите backup, либо
+выполните обратные `ALTER TABLE ... RENAME COLUMN` и удалите новые
+constraints/индексы вручную. Строки `moderation_status` старый код не читает;
+скрытый контент снова станет видимым, если откатить только схему. V52 — только
+индекс (`idx_posts_public_moderated_feed`); откат кода безопасен, `DROP INDEX`
+не требуется для работы приложения.
 
 ## 9. Ограничения и замечания
 
@@ -681,3 +773,13 @@ V50 — аддитивная (колонка `anonymized_at`, два partial-и�
   исторических связей. Настройки приватности применяются к публичным
   проекциям профиля, но не скрывают данные от администраторов и не заменяют
   проверку прав на уровне endpoint-ов.
+- V51 переименовывает три колонки, поэтому требует остановки старого кода на
+  время миграции: версия до V51 обращается к `details`/`assigned_to_id`/`note`
+  и получит ошибку SQL. Для zero-downtime сначала разверните совместимую
+  версию кода или выполните миграцию в окно обслуживания. `moderation_status`
+  имеет default `ACTIVE`, поэтому существующий контент остаётся видимым.
+  Жалобы и действия не удаляются и не переписываются; audit-таблицы растут
+  бессрочно, retention для них пока не настроен. V52 — только индекс;
+  на большой базе `CREATE INDEX` берёт блокировку записи, поэтому в production
+  предпочтите `CREATE INDEX CONCURRENTLY` с тем же именем и определением.
+  Подробности домена — `docs/REPORTS_MODERATION.md`.

@@ -2,6 +2,7 @@ package org.example.helptreeservice.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.example.helptreeservice.enums.ModerationStatus;
 import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
@@ -67,6 +68,12 @@ public class Comment {
 
     @Column(name = "deleted_reason", length = 40)
     private String deletedReason;
+
+    /** Moderator-controlled visibility, independent from the author's delete. */
+    @Builder.Default
+    @Enumerated(EnumType.STRING)
+    @Column(name = "moderation_status", nullable = false, length = 20)
+    private ModerationStatus moderationStatus = ModerationStatus.ACTIVE;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)

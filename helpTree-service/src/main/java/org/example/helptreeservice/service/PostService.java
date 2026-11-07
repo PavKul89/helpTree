@@ -10,6 +10,7 @@ import org.example.helptreeservice.dto.wallet.WalletOperationResult;
 import org.example.helptreeservice.entity.Post;
 import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.enums.ImagePurpose;
+import org.example.helptreeservice.enums.ModerationStatus;
 import org.example.helptreeservice.enums.PostStatus;
 import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.ConflictException;
@@ -174,7 +175,7 @@ public class PostService {
             userService.getUserEntityById(userId);
 
             Specification<Post> spec = PostSpecification.filter(
-                    userId, null, null, null, null, null, !includeAllStatuses);
+                    userId, null, null, null, null, null, !includeAllStatuses, !includeAllStatuses);
 
             Page<PublicPostDto> posts = postRepository.findAll(spec, pageable).map(this::toPublicDto);
 
@@ -206,7 +207,7 @@ public class PostService {
         userService.getUserEntityById(userId);
 
         Specification<Post> spec = PostSpecification.filter(
-                userId, null, null, null, null, null, false);
+                userId, null, null, null, null, null, false, false);
 
         return postRepository.findAll(spec, pageable).map(this::toDto);
     }
@@ -220,7 +221,15 @@ public class PostService {
         log.info("Запрос поста по ID: {}", id);
 
         try {
-            PostDto postDto = toDto(getPostEntityById(id));
+            Post post = getPostEntityById(id);
+            // A moderated post is hidden from everyone except its author and
+            // administrators. The same lookup is reused by owner-only flows, so
+            // the check is based on the viewer, not on the endpoint.
+            if (post.getModerationStatus() != ModerationStatus.ACTIVE
+                    && !privacyPolicy.canViewFullPost(post.getUser() == null ? null : post.getUser().getId())) {
+                throw new NotFoundException("Пост не найден с id: " + id);
+            }
+            PostDto postDto = toDto(post);
             log.info("Пост с ID {} найден: title={}, автор={}", id, postDto.getTitle(), postDto.getAuthorName());
             return postDto;
 
@@ -243,7 +252,7 @@ public class PostService {
                 userService.getUserEntityById(userId);
             }
 
-            Specification<Post> spec = PostSpecification.filter(userId, status, title, authorName, category, city, excludeCancelled);
+            Specification<Post> spec = PostSpecification.filter(userId, status, title, authorName, category, city, excludeCancelled, true);
             
             Specification<Post> boostedSpec = (root, query, cb) -> {
                 LocalDateTime now = LocalDateTime.now();

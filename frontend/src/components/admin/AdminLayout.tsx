@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-do
 import {
   ArrowLeft,
   ClipboardList,
+  Flag,
   LayoutDashboard,
   Leaf,
   LogOut,
@@ -45,6 +46,12 @@ const NAV_ITEMS: AdminNavItem[] = [
     icon: ClipboardList,
   },
   {
+    to: '/admin/reports',
+    label: 'Жалобы',
+    description: 'Очередь модерации',
+    icon: Flag,
+  },
+  {
     to: '/admin/reviews',
     label: 'Отзывы',
     description: 'Отзывы получателей',
@@ -81,6 +88,12 @@ const getSectionMeta = (pathname: string): { title: string; description: string 
     return {
       title: 'Отзывы',
       description: 'Отзывы, полученные выбранным пользователем.',
+    };
+  }
+  if (pathname.startsWith('/admin/reports')) {
+    return {
+      title: 'Жалобы',
+      description: 'Очередь модерации, история и санкции.',
     };
   }
   return {
@@ -195,9 +208,8 @@ export const AdminLayout: React.FC = () => {
         <div className="admin-sidebar-note" role="note">
           <ShieldCheck size={16} aria-hidden="true" />
           <p>
-            Доступен только бэкенд-роль <strong>ADMIN</strong>. Роли модератора, жалоб, журнала
-            действий и глобальных списков комментариев/отзывов в API нет, поэтому такие разделы не
-            создавались.
+            Доступен только бэкенд-роль <strong>ADMIN</strong>. Жалобы рассматриваются здесь;
+            роль модератора и апелляции в API пока не предусмотрены.
           </p>
         </div>
 

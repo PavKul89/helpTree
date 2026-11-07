@@ -11,6 +11,9 @@ import org.example.helptreeservice.enums.ReportTargetType;
 
 import java.time.LocalDateTime;
 
+/**
+ * User-facing report projection. It deliberately has no internal_note field.
+ */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -23,12 +26,16 @@ public class ReportResponse {
     private ReportTargetType targetType;
     private Long targetId;
     private ReportReason reason;
-    private String details;
+    private String description;
     private ReportStatus status;
     private ReportPriority priority;
+    private Long assignedModeratorId;
+    private String assignedModeratorName;
     private String resolution;
+    private Long duplicateOfId;
     private Long resolvedById;
     private String resolvedByName;
     private LocalDateTime resolvedAt;
     private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
 }

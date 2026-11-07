@@ -18,6 +18,8 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@EqualsAndHashCode(exclude = "duplicateOf")
+@ToString(exclude = "duplicateOf")
 public class Report {
 
     @Id
@@ -39,8 +41,9 @@ public class Report {
     @Column(nullable = false, length = 40)
     private ReportReason reason;
 
+    /** Public explanation written by the reporter. */
     @Column(columnDefinition = "TEXT")
-    private String details;
+    private String description;
 
     @Builder.Default
     @Enumerated(EnumType.STRING)
@@ -53,11 +56,23 @@ public class Report {
     private ReportPriority priority = ReportPriority.NORMAL;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "assigned_to_id")
-    private User assignedTo;
+    @JoinColumn(name = "assigned_moderator_id")
+    private User assignedModerator;
 
     @Column(length = 1000)
     private String resolution;
+
+    /** Staff-only note. Never exposed through user DTOs. */
+    @Column(name = "internal_note", columnDefinition = "TEXT")
+    private String internalNote;
+
+    /** Set when this report is declared a duplicate of an earlier report. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "duplicate_of_id")
+    private Report duplicateOf;
+
+    @Column(name = "idempotency_key", length = 100)
+    private String idempotencyKey;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "resolved_by_id")

@@ -23,22 +23,30 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
     boolean existsByHelpAndFromUser(Help help, User fromUser);
 
     @EntityGraph(attributePaths = {"fromUser", "toUser", "help", "help.post"})
-    @Query("SELECT r FROM Review r WHERE r.help = :help AND (r.deleted = false OR r.deleted IS NULL)")
+    @Query("SELECT r FROM Review r WHERE r.help = :help "
+            + "AND (r.deleted = false OR r.deleted IS NULL) "
+            + "AND r.moderationStatus = org.example.helptreeservice.enums.ModerationStatus.ACTIVE")
     Page<Review> findByHelpWithDetails(@Param("help") Help help, Pageable pageable);
 
     @EntityGraph(attributePaths = {"fromUser", "toUser", "help", "help.post"})
-    @Query("SELECT r FROM Review r WHERE r.toUser = :user AND (r.deleted = false OR r.deleted IS NULL)")
+    @Query("SELECT r FROM Review r WHERE r.toUser = :user "
+            + "AND (r.deleted = false OR r.deleted IS NULL) "
+            + "AND r.moderationStatus = org.example.helptreeservice.enums.ModerationStatus.ACTIVE")
     Page<Review> findByToUserWithFromUser(@Param("user") User user, Pageable pageable);
 
-    @Query("SELECT AVG(r.rating) FROM Review r WHERE r.toUser = :user AND (r.deleted = false OR r.deleted IS NULL)")
+    @Query("SELECT AVG(r.rating) FROM Review r WHERE r.toUser = :user "
+            + "AND (r.deleted = false OR r.deleted IS NULL) "
+            + "AND r.moderationStatus = org.example.helptreeservice.enums.ModerationStatus.ACTIVE")
     Double calculateAverageRating(@Param("user") User user);
 
     @Query("SELECT COUNT(r) FROM Review r WHERE r.toUser.id = :userId "
-            + "AND (r.deleted = false OR r.deleted IS NULL)")
+            + "AND (r.deleted = false OR r.deleted IS NULL) "
+            + "AND r.moderationStatus = org.example.helptreeservice.enums.ModerationStatus.ACTIVE")
     long countActiveByToUserId(@Param("userId") Long userId);
 
     @Query("SELECT AVG(r.rating) FROM Review r WHERE r.toUser.id = :userId "
-            + "AND (r.deleted = false OR r.deleted IS NULL)")
+            + "AND (r.deleted = false OR r.deleted IS NULL) "
+            + "AND r.moderationStatus = org.example.helptreeservice.enums.ModerationStatus.ACTIVE")
     Double findAverageRatingByToUserId(@Param("userId") Long userId);
 
     /**

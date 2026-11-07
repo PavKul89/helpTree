@@ -3,6 +3,7 @@ package org.example.helptreeservice.repository;
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Predicate;
 import org.example.helptreeservice.entity.Post;
+import org.example.helptreeservice.enums.ModerationStatus;
 import org.example.helptreeservice.enums.PostStatus;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.util.StringUtils;
@@ -23,12 +24,17 @@ public final class PostSpecification {
                                              final String authorName,
                                              final String category,
                                              final String city,
-                                             final boolean excludeCancelled) {
+                                             final boolean excludeCancelled,
+                                             final boolean excludeModerated) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 
             // Фильтруем мягко удалённые
             predicates.add(cb.equal(root.get("deleted"), false));
+
+            if (excludeModerated) {
+                predicates.add(cb.equal(root.get("moderationStatus"), ModerationStatus.ACTIVE));
+            }
 
             if (userId != null) {
                 predicates.add(cb.equal(root.get("user").get("id"), userId));
@@ -100,6 +106,7 @@ public final class PostSpecification {
             predicates.add(cb.or(
                     cb.equal(root.get("deleted"), false),
                     cb.isNull(root.get("deleted"))));
+            predicates.add(cb.equal(root.get("moderationStatus"), ModerationStatus.ACTIVE));
             predicates.add(cb.isNotNull(root.get("latitude")));
             predicates.add(cb.isNotNull(root.get("longitude")));
             predicates.add(cb.notEqual(root.get("status"), PostStatus.CANCELLED));

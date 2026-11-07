@@ -20,8 +20,11 @@ public interface CommentRepository extends JpaRepository<Comment, Long> {
      * entity graph loads the author needed by the response mapper.
      */
     @EntityGraph(attributePaths = {"user"})
-    @Query(value = "SELECT c FROM Comment c WHERE c.post.id = :postId AND c.parentCommentId IS NULL",
-           countQuery = "SELECT COUNT(c) FROM Comment c WHERE c.post.id = :postId AND c.parentCommentId IS NULL")
+    @Query(value = "SELECT c FROM Comment c WHERE c.post.id = :postId AND c.parentCommentId IS NULL "
+            + "AND c.moderationStatus = org.example.helptreeservice.enums.ModerationStatus.ACTIVE",
+           countQuery = "SELECT COUNT(c) FROM Comment c WHERE c.post.id = :postId "
+                   + "AND c.parentCommentId IS NULL "
+                   + "AND c.moderationStatus = org.example.helptreeservice.enums.ModerationStatus.ACTIVE")
     Page<Comment> findRootComments(@Param("postId") Long postId, Pageable pageable);
 
     /**
@@ -35,12 +38,14 @@ public interface CommentRepository extends JpaRepository<Comment, Long> {
                 FROM comments c
                 WHERE c.post_id = :postId
                   AND c.parent_comment_id IS NULL
+                  AND c.moderation_status = 'ACTIVE'
                   AND c.id IN (:rootIds)
                 UNION ALL
                 SELECT c.id, t.root_id
                 FROM comments c
                 JOIN comment_tree t ON c.parent_comment_id = t.id
                 WHERE c.post_id = :postId
+                  AND c.moderation_status = 'ACTIVE'
             )
             SELECT c.id
             FROM comments c
@@ -51,13 +56,19 @@ public interface CommentRepository extends JpaRepository<Comment, Long> {
     List<Long> findThreadCommentIds(@Param("postId") Long postId,
                                     @Param("rootIds") Collection<Long> rootIds);
 
-    @Query("SELECT c FROM Comment c JOIN FETCH c.user WHERE c.id IN :ids ORDER BY c.createdAt ASC, c.id ASC")
+    @Query("SELECT c FROM Comment c JOIN FETCH c.user WHERE c.id IN :ids "
+            + "AND c.moderationStatus = org.example.helptreeservice.enums.ModerationStatus.ACTIVE "
+            + "ORDER BY c.createdAt ASC, c.id ASC")
     List<Comment> findAllByIdInWithUser(@Param("ids") Collection<Long> ids);
 
-    @Query("SELECT c FROM Comment c JOIN FETCH c.user WHERE c.user.id = :userId AND c.deleted = false ORDER BY c.createdAt DESC")
+    @Query("SELECT c FROM Comment c JOIN FETCH c.user WHERE c.user.id = :userId AND c.deleted = false "
+            + "AND c.moderationStatus = org.example.helptreeservice.enums.ModerationStatus.ACTIVE "
+            + "ORDER BY c.createdAt DESC")
     List<Comment> findByUserIdWithUser(@Param("userId") Long userId);
 
-    long countByPostIdAndDeletedFalse(Long postId);
+    @Query("SELECT COUNT(c) FROM Comment c WHERE c.post.id = :postId AND c.deleted = false "
+            + "AND c.moderationStatus = org.example.helptreeservice.enums.ModerationStatus.ACTIVE")
+    long countByPostIdAndDeletedFalse(@Param("postId") Long postId);
 
     boolean existsByPostIdAndUserId(Long postId, Long userId);
 }

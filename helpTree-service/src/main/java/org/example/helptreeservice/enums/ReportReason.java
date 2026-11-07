@@ -10,5 +10,7 @@ public enum ReportReason {
     ABUSE,
     HARASSMENT,
     INAPPROPRIATE,
+    FRAUD,
+    IMPERSONATION,
     OTHER
 }

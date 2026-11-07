@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
+import org.example.helptreeservice.enums.ModerationStatus;
 import java.time.LocalDateTime;
 
 @Entity
@@ -47,4 +48,9 @@ public class Review {
 
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
+
+    /** Moderator-controlled visibility, independent from the author's delete. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "moderation_status", nullable = false, length = 20)
+    private ModerationStatus moderationStatus = ModerationStatus.ACTIVE;
 }

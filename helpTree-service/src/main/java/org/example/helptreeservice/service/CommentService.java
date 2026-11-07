@@ -11,6 +11,7 @@ import org.example.helptreeservice.entity.Comment;
 import org.example.helptreeservice.entity.Post;
 import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.enums.CommentSort;
+import org.example.helptreeservice.enums.ModerationStatus;
 import org.example.helptreeservice.enums.Role;
 import org.example.helptreeservice.exception.AccountBlockedException;
 import org.example.helptreeservice.exception.BadRequestException;
@@ -73,6 +74,9 @@ public class CommentService {
             }
             if (Boolean.TRUE.equals(parent.getDeleted())) {
                 throw new BadRequestException("Нельзя ответить на удалённый комментарий");
+            }
+            if (parent.getModerationStatus() != ModerationStatus.ACTIVE) {
+                throw new BadRequestException("Нельзя ответить на скрытый комментарий");
             }
             int parentDepth = parent.getDepth() == null ? 0 : parent.getDepth();
             if (parentDepth >= commentProperties.getMaxDepth()) {
