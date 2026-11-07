@@ -21,6 +21,7 @@ import org.example.helptreeservice.repository.HelpStatusHistoryRepository;
 import org.example.helptreeservice.repository.PostRepository;
 import org.example.helptreeservice.repository.UserRepository;
 import org.example.helptreeservice.repository.projection.GraphUserProjection;
+import org.example.helptreeservice.service.notification.NotificationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -56,6 +57,7 @@ class HelpServiceTest {
     @Mock private HelpStatusHistoryRepository statusHistoryRepository;
     @Mock private HelpGraphMetrics helpGraphMetrics;
     @Mock private UserBlockService userBlockService;
+    @Mock private NotificationService notificationService;
 
     private HelpService helpService;
 
@@ -75,7 +77,8 @@ class HelpServiceTest {
                 economyConfig,
                 statusHistoryRepository,
                 helpGraphMetrics,
-                userBlockService
+                userBlockService,
+                notificationService
         );
 
         lenient().when(helpMapper.toResponse(any(Help.class))).thenAnswer(invocation -> {

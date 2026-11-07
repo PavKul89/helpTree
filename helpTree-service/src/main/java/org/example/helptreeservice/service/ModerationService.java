@@ -318,6 +318,7 @@ public class ModerationService {
                 Post post = postRepository.findById(targetId)
                         .orElseThrow(() -> new NotFoundException("Пост не найден"));
                 metadata.put("previousModerationStatus", post.getModerationStatus().name());
+                metadata.put("targetUserId", post.getUser() == null ? null : post.getUser().getId());
                 post.setModerationStatus(newStatus);
                 post.setUpdatedAt(LocalDateTime.now());
                 postRepository.save(post);
@@ -327,6 +328,7 @@ public class ModerationService {
                         .orElseThrow(() -> new NotFoundException("Комментарий не найден"));
                 ModerationStatus previousStatus = comment.getModerationStatus();
                 metadata.put("previousModerationStatus", previousStatus.name());
+                metadata.put("targetUserId", comment.getUser() == null ? null : comment.getUser().getId());
                 comment.setModerationStatus(newStatus);
                 comment.setUpdatedAt(LocalDateTime.now());
                 commentRepository.save(comment);
@@ -336,6 +338,8 @@ public class ModerationService {
                 Review review = reviewRepository.findById(targetId)
                         .orElseThrow(() -> new NotFoundException("Отзыв не найден"));
                 metadata.put("previousModerationStatus", review.getModerationStatus().name());
+                metadata.put("targetUserId",
+                        review.getFromUser() == null ? null : review.getFromUser().getId());
                 review.setModerationStatus(newStatus);
                 reviewRepository.save(review);
                 // The rating projection reads review rows, so the status change

@@ -6,7 +6,10 @@ import org.example.helptreeservice.entity.Help;
 import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.enums.AchievementType;
 import org.example.helptreeservice.enums.HelpStatus;
+import org.example.helptreeservice.enums.NotificationType;
 import org.example.helptreeservice.repository.*;
+import org.example.helptreeservice.service.notification.NotificationCommand;
+import org.example.helptreeservice.service.notification.NotificationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -30,6 +33,7 @@ public class AchievementService {
     private final PostRepository postRepository;
     private final MessageRepository messageRepository;
     private final UserRepository userRepository;
+    private final NotificationService notificationService;
 
     @Transactional
     public void checkAndAwardAchievements(User user, Help help) {
@@ -170,7 +174,23 @@ public class AchievementService {
         if (inserted == 0) {
             log.debug("Достижение {} уже было у пользователя {}, повторная выдача пропущена",
                     type, user.getId());
+            return;
         }
+
+        // Only a real insert produces a notification; a retried projection pass
+        // must not congratulate the user twice.
+        java.util.Map<String, Object> payload = new java.util.LinkedHashMap<>();
+        payload.put("achievementType", type.name());
+        payload.put("achievementName", type.getName());
+        payload.put("emoji", type.getEmoji());
+        payload.put("rarity", type.getRarity());
+        notificationService.notify(NotificationCommand.of(
+                user.getId(),
+                NotificationType.ACHIEVEMENT_EARNED,
+                "Новое достижение: " + type.getName(),
+                type.getEmoji() + " " + type.getDescription(),
+                payload,
+                "achievement:" + user.getId() + ":" + type.name()));
     }
 
     public List<AchievementDto> getUserAchievements(Long userId) {

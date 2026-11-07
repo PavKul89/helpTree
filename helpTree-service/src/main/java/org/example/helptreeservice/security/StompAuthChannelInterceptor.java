@@ -43,6 +43,7 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
 
     private static final Set<String> PRIVATE_USER_QUEUES = Set.of(
             "/user/queue/chat-updates",
+            "/user/queue/notifications",
             "/user/queue/errors"
     );
 

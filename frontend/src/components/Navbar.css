@@ -355,6 +355,25 @@
   color: #c8f56a;
 }
 
+.navbar-notifications-badge {
+  position: absolute;
+  top: -4px;
+  right: -5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  border: 2px solid #071b13;
+  background: #c8f56a;
+  color: #10230f;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+}
+
 /* Buttons ---------------------------------------------------------- */
 
 .navbar-actions {

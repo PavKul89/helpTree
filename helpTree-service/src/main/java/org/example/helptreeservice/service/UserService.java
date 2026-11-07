@@ -7,6 +7,7 @@ import org.example.helptreeservice.dto.users.UserDto;
 import org.example.helptreeservice.dto.users.UserPublicDto;
 import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.enums.ImagePurpose;
+import org.example.helptreeservice.enums.NotificationType;
 import org.example.helptreeservice.enums.Role;
 import org.example.helptreeservice.enums.UserStatus;
 import org.example.helptreeservice.exception.ConflictException;
@@ -17,6 +18,8 @@ import org.example.helptreeservice.repository.PostRepository;
 import org.example.helptreeservice.repository.UserRatingStatsRepository;
 import org.example.helptreeservice.repository.UserRepository;
 import org.example.helptreeservice.repository.UserSpecification;
+import org.example.helptreeservice.service.notification.NotificationCommand;
+import org.example.helptreeservice.service.notification.NotificationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
@@ -29,7 +32,9 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -50,6 +55,7 @@ public class UserService {
     private final AuthSessionService authSessionService;
     private final EconomyConfig economyConfig;
     private final PublicProfileCache publicProfileCache;
+    private final NotificationService notificationService;
 
     public UserDto createUser(CreateUserRequest request) {
         return createUserWithRole(request, Role.USER);
@@ -726,6 +732,7 @@ public class UserService {
                 blockedUserIds.add(user.getId());
                 // Debt blocking must immediately invalidate already issued tokens.
                 authSessionService.revokeAllSessionsForUser(user.getId(), "ACCOUNT_BLOCKED");
+                notifyAccountBlocked(user, "задолженность по HelpCoin");
                 log.info("Пользователь {} заблокирован за долг на 7 дней (debtCount: {}, blockedUntil: {})", 
                     user.getId(), user.getDebtCount(), user.getBlockedUntil());
             }
@@ -752,12 +759,18 @@ public class UserService {
     public void unblockUser(Long userId) {
         log.info("Разблокировка пользователя {}", userId);
         User user = getUserEntityById(userId);
+        boolean wasBlocked = user.getBlockedAt() != null || user.getBlockedUntil() != null;
+        LocalDateTime previousBlockedUntil = user.getBlockedUntil();
         user.setBlockedAt(null);
         user.setBlockedUntil(null);
         userRepository.save(user);
         publicProfileCache.evictAfterCommit(userId);
         // Remove the block penalty from the projection immediately.
         ratingService.recalculateUsers(List.of(userId), "Ручная разблокировка");
+        if (wasBlocked) {
+            notifyAccountUnblocked(user.getId(), "блокировка снята администратором",
+                    "manual:" + userId + ":" + previousBlockedUntil);
+        }
         log.info("Пользователь {} разблокирован", userId);
     }
 
@@ -768,11 +781,57 @@ public class UserService {
         // Read the ids before the bulk update: loading entities here would leave
         // stale blocked values in the persistence context for the recalculation.
         List<Long> unblockedIds = userRepository.findIdsWithExpiredBlocks(now);
+        if (unblockedIds.isEmpty()) {
+            return;
+        }
+
+        // Snapshot the deadline before the bulk UPDATE clears it; the value is
+        // part of the dedupe key so the same expiry notifies exactly once.
+        Map<Long, LocalDateTime> expiries = new LinkedHashMap<>();
+        for (User user : userRepository.findAllById(unblockedIds)) {
+            expiries.put(user.getId(), user.getBlockedUntil());
+        }
+
         int unblocked = userRepository.unblockExpiredUsers(now);
         unblockedIds.forEach(publicProfileCache::evictAfterCommit);
         ratingService.recalculateUsers(unblockedIds, "Автоматическая разблокировка");
+
+        for (Long userId : unblockedIds) {
+            notifyAccountUnblocked(userId, "срок блокировки истёк",
+                    "expired:" + userId + ":" + expiries.get(userId));
+        }
         if (unblocked > 0) {
             log.info("Авто-разблокировано {} пользователей", unblocked);
         }
+    }
+
+    private void notifyAccountBlocked(User user, String reason) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("userId", user.getId());
+        payload.put("reason", reason);
+        payload.put("blockedAt", user.getBlockedAt());
+        payload.put("blockedUntil", user.getBlockedUntil());
+        notificationService.notify(NotificationCommand.of(
+                user.getId(),
+                NotificationType.ACCOUNT_BLOCKED,
+                "Аккаунт заблокирован",
+                "Ваш аккаунт заблокирован. Причина: " + reason + "."
+                        + (user.getBlockedUntil() == null ? ""
+                        : " Блокировка действует до " + user.getBlockedUntil() + "."),
+                payload,
+                "account:blocked:" + user.getId() + ":" + user.getBlockedUntil()));
+    }
+
+    private void notifyAccountUnblocked(Long userId, String reason, String dedupeSuffix) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("userId", userId);
+        payload.put("reason", reason);
+        notificationService.notify(NotificationCommand.of(
+                userId,
+                NotificationType.ACCOUNT_UNBLOCKED,
+                "Аккаунт разблокирован",
+                "Ваш аккаунт снова активен: " + reason + ".",
+                payload,
+                "account:unblocked:" + dedupeSuffix));
     }
 }

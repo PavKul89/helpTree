@@ -21,6 +21,7 @@ import org.example.helptreeservice.entity.Report;
 import org.example.helptreeservice.entity.ReportEvent;
 import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.enums.ModerationActionType;
+import org.example.helptreeservice.enums.NotificationType;
 import org.example.helptreeservice.enums.ReportAction;
 import org.example.helptreeservice.enums.ReportEventType;
 import org.example.helptreeservice.enums.ReportPriority;
@@ -39,6 +40,8 @@ import org.example.helptreeservice.repository.PostRepository;
 import org.example.helptreeservice.repository.ReportEventRepository;
 import org.example.helptreeservice.repository.ReportRepository;
 import org.example.helptreeservice.repository.UserRepository;
+import org.example.helptreeservice.service.notification.NotificationCommand;
+import org.example.helptreeservice.service.notification.NotificationService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -117,6 +120,7 @@ public class ReportService {
     private final UserRepository userRepository;
     private final ModerationService moderationService;
     private final CommentContentSanitizer contentSanitizer;
+    private final NotificationService notificationService;
 
     // ============================================================
     // User-facing lifecycle
@@ -170,6 +174,8 @@ public class ReportService {
         metadata.put("targetId", saved.getTargetId());
         metadata.put("reason", saved.getReason().name());
         saveEvent(saved, reporter, ReportEventType.CREATED, null, ReportStatus.OPEN, null, metadata);
+
+        notifyAdminsAboutNewReport(saved, reporter);
 
         log.info("Создана жалоба ID={} на {} ID={} от пользователя ID={}",
                 saved.getId(), saved.getTargetType(), saved.getTargetId(), userId);
@@ -501,6 +507,8 @@ public class ReportService {
         metadata.put("newReportStatus", newStatus.name());
         saveEvent(report, admin, eventType, fromStatus, newStatus, eventNote, metadata);
 
+        notifyReportDecision(report, actionType, metadata, resolution);
+
         log.info("Жалоба ID={} рассмотрена администратором ID={}: {} -> {}, действие={}",
                 reportId, adminId, fromStatus, newStatus, actionType);
         return toActionResponse(savedAction);
@@ -534,6 +542,139 @@ public class ReportService {
     // ============================================================
     // Helpers
     // ============================================================
+
+    /**
+     * Notifies every active administrator about a new report. The notification is
+     * created in the same transaction as the report: if the report rolls back,
+     * the fan-out disappears with it. A deterministic per-admin dedupe key keeps
+     * an idempotent replay from notifying twice.
+     */
+    private void notifyAdminsAboutNewReport(Report report, User reporter) {
+        List<Long> adminIds = userRepository.findActiveIdsByRole(Role.ADMIN);
+        if (adminIds.isEmpty()) {
+            return;
+        }
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("reportId", report.getId());
+        payload.put("targetType", report.getTargetType().name());
+        payload.put("targetId", report.getTargetId());
+        payload.put("reason", report.getReason().name());
+        payload.put("reporterId", reporter.getId());
+        payload.put("reporterName", reporter.getName());
+
+        String body = reporter.getName() + " пожаловался на " + targetLabel(report)
+                + ". Причина: " + report.getReason().name();
+        for (Long adminId : adminIds) {
+            notificationService.notify(NotificationCommand.of(
+                    adminId,
+                    NotificationType.NEW_REPORT,
+                    "Новая жалоба #" + report.getId(),
+                    body,
+                    payload,
+                    "report:" + report.getId() + ":new:admin:" + adminId));
+        }
+    }
+
+    /**
+     * Tells the reporter about the decision and, when the target is an account,
+     * the account owner about the sanction. The canonical notification rows are
+     * written before the method returns; only the delivery is asynchronous.
+     */
+    private void notifyReportDecision(Report report,
+                                      ModerationActionType actionType,
+                                      Map<String, Object> metadata,
+                                      String resolution) {
+        boolean rejected = actionType == ModerationActionType.DISMISS_REPORT
+                || actionType == ModerationActionType.LINK_DUPLICATE;
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("reportId", report.getId());
+        payload.put("actionType", actionType.name());
+        payload.put("status", report.getStatus().name());
+        payload.put("targetType", report.getTargetType().name());
+        payload.put("targetId", report.getTargetId());
+        payload.put("resolution", resolution);
+
+        User reporter = report.getReporter();
+        if (reporter != null) {
+            String title = rejected ? "Жалоба отклонена" : "Жалоба рассмотрена";
+            String body = rejected
+                    ? "Ваша жалоба #" + report.getId() + " отклонена."
+                            + (resolution == null ? "" : " Комментарий: " + resolution)
+                    : "Ваша жалоба #" + report.getId() + " рассмотрена. Спасибо, что помогаете"
+                            + " поддерживать порядок.";
+            notificationService.notify(NotificationCommand.of(
+                    reporter.getId(),
+                    rejected ? NotificationType.REPORT_REJECTED : NotificationType.REPORT_ACCEPTED,
+                    title,
+                    body,
+                    payload,
+                    "report:" + report.getId() + ":reporter"));
+        }
+
+        Long targetUserId = asLong(metadata.get("targetUserId"));
+        if (targetUserId == null
+                || (reporter != null && targetUserId.equals(reporter.getId()))) {
+            return;
+        }
+
+        NotificationType type;
+        String title;
+        String body;
+        switch (actionType) {
+            case BAN, MUTE -> {
+                type = NotificationType.ACCOUNT_BLOCKED;
+                title = "Аккаунт заблокирован";
+                body = "К вашему аккаунту применена санкция " + actionType.name()
+                        + ". Причина: " + resolution;
+            }
+            case UNBAN, UNMUTE -> {
+                type = NotificationType.ACCOUNT_UNBLOCKED;
+                title = "Аккаунт разблокирован";
+                body = "Санкция " + actionType.name() + " снята. Причина: " + resolution;
+            }
+            default -> {
+                type = NotificationType.MODERATION_ACTION;
+                title = "Действие модерации";
+                body = "По вашей публикации применено действие " + actionType.name()
+                        + ". Причина: " + resolution;
+            }
+        }
+
+        notificationService.notify(NotificationCommand.of(
+                targetUserId,
+                type,
+                title,
+                body,
+                payload,
+                "report:" + report.getId() + ":target:" + targetUserId));
+    }
+
+    private String targetLabel(Report report) {
+        return switch (report.getTargetType()) {
+            case POST -> "пост #" + report.getTargetId();
+            case COMMENT -> "комментарий #" + report.getTargetId();
+            case REVIEW -> "отзыв #" + report.getTargetId();
+            case USER -> "пользователя #" + report.getTargetId();
+            case MESSAGE -> "сообщение #" + report.getTargetId();
+            default -> report.getTargetType().name() + " #" + report.getTargetId();
+        };
+    }
+
+    private Long asLong(Object value) {
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        if (value instanceof String text && !text.isBlank()) {
+            try {
+                return Long.parseLong(text);
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        return null;
+    }
 
     private Report linkDuplicate(Report report, Long duplicateOfId) {
         if (duplicateOfId == null) {

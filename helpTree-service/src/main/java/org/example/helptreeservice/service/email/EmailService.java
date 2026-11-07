@@ -17,4 +17,11 @@ public interface EmailService {
     boolean sendAccountInvitation(String to, String token);
 
     void sendEmailChangedNotice(String oldEmail, String newEmail);
+
+    /**
+     * Generic transactional notification email. Unlike the security flows it
+     * carries no token and is delivered from the durable outbox, where a false
+     * result schedules a retry.
+     */
+    boolean sendNotification(String to, String subject, String body);
 }

@@ -9,6 +9,7 @@ import org.example.helptreeservice.repository.HelpRepository;
 import org.example.helptreeservice.repository.MessageRepository;
 import org.example.helptreeservice.repository.PostRepository;
 import org.example.helptreeservice.repository.UserRepository;
+import org.example.helptreeservice.service.notification.NotificationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,6 +33,7 @@ class AchievementServiceTest {
     @Mock private PostRepository postRepository;
     @Mock private MessageRepository messageRepository;
     @Mock private UserRepository userRepository;
+    @Mock private NotificationService notificationService;
 
     private AchievementService service;
 
@@ -42,7 +44,8 @@ class AchievementServiceTest {
                 helpRepository,
                 postRepository,
                 messageRepository,
-                userRepository
+                userRepository,
+                notificationService
         );
     }
 

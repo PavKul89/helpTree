@@ -31,6 +31,7 @@ import org.example.helptreeservice.repository.PostRepository;
 import org.example.helptreeservice.repository.ReportEventRepository;
 import org.example.helptreeservice.repository.ReportRepository;
 import org.example.helptreeservice.repository.UserRepository;
+import org.example.helptreeservice.service.notification.NotificationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -73,6 +74,8 @@ class ReportServiceTest {
     private UserRepository userRepository;
     @Mock
     private ModerationService moderationService;
+    @Mock
+    private NotificationService notificationService;
 
     private ReportService reportService;
     private User reporter;
@@ -88,7 +91,8 @@ class ReportServiceTest {
                 postRepository,
                 userRepository,
                 moderationService,
-                new CommentContentSanitizer(new CommentProperties()));
+                new CommentContentSanitizer(new CommentProperties()),
+                notificationService);
 
         reporter = user(1L, "Alice", Role.USER);
         admin = user(3L, "Admin", Role.ADMIN);

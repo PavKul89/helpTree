@@ -204,14 +204,85 @@ export interface CreateMessageRequest {
 }
 
 export interface WsMessageEnvelope {
-  type: 'NEW_MESSAGE' | 'MESSAGE_DELETED' | 'MESSAGES_READ' | 'CHAT_DELETED' | 'CHAT_UPDATED' | 'ERROR';
+  type: 'NEW_MESSAGE' | 'MESSAGE_DELETED' | 'MESSAGES_READ' | 'CHAT_DELETED' | 'CHAT_UPDATED' | 'NOTIFICATION' | 'ERROR';
   message?: Message;
   chat?: Chat;
   chatId?: number;
   lastReadMessageId?: number;
+  notification?: Notification;
+  unreadCount?: number;
   error?: string;
   timestamp?: string;
 }
+
+/** Event types that are part of the public notification API. */
+export type NotificationType =
+  | 'NEW_HELP_RESPONSE'
+  | 'HELP_ACCEPTED'
+  | 'HELP_COMPLETED'
+  | 'HELP_CONFIRMED'
+  | 'HELP_CANCELLED'
+  | 'NEW_REVIEW'
+  | 'NEW_REPORT'
+  | 'REPORT_ACCEPTED'
+  | 'REPORT_REJECTED'
+  | 'MODERATION_ACTION'
+  | 'ACCOUNT_BLOCKED'
+  | 'ACCOUNT_UNBLOCKED'
+  | 'COINS_EARNED'
+  | 'COINS_SPENT'
+  | 'ACHIEVEMENT_EARNED';
+
+export type NotificationChannel = 'IN_APP' | 'EMAIL' | 'TELEGRAM';
+
+/**
+ * Canonical notification row. `dedupeKey` is deliberately not exposed: the
+ * server owns it and the UI must never build one itself.
+ */
+export interface Notification {
+  id: number;
+  userId: number;
+  type: NotificationType;
+  title: string;
+  body: string;
+  payload?: Record<string, unknown>;
+  read: boolean;
+  readAt?: string | null;
+  createdAt: string;
+}
+
+export interface UnreadCountResponse {
+  unreadCount: number;
+}
+
+export interface MarkAllReadResponse {
+  updated: number;
+  unreadCount: number;
+}
+
+export interface NotificationPreferenceDto {
+  type: NotificationType;
+  channel: NotificationChannel;
+  enabled: boolean;
+}
+
+/**
+ * The server always returns the full matrix (every type × every channel), so
+ * the settings screen never has to guess a default.
+ */
+export interface NotificationPreferencesResponse {
+  preferences: NotificationPreferenceDto[];
+  types: NotificationType[];
+  channels: NotificationChannel[];
+}
+
+export interface WsNotificationEnvelope {
+  type: 'NOTIFICATION';
+  notification: Notification;
+  unreadCount: number;
+  timestamp?: string;
+}
+
 
 export interface WsTicket {
   ticket: string;

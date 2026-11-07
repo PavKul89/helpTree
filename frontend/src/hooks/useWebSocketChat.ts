@@ -2,9 +2,9 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { Client, StompSubscription } from '@stomp/stompjs';
 import { API_URL } from '../api/axios';
 import { authApi } from '../api/authApi';
-import type { Chat, Message, WsMessageEnvelope } from '../types';
+import type { Chat, Message, Notification, WsMessageEnvelope } from '../types';
 
-export type WsMessageType = 'NEW_MESSAGE' | 'MESSAGE_DELETED' | 'MESSAGES_READ' | 'CHAT_DELETED' | 'CHAT_UPDATED' | 'ERROR';
+export type WsMessageType = 'NEW_MESSAGE' | 'MESSAGE_DELETED' | 'MESSAGES_READ' | 'CHAT_DELETED' | 'CHAT_UPDATED' | 'NOTIFICATION' | 'ERROR';
 
 const WS_URL = process.env.REACT_APP_WS_URL || `${API_URL.replace(/^http/, 'ws')}/ws/chat`;
 
@@ -15,6 +15,7 @@ interface UseWebSocketChatOptions {
   onMessagesRead: (chatId: number) => void;
   onChatDeleted: (chatId: number) => void;
   onChatUpdated?: (chat: Chat) => void;
+  onNotification?: (notification: Notification, unreadCount: number) => void;
   onError?: (message: string) => void;
 }
 
@@ -24,6 +25,7 @@ export function useWebSocketChat(options: UseWebSocketChatOptions) {
   const clientRef = useRef<Client | null>(null);
   const subscriptionsRef = useRef<Map<number, StompSubscription>>(new Map());
   const userSubscriptionRef = useRef<StompSubscription | null>(null);
+  const notificationSubscriptionRef = useRef<StompSubscription | null>(null);
   const errorSubscriptionRef = useRef<StompSubscription | null>(null);
   const chatIdsRef = useRef<Set<number>>(new Set());
   const handlersRef = useRef(options);
@@ -39,6 +41,7 @@ export function useWebSocketChat(options: UseWebSocketChatOptions) {
       onMessagesRead,
       onChatDeleted,
       onChatUpdated,
+      onNotification,
       onError,
     } = handlersRef.current;
 
@@ -66,6 +69,11 @@ export function useWebSocketChat(options: UseWebSocketChatOptions) {
       case 'CHAT_UPDATED':
         if (envelope.chat && onChatUpdated) {
           onChatUpdated(envelope.chat);
+        }
+        break;
+      case 'NOTIFICATION':
+        if (envelope.notification && onNotification) {
+          onNotification(envelope.notification, envelope.unreadCount ?? 0);
         }
         break;
       case 'ERROR':
@@ -97,6 +105,17 @@ export function useWebSocketChat(options: UseWebSocketChatOptions) {
       userSubscriptionRef.current = client.subscribe('/user/queue/chat-updates', (message) => {
         parseEnvelope(message.body);
       });
+    }
+
+    if (!notificationSubscriptionRef.current) {
+      // The notification queue is separate from chat updates: it is the only
+      // realtime transport for the centralized notification domain.
+      notificationSubscriptionRef.current = client.subscribe(
+        '/user/queue/notifications',
+        (message) => {
+          parseEnvelope(message.body);
+        }
+      );
     }
 
     if (!errorSubscriptionRef.current) {
@@ -162,6 +181,15 @@ export function useWebSocketChat(options: UseWebSocketChatOptions) {
         // сокет уже закрыт — игнорируем
       }
       errorSubscriptionRef.current = null;
+    }
+
+    if (notificationSubscriptionRef.current) {
+      try {
+        notificationSubscriptionRef.current.unsubscribe();
+      } catch {
+        // сокет уже закрыт — игнорируем
+      }
+      notificationSubscriptionRef.current = null;
     }
   }, []);
 

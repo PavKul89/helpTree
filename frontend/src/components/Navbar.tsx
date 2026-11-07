@@ -4,6 +4,11 @@ import { useAuth } from '../context/AuthContext';
 import { chatApi } from '../api/chatApi';
 import { authApi } from '../api/authApi';
 import { WALLET_UPDATED_EVENT, walletApi } from '../api/walletApi';
+import {
+  NOTIFICATION_COUNT_EVENT,
+  NOTIFICATION_EVENT,
+  notificationApi,
+} from '../api/notificationApi';
 import { useWebSocketChat } from '../hooks/useWebSocketChat';
 import {
   Map,
@@ -27,7 +32,7 @@ import {
   Search,
   X,
 } from 'lucide-react';
-import type { Chat } from '../types';
+import type { Chat, Notification } from '../types';
 import './Navbar.css';
 
 const getInitials = (name: string): string =>
@@ -52,6 +57,7 @@ export const Navbar: React.FC = () => {
   const [isVip, setIsVip] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchInput, setSearchInput] = useState('');
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -73,6 +79,17 @@ export const Navbar: React.FC = () => {
     setChats((prev) => prev.filter((c) => c.id !== chatId));
   }, []);
 
+  /**
+   * One STOMP connection is shared by chat and notifications. The event lets the
+   * notification page react without opening a second socket.
+   */
+  const handleNotification = useCallback((notification: Notification, unreadCount: number) => {
+    setUnreadNotifications(Math.max(0, unreadCount));
+    window.dispatchEvent(
+      new CustomEvent(NOTIFICATION_EVENT, { detail: { notification, unreadCount } })
+    );
+  }, []);
+
   useWebSocketChat({
     userId: user?.id ?? null,
     onNewMessage: () => {},
@@ -80,6 +97,7 @@ export const Navbar: React.FC = () => {
     onMessagesRead: () => {},
     onChatDeleted: handleChatDeleted,
     onChatUpdated: handleChatUpdated,
+    onNotification: handleNotification,
   });
 
   useEffect(() => {
@@ -102,8 +120,21 @@ export const Navbar: React.FC = () => {
       loadInitialChats();
       loadUserData();
       loadWallet();
+      loadUnreadNotifications();
     }
   }, [user]);
+
+  useEffect(() => {
+    const handleCountUpdated = (event: Event) => {
+      const unreadCount = (event as CustomEvent<{ unreadCount?: number }>).detail?.unreadCount;
+      if (typeof unreadCount === 'number' && Number.isFinite(unreadCount)) {
+        setUnreadNotifications(Math.max(0, unreadCount));
+      }
+    };
+
+    window.addEventListener(NOTIFICATION_COUNT_EVENT, handleCountUpdated);
+    return () => window.removeEventListener(NOTIFICATION_COUNT_EVENT, handleCountUpdated);
+  }, []);
 
   useEffect(() => {
     const handleWalletUpdated = (event: Event) => {
@@ -177,6 +208,15 @@ export const Navbar: React.FC = () => {
       } catch (err) {
         console.error(err);
       }
+    }
+  };
+
+  const loadUnreadNotifications = async () => {
+    try {
+      const response = await notificationApi.getUnreadCount();
+      setUnreadNotifications(Math.max(0, response.unreadCount));
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -369,6 +409,11 @@ export const Navbar: React.FC = () => {
               title="Уведомления"
             >
               <Bell size={18} aria-hidden="true" />
+              {unreadNotifications > 0 && (
+                <span className="navbar-notifications-badge" aria-label={`Непрочитанных: ${unreadNotifications}`}>
+                  {unreadNotifications > 99 ? '99+' : unreadNotifications}
+                </span>
+              )}
             </Link>
           )}
 
@@ -443,6 +488,11 @@ export const Navbar: React.FC = () => {
               </Link>
               <Link to="/notifications" className={`navbar-mobile-link ${isActive('/notifications') ? 'navbar-mobile-link--active' : ''}`} onClick={closeDropdown}>
                 <Bell size={16} aria-hidden="true" /> Уведомления
+                {unreadNotifications > 0 && (
+                  <span className="navbar-badge">
+                    {unreadNotifications > 99 ? '99+' : unreadNotifications}
+                  </span>
+                )}
               </Link>
               <Link to="/profile" className="navbar-mobile-link" onClick={closeDropdown}>
                 <User size={16} aria-hidden="true" /> Мой профиль

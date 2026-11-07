@@ -13,6 +13,7 @@ import org.example.helptreeservice.exception.ConflictException;
 import org.example.helptreeservice.repository.AdminCoinAuditRepository;
 import org.example.helptreeservice.repository.CoinTransactionRepository;
 import org.example.helptreeservice.repository.UserRepository;
+import org.example.helptreeservice.service.notification.NotificationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -40,6 +41,7 @@ class WalletServiceTest {
     @Mock private AdminCoinAuditRepository adminAuditRepository;
     @Mock private RatingService ratingService;
     @Mock private PublicProfileCache publicProfileCache;
+    @Mock private NotificationService notificationService;
 
     private EconomyConfig economyConfig;
     private WalletService walletService;
@@ -51,7 +53,8 @@ class WalletServiceTest {
         PaginationConfig paginationConfig = new PaginationConfig();
         walletService = new WalletService(
                 userRepository, transactionRepository, adminAuditRepository,
-                ratingService, economyConfig, paginationConfig, publicProfileCache);
+                ratingService, economyConfig, paginationConfig, publicProfileCache,
+                notificationService);
 
         user = new User();
         user.setId(1L);

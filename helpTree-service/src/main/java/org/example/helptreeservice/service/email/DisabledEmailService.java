@@ -48,6 +48,11 @@ public class DisabledEmailService implements EmailService {
         logDisabled("email changed notice", oldEmail);
     }
 
+    @Override
+    public boolean sendNotification(String to, String subject, String body) {
+        return logDisabled("notification: " + subject, to);
+    }
+
     private boolean logDisabled(String purpose, String to) {
         log.info("Письмо ({}) не отправлено: SMTP отключён. Получатель: {}", purpose, mask(to));
         return false;

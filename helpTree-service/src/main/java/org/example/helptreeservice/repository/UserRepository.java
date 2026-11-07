@@ -81,6 +81,10 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
     @Query("SELECT u FROM User u WHERE u.role = :role AND (u.deleted = false OR u.deleted IS NULL) ORDER BY u.id")
     List<User> findActiveByRoleForUpdate(@Param("role") Role role);
 
+    /** Read-only admin recipient list for fan-out notifications (e.g. new report). */
+    @Query("SELECT u.id FROM User u WHERE u.role = :role AND (u.deleted = false OR u.deleted IS NULL) ORDER BY u.id")
+    List<Long> findActiveIdsByRole(@Param("role") Role role);
+
     @Query("SELECT u.id FROM User u WHERE u.deleted = false AND u.blockedUntil IS NOT NULL AND u.blockedUntil < :now")
     List<Long> findIdsWithExpiredBlocks(@Param("now") LocalDateTime now);
 

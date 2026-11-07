@@ -1,12 +1,12 @@
 package org.example.helptreeservice.service;
 
 import lombok.RequiredArgsConstructor;
-import org.example.helptreeservice.entity.NotificationPreference;
+import org.example.helptreeservice.entity.AccountNotificationPreference;
 import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.entity.UserPrivacySettings;
 import org.example.helptreeservice.enums.DigestFrequency;
 import org.example.helptreeservice.enums.ProfileVisibility;
-import org.example.helptreeservice.repository.NotificationPreferenceRepository;
+import org.example.helptreeservice.repository.AccountNotificationPreferenceRepository;
 import org.example.helptreeservice.repository.UserPrivacySettingsRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,7 +25,7 @@ import java.util.Map;
 public class UserDataExportService {
 
     private final UserPrivacySettingsRepository privacySettingsRepository;
-    private final NotificationPreferenceRepository notificationPreferenceRepository;
+    private final AccountNotificationPreferenceRepository notificationPreferenceRepository;
 
     @Transactional(readOnly = true)
     public Map<String, Object> export(User user) {
@@ -79,7 +79,7 @@ public class UserDataExportService {
     }
 
     private Map<String, Object> notificationFields(Long userId) {
-        NotificationPreference preferences = notificationPreferenceRepository.findById(userId).orElse(null);
+        AccountNotificationPreference preferences = notificationPreferenceRepository.findById(userId).orElse(null);
         Map<String, Object> fields = new LinkedHashMap<>();
         fields.put("emailEnabled", preferences != null ? preferences.getEmailEnabled() : true);
         fields.put("pushEnabled", preferences != null ? preferences.getPushEnabled() : true);

@@ -4,7 +4,7 @@ import org.example.helptreeservice.dto.account.NotificationPreferencesDto;
 import org.example.helptreeservice.dto.account.PrivacySettingsDto;
 import org.example.helptreeservice.dto.account.UpdateNotificationPreferencesRequest;
 import org.example.helptreeservice.dto.account.UpdatePrivacySettingsRequest;
-import org.example.helptreeservice.entity.NotificationPreference;
+import org.example.helptreeservice.entity.AccountNotificationPreference;
 import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.entity.UserPrivacySettings;
 import org.example.helptreeservice.enums.AdminAuditAction;
@@ -13,7 +13,7 @@ import org.example.helptreeservice.enums.ProfileVisibility;
 import org.example.helptreeservice.enums.Role;
 import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.NotFoundException;
-import org.example.helptreeservice.repository.NotificationPreferenceRepository;
+import org.example.helptreeservice.repository.AccountNotificationPreferenceRepository;
 import org.example.helptreeservice.repository.UserPrivacySettingsRepository;
 import org.example.helptreeservice.repository.UserRepository;
 import org.junit.jupiter.api.Test;
@@ -35,7 +35,7 @@ import static org.mockito.Mockito.*;
 class AccountSettingsServiceTest {
 
     @Mock private UserRepository userRepository;
-    @Mock private NotificationPreferenceRepository notificationPreferenceRepository;
+    @Mock private AccountNotificationPreferenceRepository notificationPreferenceRepository;
     @Mock private UserPrivacySettingsRepository privacySettingsRepository;
     @Mock private UserDataExportService userDataExportService;
     @Mock private UserService userService;
@@ -79,7 +79,7 @@ class AccountSettingsServiceTest {
     void updateNotificationsShouldCreateRowWithDefaultsAndApplyPatch() {
         when(userRepository.findById(USER_ID)).thenReturn(Optional.of(activeUser()));
         when(notificationPreferenceRepository.findById(USER_ID)).thenReturn(Optional.empty());
-        when(notificationPreferenceRepository.save(any(NotificationPreference.class)))
+        when(notificationPreferenceRepository.save(any(AccountNotificationPreference.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         UpdateNotificationPreferencesRequest request = new UpdateNotificationPreferencesRequest();
@@ -96,8 +96,8 @@ class AccountSettingsServiceTest {
         assertEquals(DigestFrequency.WEEKLY, result.getDigestFrequency());
         assertEquals(LocalTime.of(22, 0), result.getQuietHoursStart());
 
-        ArgumentCaptor<NotificationPreference> captor =
-                ArgumentCaptor.forClass(NotificationPreference.class);
+        ArgumentCaptor<AccountNotificationPreference> captor =
+                ArgumentCaptor.forClass(AccountNotificationPreference.class);
         verify(notificationPreferenceRepository).save(captor.capture());
         assertEquals(USER_ID, captor.getValue().getUserId());
         assertNotNull(captor.getValue().getCreatedAt());

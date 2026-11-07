@@ -13,6 +13,7 @@ import org.example.helptreeservice.mapper.ReviewMapper;
 import org.example.helptreeservice.repository.HelpRepository;
 import org.example.helptreeservice.repository.ReviewRepository;
 import org.example.helptreeservice.repository.UserRepository;
+import org.example.helptreeservice.service.notification.NotificationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -38,6 +39,7 @@ class ReviewServiceTest {
     @Mock private WalletService walletService;
     @Mock private RatingService ratingService;
     @Mock private UserBlockService userBlockService;
+    @Mock private NotificationService notificationService;
 
     private ReviewService reviewService;
 
@@ -46,7 +48,7 @@ class ReviewServiceTest {
         reviewService = new ReviewService(
                 reviewRepository, helpRepository, userRepository,
                 reviewMapper, userService, walletService, ratingService,
-                userBlockService);
+                userBlockService, notificationService);
     }
 
     @Test

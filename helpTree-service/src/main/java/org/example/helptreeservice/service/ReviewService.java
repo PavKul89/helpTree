@@ -8,6 +8,7 @@ import org.example.helptreeservice.entity.Help;
 import org.example.helptreeservice.entity.Review;
 import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.enums.HelpStatus;
+import org.example.helptreeservice.enums.NotificationType;
 import org.example.helptreeservice.enums.UserBlockScope;
 import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.ForbiddenException;
@@ -16,13 +17,17 @@ import org.example.helptreeservice.mapper.ReviewMapper;
 import org.example.helptreeservice.repository.HelpRepository;
 import org.example.helptreeservice.repository.ReviewRepository;
 import org.example.helptreeservice.repository.UserRepository;
+import org.example.helptreeservice.service.notification.NotificationCommand;
+import org.example.helptreeservice.service.notification.NotificationService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @Service
@@ -37,6 +42,7 @@ public class ReviewService {
     private final WalletService walletService;
     private final RatingService ratingService;
     private final UserBlockService userBlockService;
+    private final NotificationService notificationService;
 
     @Transactional
     public ReviewResponse createReview(CreateReviewRequest request, Long currentUserId) {
@@ -99,6 +105,21 @@ public class ReviewService {
         // The review is part of the rating only after it is actually stored.
         reviewRepository.flush();
         ratingService.recalculateUsers(List.of(toUser.getId()));
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("reviewId", savedReview.getId());
+        payload.put("helpId", help.getId());
+        payload.put("rating", savedReview.getRating());
+        payload.put("fromUserId", fromUser.getId());
+        payload.put("fromUserName", fromUser.getName());
+        notificationService.notify(NotificationCommand.of(
+                toUser.getId(),
+                NotificationType.NEW_REVIEW,
+                "Новый отзыв",
+                fromUser.getName() + " оставил отзыв " + savedReview.getRating()
+                        + "/5 по помощи #" + help.getId() + ".",
+                payload,
+                "review:" + savedReview.getId()));
 
         return reviewMapper.toResponse(savedReview);
     }

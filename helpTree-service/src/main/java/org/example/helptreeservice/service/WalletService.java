@@ -10,6 +10,7 @@ import org.example.helptreeservice.dto.wallet.WalletPricingDto;
 import org.example.helptreeservice.entity.AdminCoinAudit;
 import org.example.helptreeservice.entity.CoinTransaction;
 import org.example.helptreeservice.entity.User;
+import org.example.helptreeservice.enums.NotificationType;
 import org.example.helptreeservice.enums.TransactionDirection;
 import org.example.helptreeservice.enums.TransactionType;
 import org.example.helptreeservice.exception.BadRequestException;
@@ -18,6 +19,8 @@ import org.example.helptreeservice.exception.NotFoundException;
 import org.example.helptreeservice.repository.AdminCoinAuditRepository;
 import org.example.helptreeservice.repository.CoinTransactionRepository;
 import org.example.helptreeservice.repository.UserRepository;
+import org.example.helptreeservice.service.notification.NotificationCommand;
+import org.example.helptreeservice.service.notification.NotificationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -31,7 +34,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -65,6 +70,7 @@ public class WalletService {
     private final EconomyConfig economyConfig;
     private final PaginationConfig paginationConfig;
     private final PublicProfileCache publicProfileCache;
+    private final NotificationService notificationService;
 
     // ------------------------------------------------------------------ read
 
@@ -554,7 +560,49 @@ public class WalletService {
                 .build();
         transactionRepository.save(transaction);
 
+        notifyCoinChange(user, transaction);
+
         return new AppliedTransaction(transaction, true);
+    }
+
+    /**
+     * One notification per ledger row. The dedupe key is the transaction id, so a
+     * retried or concurrently repeated operation that reuses the existing row
+     * never produces a second notification.
+     */
+    private void notifyCoinChange(User user, CoinTransaction transaction) {
+        if (transaction.getId() == null) {
+            return;
+        }
+        long amount = transaction.getAmount() == null ? 0L : transaction.getAmount();
+        if (amount == 0L) {
+            return;
+        }
+
+        boolean earned = amount > 0;
+        long absolute = Math.abs(amount);
+        String title = earned ? "Начисление монет" : "Списание монет";
+        String description = transaction.getDescription();
+        String body = (earned ? "Вам начислено " : "С вас списано ") + absolute
+                + " HelpCoin." + (description == null || description.isBlank()
+                        ? ""
+                        : " " + description);
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("transactionId", transaction.getId());
+        payload.put("amount", amount);
+        payload.put("balance", user.getHelpCoins());
+        payload.put("transactionType", transaction.getType() == null
+                ? null : transaction.getType().name());
+        payload.put("description", description);
+
+        notificationService.notify(NotificationCommand.of(
+                user.getId(),
+                earned ? NotificationType.COINS_EARNED : NotificationType.COINS_SPENT,
+                title,
+                body,
+                payload,
+                "wallet:" + transaction.getId()));
     }
 
     private Optional<CoinTransaction> findExisting(Long userId, TransactionType type, String referenceId) {

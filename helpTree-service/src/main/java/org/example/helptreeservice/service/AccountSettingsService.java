@@ -6,7 +6,7 @@ import org.example.helptreeservice.dto.account.NotificationPreferencesDto;
 import org.example.helptreeservice.dto.account.PrivacySettingsDto;
 import org.example.helptreeservice.dto.account.UpdateNotificationPreferencesRequest;
 import org.example.helptreeservice.dto.account.UpdatePrivacySettingsRequest;
-import org.example.helptreeservice.entity.NotificationPreference;
+import org.example.helptreeservice.entity.AccountNotificationPreference;
 import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.entity.UserPrivacySettings;
 import org.example.helptreeservice.enums.AdminAuditAction;
@@ -14,7 +14,7 @@ import org.example.helptreeservice.enums.DigestFrequency;
 import org.example.helptreeservice.enums.ProfileVisibility;
 import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.NotFoundException;
-import org.example.helptreeservice.repository.NotificationPreferenceRepository;
+import org.example.helptreeservice.repository.AccountNotificationPreferenceRepository;
 import org.example.helptreeservice.repository.UserPrivacySettingsRepository;
 import org.example.helptreeservice.repository.UserRepository;
 import org.springframework.stereotype.Service;
@@ -36,7 +36,7 @@ import java.util.Map;
 public class AccountSettingsService {
 
     private final UserRepository userRepository;
-    private final NotificationPreferenceRepository notificationPreferenceRepository;
+    private final AccountNotificationPreferenceRepository notificationPreferenceRepository;
     private final UserPrivacySettingsRepository privacySettingsRepository;
     private final UserDataExportService userDataExportService;
     private final UserService userService;
@@ -56,8 +56,8 @@ public class AccountSettingsService {
             Long userId, UpdateNotificationPreferencesRequest request) {
         requireActiveUser(userId);
 
-        NotificationPreference preferences = notificationPreferenceRepository.findById(userId)
-                .orElseGet(() -> NotificationPreference.builder()
+        AccountNotificationPreference preferences = notificationPreferenceRepository.findById(userId)
+                .orElseGet(() -> AccountNotificationPreference.builder()
                         .userId(userId)
                         .emailEnabled(true)
                         .pushEnabled(true)
@@ -198,7 +198,7 @@ public class AccountSettingsService {
         return user;
     }
 
-    private NotificationPreferencesDto toDto(NotificationPreference preferences) {
+    private NotificationPreferencesDto toDto(AccountNotificationPreference preferences) {
         return NotificationPreferencesDto.builder()
                 .emailEnabled(preferences.getEmailEnabled())
                 .pushEnabled(preferences.getPushEnabled())

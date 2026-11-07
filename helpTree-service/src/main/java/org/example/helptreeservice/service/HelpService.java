@@ -11,6 +11,7 @@ import org.example.helptreeservice.entity.Post;
 import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.enums.HelpActorRole;
 import org.example.helptreeservice.enums.HelpStatus;
+import org.example.helptreeservice.enums.NotificationType;
 import org.example.helptreeservice.enums.PostStatus;
 import org.example.helptreeservice.enums.UserBlockScope;
 import org.example.helptreeservice.exception.BadRequestException;
@@ -23,6 +24,8 @@ import org.example.helptreeservice.repository.HelpStatusHistoryRepository;
 import org.example.helptreeservice.repository.PostRepository;
 import org.example.helptreeservice.repository.UserRepository;
 import org.example.helptreeservice.repository.projection.GraphUserProjection;
+import org.example.helptreeservice.service.notification.NotificationCommand;
+import org.example.helptreeservice.service.notification.NotificationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -57,6 +60,7 @@ public class HelpService {
     private final HelpStatusHistoryRepository statusHistoryRepository;
     private final HelpGraphMetrics helpGraphMetrics;
     private final UserBlockService userBlockService;
+    private final NotificationService notificationService;
 
     @Value("${app.graph.default-max-edges:500}")
     private int defaultMaxEdges;
@@ -158,6 +162,8 @@ public class HelpService {
         recordHistory(savedHelp, null, HelpStatus.ACCEPTED, helperId,
                 HelpActorRole.HELPER, null, now);
 
+        notifyHelpAccepted(savedHelp, helper);
+
         // The new ACCEPTED record changes the user's help projection
         // (totalHelpRecords / activeHelps). Rebuild it from the flushed fact so
         // the rating response never reports a stale active-help count.
@@ -208,6 +214,16 @@ public class HelpService {
 
         recordHistory(updatedHelp, HelpStatus.ACCEPTED, HelpStatus.COMPLETED, actorId,
                 admin ? HelpActorRole.ADMIN : HelpActorRole.HELPER, null, now);
+
+        notificationService.notify(NotificationCommand.of(
+                updatedHelp.getReceiver().getId(),
+                NotificationType.HELP_COMPLETED,
+                "Помощь выполнена",
+                updatedHelp.getHelper().getName() + " отметил помощь по заявке «"
+                        + postTitle(updatedHelp) + "» как выполненную. Подтвердите получение.",
+                helpPayload(updatedHelp, actorId, updatedHelp.getHelper().getName(),
+                        HelpStatus.COMPLETED.name(), null),
+                "help:" + updatedHelp.getId() + ":completed:receiver"));
 
         // ACCEPTED and COMPLETED are both active help records; the projection
         // stores their count separately from confirmed acts.
@@ -287,6 +303,16 @@ public class HelpService {
 
         recordHistory(help, HelpStatus.COMPLETED, HelpStatus.CONFIRMED, actorId,
                 admin ? HelpActorRole.ADMIN : HelpActorRole.RECEIVER, null, now);
+
+        notificationService.notify(NotificationCommand.of(
+                helperId,
+                NotificationType.HELP_CONFIRMED,
+                "Помощь подтверждена",
+                receiver.getName() + " подтвердил помощь по заявке «" + postTitle(help)
+                        + "». Спасибо за помощь!",
+                helpPayload(help, actorId, receiver.getName(),
+                        HelpStatus.CONFIRMED.name(), null),
+                "help:" + help.getId() + ":confirmed:helper"));
 
         log.info("Помощь успешно подтверждена: helpId={}", helpId);
         return helpMapper.toResponse(help);
@@ -428,6 +454,88 @@ public class HelpService {
         helpRepository.saveAndFlush(help);
         // The cancellation is a fact now; rebuild the helper's projection.
         ratingService.recalculateUsers(List.of(helperId));
+
+        notifyHelpCancelled(help, fromStatus, initiator, actorId, help.getCancelReason());
+    }
+
+    private void notifyHelpAccepted(Help help, User helper) {
+        notificationService.notify(NotificationCommand.of(
+                help.getReceiver().getId(),
+                NotificationType.NEW_HELP_RESPONSE,
+                "Новый отклик на вашу заявку",
+                helper.getName() + " откликнулся на заявку «" + postTitle(help)
+                        + "» и готов помочь.",
+                helpPayload(help, helper.getId(), helper.getName(),
+                        HelpStatus.ACCEPTED.name(), null),
+                "help:" + help.getId() + ":accepted:receiver"));
+
+        notificationService.notify(NotificationCommand.of(
+                helper.getId(),
+                NotificationType.HELP_ACCEPTED,
+                "Отклик принят",
+                "Вы откликнулись на заявку «" + postTitle(help)
+                        + "». Завершите помощь, когда она будет оказана.",
+                helpPayload(help, helper.getId(), helper.getName(),
+                        HelpStatus.ACCEPTED.name(), null),
+                "help:" + help.getId() + ":accepted:helper"));
+    }
+
+    private void notifyHelpCancelled(Help help,
+                                     HelpStatus fromStatus,
+                                     HelpActorRole initiator,
+                                     Long actorId,
+                                     String reason) {
+        Long helperId = help.getHelper().getId();
+        Long receiverId = help.getReceiver().getId();
+        String actorName = switch (initiator) {
+            case HELPER -> help.getHelper().getName();
+            case RECEIVER -> help.getReceiver().getName();
+            case ADMIN -> "Администратор";
+            case SYSTEM -> "Система";
+        };
+        String text = initiator == HelpActorRole.SYSTEM
+                ? "Помощь по заявке «" + postTitle(help)
+                        + "» автоматически отменена. Причина: " + reason
+                : actorName + " отменил помощь по заявке «" + postTitle(help)
+                        + "». Причина: " + reason;
+
+        for (Long userId : List.of(helperId, receiverId)) {
+            if (initiator != HelpActorRole.SYSTEM && userId.equals(actorId)) {
+                continue;
+            }
+            notificationService.notify(NotificationCommand.of(
+                    userId,
+                    NotificationType.HELP_CANCELLED,
+                    "Помощь отменена",
+                    text,
+                    helpPayload(help, actorId, actorName, fromStatus.name(), reason),
+                    "help:" + help.getId() + ":cancelled:" + userId));
+        }
+    }
+
+    private Map<String, Object> helpPayload(Help help,
+                                            Long actorId,
+                                            String actorName,
+                                            String status,
+                                            String reason) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("helpId", help.getId());
+        payload.put("postId", help.getPost() != null ? help.getPost().getId() : null);
+        payload.put("status", status);
+        payload.put("actorId", actorId);
+        payload.put("actorName", actorName);
+        payload.put("reason", reason);
+        return payload;
+    }
+
+    private String postTitle(Help help) {
+        Post post = help.getPost();
+        if (post == null) {
+            return "заявка #" + help.getId();
+        }
+        return post.getTitle() != null && !post.getTitle().isBlank()
+                ? post.getTitle()
+                : "заявка #" + post.getId();
     }
 
     private void recordHistory(Help help, HelpStatus fromStatus, HelpStatus toStatus,

@@ -14,6 +14,7 @@ import org.example.helptreeservice.mapper.UserMapper;
 import org.example.helptreeservice.repository.PostRepository;
 import org.example.helptreeservice.repository.UserRatingStatsRepository;
 import org.example.helptreeservice.repository.UserRepository;
+import org.example.helptreeservice.service.notification.NotificationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -54,6 +55,8 @@ class UserServiceTest {
     private AuthSessionService authSessionService;
     @Mock
     private PublicProfileCache publicProfileCache;
+    @Mock
+    private NotificationService notificationService;
 
     private UserService userService;
 
@@ -71,7 +74,8 @@ class UserServiceTest {
                 geocodingService,
                 authSessionService,
                 new org.example.helptreeservice.config.EconomyConfig(),
-                publicProfileCache
+                publicProfileCache,
+                notificationService
         );
     }
 

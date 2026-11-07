@@ -85,6 +85,11 @@ public class SmtpEmailService implements EmailService {
                         + "Если это были не вы, немедленно свяжитесь с поддержкой.");
     }
 
+    @Override
+    public boolean sendNotification(String to, String subject, String body) {
+        return send(to, subject, body);
+    }
+
     private boolean send(String to, String subject, String body) {
         try {
             MimeMessage message = mailSender.createMimeMessage();
