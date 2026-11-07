@@ -1,4 +1,4 @@
-# Миграции базы данных (Block 6–15)
+# Миграции базы данных (Block 6–16)
 
 Документ описывает политику миграций, восстановление схемы после V33,
 безопасную стратегию для V3, порядок проверки/отката, проекцию статистики
@@ -8,8 +8,9 @@ Block 10 (V47), владение объектами изображений Block
 приватности публичных данных) не меняет схему: он затрагивает только
 серверные проекции ответов. Block 14 добавляет настройки приватности
 аккаунта и маркер анонимизации (V50). Block 15 завершает домен жалоб и
-модерации (V51) и добавляет корректирующий индекс публичной выдачи (V52),
-поэтому последняя версия схемы — V52.
+модерации (V51) и добавляет корректирующий индекс публичной выдачи (V52).
+Block 16 добавляет пользовательские блокировки в отдельной таблице (V53),
+поэтому последняя версия схемы — V53.
 
 ## 1. Политика
 
@@ -502,6 +503,54 @@ CHECK-контракты, unique/partial-индексы, FK `duplicate_of_id`, �
 `ModerationServiceTest`, `PostSpecificationTest` и
 `CommentThreadIntegrationTest`.
 
+### 5.9. Пользовательские блокировки (V53)
+
+V53 — аддитивная миграция Block 16. Она создаёт отдельную таблицу
+`user_blocks_relations` и не изменяет `users`, `user_blocks` (журнал
+модерационных/долговых санкций из V42) или `blockedAt`/`blockedUntil`. Это
+разные домены: санкция платформы против персональной настройки пользователя.
+
+Схема `user_blocks_relations`:
+
+- `id` (`BIGSERIAL`, primary key);
+- `blocker_id`, `blocked_id` — `FK → users(id) ON DELETE CASCADE`;
+- `scope` (`VARCHAR(20)`, default `ALL`) — `ALL`, `MESSAGES`, `PROFILE` или
+  `HELP_REQUESTS`, ограничено `chk_user_blocks_relations_scope`;
+- `created_at` (`DEFAULT CURRENT_TIMESTAMP`);
+- `expires_at` (`TIMESTAMP NULL`) — `NULL` означает бессрочную блокировку;
+  `chk_user_blocks_relations_period` требует `expires_at > created_at`;
+- `chk_user_blocks_relations_self` запрещает `blocker_id = blocked_id`;
+- `uq_user_blocks_relations_pair` — уникальность упорядоченной пары
+  `(blocker_id, blocked_id)`.
+
+Индексы:
+
+- `idx_user_blocks_relations_blocker` — `(blocker_id, expires_at)` для списка
+  «мои блокировки»;
+- `idx_user_blocks_relations_blocked` — `(blocked_id, expires_at)` для
+  обратной стороны двусторонней проверки.
+
+Поведение:
+
+- `POST /api/users/{id}/block` выполняет атомарный
+  `INSERT ... ON CONFLICT (blocker_id, blocked_id) DO UPDATE`, поэтому
+  повторный вызов меняет `scope`/`expires_at`, а не создаёт вторую строку;
+- `DELETE /api/users/{id}/block` идемпотентен: отсутствие строки не является
+  ошибкой;
+- просроченная строка не удаляется автоматически, но игнорируется всеми
+  проверками через `expires_at > LOCALTIMESTAMP`;
+- проверка двусторонняя: блокировка `A → B` закрывает сценарий и для `B → A`;
+- `MESSAGES` закрывает создание чатов и отправку сообщений, `PROFILE` —
+  публичный профиль, директорию, поиск и отзывы, `HELP_REQUESTS` — отклики на
+  заявки, `ALL` — все сценарии, включая комментарии.
+
+Проверка: `scripts/fixtures/verify_block16_schema.sql` проверяет таблицу,
+типы, defaults, CHECK-контракты, каскадные FK, unique-пару и индексы.
+Серверная логика покрыта `UserBlockServiceTest`,
+`UserBlockIntegrationTest` и тестами enforcement в `ChatServiceTest`,
+`CommentServiceTest`, `ReviewServiceTest`, `HelpServiceTest`.
+Документация API и сценариев — `docs/USER_BLOCKS.md`.
+
 ## 6. Проверка миграций
 ### 6.1 Чистая база
 
@@ -550,6 +599,10 @@ docker exec postgres psql -U helpTree -d helptree_clean_test `
 docker cp scripts/fixtures/verify_block15_schema.sql postgres:/tmp/verify_block15_schema.sql
 docker exec postgres psql -U helpTree -d helptree_clean_test `
   -v ON_ERROR_STOP=1 -f /tmp/verify_block15_schema.sql
+
+docker cp scripts/fixtures/verify_block16_schema.sql postgres:/tmp/verify_block16_schema.sql
+docker exec postgres psql -U helpTree -d helptree_clean_test `
+  -v ON_ERROR_STOP=1 -f /tmp/verify_block16_schema.sql
 ```
 
 ### 6.2 Копия существующей базы

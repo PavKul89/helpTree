@@ -36,6 +36,7 @@ public class SearchService {
     private static final String OLDEST = "oldest";
 
     private final SearchRepository searchRepository;
+    private final AuthorizationService authorizationService;
 
     @Transactional(readOnly = true)
     public PageResponse<SearchResultDto> search(String query,
@@ -57,12 +58,17 @@ public class SearchService {
         SearchType resolvedType = type != null ? type : SearchType.ALL;
         String cityPattern = likePatternOrEmpty(city);
         String categoryPattern = likePatternOrEmpty(category);
+        // A real user id filters blocked users/reviews in SQL. Anonymous callers
+        // use -1 (no row can match a positive id), keeping the parameter type
+        // stable for the native query.
+        AuthorizationService.UserContext viewer = authorizationService.getCurrentUser();
+        Long viewerId = viewer != null ? viewer.getUserId() : -1L;
 
         Page<Object[]> rows = OLDEST.equals(normalizedSort)
                 ? searchRepository.searchOldest(pattern, cityPattern, categoryPattern,
-                        resolvedType.name(), pageable)
+                        resolvedType.name(), viewerId, pageable)
                 : searchRepository.searchNewest(pattern, cityPattern, categoryPattern,
-                        resolvedType.name(), pageable);
+                        resolvedType.name(), viewerId, pageable);
 
         log.debug("Unified search: type={}, sort={}, total={}", resolvedType, normalizedSort,
                 rows.getTotalElements());

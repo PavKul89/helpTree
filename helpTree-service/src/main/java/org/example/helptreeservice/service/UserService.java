@@ -164,10 +164,21 @@ public class UserService {
 
     @Transactional(readOnly = true)
     public Page<UserPublicDto> getAllUsersPublic(Pageable pageable, String query, String city) {
-        log.info("Запрос страницы публичных пользователей: page={}, size={}, q={}, city={}",
-                pageable.getPageNumber(), pageable.getPageSize(), query, city);
+        return getAllUsersPublic(pageable, query, city, null);
+    }
+
+    /**
+     * Public directory with viewer-specific block filtering. A block in the
+     * PROFILE scope is bidirectional, so users connected to the viewer by an
+     * active block disappear from both sides of the directory.
+     */
+    @Transactional(readOnly = true)
+    public Page<UserPublicDto> getAllUsersPublic(Pageable pageable, String query, String city, Long viewerId) {
+        log.info("Запрос страницы публичных пользователей: page={}, size={}, q={}, city={}, viewer={}",
+                pageable.getPageNumber(), pageable.getPageSize(), query, city, viewerId);
         return userRepository.findAll(
-                        UserSpecification.filter(query, null, null, city, null, false),
+                        UserSpecification.filter(query, null, null, city, null, false)
+                                .and(UserSpecification.excludeProfileBlocks(viewerId)),
                         pageable)
                 .map(userMapper::toPublicDto);
     }

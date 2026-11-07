@@ -1,8 +1,12 @@
 package org.example.helptreeservice.repository;
 
 import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Subquery;
 import org.example.helptreeservice.entity.User;
+import org.example.helptreeservice.entity.UserBlockRelation;
 import org.example.helptreeservice.enums.Role;
+import org.example.helptreeservice.enums.UserBlockScope;
 import org.example.helptreeservice.enums.UserStatus;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.util.StringUtils;
@@ -103,6 +107,35 @@ public final class UserSpecification {
             }
 
             return cb.and(predicates.toArray(new Predicate[0]));
+        };
+    }
+
+    /**
+     * Hides users that the viewer and the row share a PROFILE block with. The
+     * exclusion lives in SQL (a NOT EXISTS subquery) so pagination and total
+     * counts stay correct; filtering a loaded page would lie about the size.
+     */
+    public static Specification<User> excludeProfileBlocks(Long viewerId) {
+        return (root, query, cb) -> {
+            if (viewerId == null || query == null) {
+                return cb.conjunction();
+            }
+            List<UserBlockScope> scopes = List.of(UserBlockScope.PROFILE, UserBlockScope.ALL);
+            Subquery<Long> blockedPair = query.subquery(Long.class);
+            Root<UserBlockRelation> relation = blockedPair.from(UserBlockRelation.class);
+            Predicate outgoing = cb.and(
+                    cb.equal(relation.get("blocker").get("id"), viewerId),
+                    cb.equal(relation.get("blocked").get("id"), root.get("id")));
+            Predicate incoming = cb.and(
+                    cb.equal(relation.get("blocker").get("id"), root.get("id")),
+                    cb.equal(relation.get("blocked").get("id"), viewerId));
+            blockedPair.select(relation.get("id"))
+                    .where(cb.or(outgoing, incoming),
+                            cb.or(cb.isNull(relation.get("expiresAt")),
+                                    cb.greaterThan(relation.get("expiresAt"),
+                                            java.time.LocalDateTime.now())),
+                            relation.get("scope").in(scopes));
+            return cb.not(cb.exists(blockedPair));
         };
     }
 

@@ -35,6 +35,8 @@ class UserControllerOwnershipTest {
     private PaginationConfig paginationConfig;
     @Mock
     private org.example.helptreeservice.config.EconomyConfig economyConfig;
+    @Mock
+    private org.example.helptreeservice.service.UserBlockService userBlockService;
 
     @InjectMocks
     private UserController userController;
@@ -201,13 +203,13 @@ class UserControllerOwnershipTest {
     @Test
     void getAllUsersPublic_shouldClampPageSizeToServerMaximum() {
         when(paginationConfig.getMaxPageSize()).thenReturn(100);
-        when(userService.getAllUsersPublic(any(Pageable.class), isNull(), isNull()))
+        when(userService.getAllUsersPublic(any(Pageable.class), isNull(), isNull(), isNull()))
                 .thenReturn(Page.empty());
 
         userController.getAllUsersPublic(1, 1000, null, null, "rating", "desc");
 
         ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
-        verify(userService).getAllUsersPublic(captor.capture(), isNull(), isNull());
+        verify(userService).getAllUsersPublic(captor.capture(), isNull(), isNull(), isNull());
         assertEquals(100, captor.getValue().getPageSize());
         assertEquals(1, captor.getValue().getPageNumber());
     }
@@ -216,28 +218,28 @@ class UserControllerOwnershipTest {
     void getAllUsersPublic_shouldRejectNegativePage() {
         assertThrows(BadRequestException.class,
                 () -> userController.getAllUsersPublic(-1, 20, null, null, "rating", "desc"));
-        verify(userService, never()).getAllUsersPublic(any(Pageable.class), any(), any());
+        verify(userService, never()).getAllUsersPublic(any(Pageable.class), any(), any(), any());
     }
 
     @Test
     void getAllUsersPublic_shouldRejectNonPositiveSize() {
         assertThrows(BadRequestException.class,
                 () -> userController.getAllUsersPublic(0, 0, null, null, "rating", "desc"));
-        verify(userService, never()).getAllUsersPublic(any(Pageable.class), any(), any());
+        verify(userService, never()).getAllUsersPublic(any(Pageable.class), any(), any(), any());
     }
 
     @Test
     void getAllUsersPublic_shouldAlwaysReturnPagedEnvelope() {
         when(paginationConfig.getDefaultPageSize()).thenReturn(20);
         when(paginationConfig.getMaxPageSize()).thenReturn(100);
-        when(userService.getAllUsersPublic(any(Pageable.class), isNull(), isNull()))
+        when(userService.getAllUsersPublic(any(Pageable.class), isNull(), isNull(), isNull()))
                 .thenReturn(Page.empty());
 
         var response = userController.getAllUsersPublic(null, null, null, null, "rating", "desc");
 
         assertNotNull(response.getBody());
         assertTrue(response.getBody().getContent().isEmpty());
-        verify(userService).getAllUsersPublic(any(Pageable.class), isNull(), isNull());
+        verify(userService).getAllUsersPublic(any(Pageable.class), isNull(), isNull(), isNull());
     }
 
     @Test

@@ -4,9 +4,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.example.helptreeservice.config.EconomyConfig;
 import org.example.helptreeservice.config.PaginationConfig;
 import org.example.helptreeservice.dto.common.PageResponse;
+import org.example.helptreeservice.dto.users.BlockUserRequest;
+import org.example.helptreeservice.dto.users.BlockedUserResponse;
 import org.example.helptreeservice.dto.users.CreateUserRequest;
 import org.example.helptreeservice.dto.users.UpdateUserRequest;
 import org.example.helptreeservice.dto.users.UpdateRoleRequest;
+import org.example.helptreeservice.dto.users.UserBlockResponse;
+import org.example.helptreeservice.dto.users.UserBlockStatusResponse;
 import org.example.helptreeservice.dto.users.UserDto;
 import org.example.helptreeservice.dto.users.UserPublicDto;
 import org.example.helptreeservice.dto.wallet.CoinTransactionDto;
@@ -16,12 +20,14 @@ import org.example.helptreeservice.dto.wallet.WalletPricingDto;
 import org.example.helptreeservice.enums.Role;
 import org.example.helptreeservice.enums.TransactionDirection;
 import org.example.helptreeservice.enums.TransactionType;
+import org.example.helptreeservice.enums.UserBlockScope;
 import org.example.helptreeservice.enums.UserStatus;
 import org.example.helptreeservice.exception.ForbiddenException;
 import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.UnauthorizedException;
 import org.example.helptreeservice.service.AuthorizationService;
 import org.example.helptreeservice.service.AuthorizationService.UserContext;
+import org.example.helptreeservice.service.UserBlockService;
 import org.example.helptreeservice.service.UserService;
 import org.example.helptreeservice.service.WalletService;
 import org.example.helptreeservice.util.PageRequests;
@@ -52,6 +58,7 @@ public class UserController {
     private final WalletService walletService;
     private final PaginationConfig paginationConfig;
     private final EconomyConfig economyConfig;
+    private final UserBlockService userBlockService;
 
     @PostMapping
     public ResponseEntity<UserDto> createUser(@Valid @RequestBody CreateUserRequest request) {
@@ -91,7 +98,9 @@ public class UserController {
             @RequestParam(defaultValue = "desc") String direction) {
         Pageable pageable = resolveDirectoryPageable(page, size, sort, direction,
                 java.util.Set.of("id", "name", "rating", "helpedCount", "createdAt"));
-        Page<UserPublicDto> users = userService.getAllUsersPublic(pageable, q, city);
+        UserContext viewer = authService.getCurrentUser();
+        Page<UserPublicDto> users = userService.getAllUsersPublic(
+                pageable, q, city, viewer != null ? viewer.getUserId() : null);
         return ResponseEntity.ok(PageResponse.from(users));
     }
 
@@ -106,7 +115,47 @@ public class UserController {
 
     @GetMapping("/{id}/public")
     public ResponseEntity<UserPublicDto> getUserPublic(@PathVariable Long id) {
+        UserContext viewer = authService.getCurrentUser();
+        if (viewer != null && !viewer.getUserId().equals(id)) {
+            userBlockService.assertInteractionAllowed(viewer.getUserId(), id, UserBlockScope.PROFILE,
+                    "Профиль недоступен: пользователь ограничил просмотр");
+        }
         return ResponseEntity.ok(userService.getUserPublicById(id));
+    }
+
+    /**
+     * Creates or updates the caller's block against {@code id}. The body is
+     * optional: an absent body is a permanent ALL block. Repeated calls are
+     * idempotent and update the existing pair instead of failing.
+     */
+    @PostMapping("/{id}/block")
+    public ResponseEntity<UserBlockResponse> blockUser(
+            @PathVariable Long id,
+            @Valid @RequestBody(required = false) BlockUserRequest request) {
+        UserContext viewer = requireCurrentUser();
+        return ResponseEntity.ok(userBlockService.blockUser(viewer.getUserId(), id, request));
+    }
+
+    /** Removes the caller's block. A missing block is not an error (idempotent). */
+    @DeleteMapping("/{id}/block")
+    public ResponseEntity<Void> unblockUser(@PathVariable Long id) {
+        UserContext viewer = requireCurrentUser();
+        userBlockService.unblockUser(viewer.getUserId(), id);
+        return ResponseEntity.noContent().build();
+    }
+
+    /** Users the caller currently blocks. Expired rows are not returned. */
+    @GetMapping("/me/blocked")
+    public ResponseEntity<List<BlockedUserResponse>> getMyBlockedUsers() {
+        UserContext viewer = requireCurrentUser();
+        return ResponseEntity.ok(userBlockService.getBlockedUsers(viewer.getUserId()));
+    }
+
+    /** Viewer-specific block state used to render the profile controls. */
+    @GetMapping("/{id}/block-status")
+    public ResponseEntity<UserBlockStatusResponse> getBlockStatus(@PathVariable Long id) {
+        UserContext viewer = requireCurrentUser();
+        return ResponseEntity.ok(userBlockService.getBlockStatus(viewer.getUserId(), id));
     }
 
     @PostMapping("/public/batch")
@@ -371,6 +420,14 @@ public class UserController {
             "spentAmount", result.getPrice(),
             "color", result.getNicknameColor()
         ));
+    }
+
+    private UserContext requireCurrentUser() {
+        UserContext user = authService.getCurrentUser();
+        if (user == null) {
+            throw new UnauthorizedException("Вы не авторизованы");
+        }
+        return user;
     }
 
     /**

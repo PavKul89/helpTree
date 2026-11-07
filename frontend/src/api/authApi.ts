@@ -51,6 +51,44 @@ export type UpdatePrivacySettings = Partial<
   >
 >;
 
+// Block 16: user-initiated blocks. `ALL` covers every scenario; the narrower
+// scopes only close chats/messages, public profile & reviews, or help replies.
+export type UserBlockScope = 'ALL' | 'MESSAGES' | 'PROFILE' | 'HELP_REQUESTS';
+
+export interface UserBlockRequest {
+  scope?: UserBlockScope;
+  expiresAt?: string | null;
+}
+
+export interface UserBlock {
+  id: number;
+  blockerId: number;
+  blockedId: number;
+  scope: UserBlockScope;
+  createdAt: string;
+  expiresAt?: string | null;
+  active: boolean;
+}
+
+export interface UserBlockStatus {
+  userId: number;
+  blockedByMe: boolean;
+  blockedMe: boolean;
+  active: boolean;
+  scope?: UserBlockScope | null;
+  expiresAt?: string | null;
+}
+
+export interface BlockedUser {
+  id: number;
+  userId: number;
+  name: string;
+  avatarUrl?: string | null;
+  scope: UserBlockScope;
+  createdAt: string;
+  expiresAt?: string | null;
+}
+
 export interface AccountSession {
   id: string;
   createdAt: string;
@@ -219,5 +257,25 @@ export const authApi = {
   isFavorite: async (userId: number, postId: number): Promise<boolean> => {
     const response = await api.get<{ isFavorite: boolean }>(`/api/users/${userId}/favorites/${postId}`);
     return response.data.isFavorite;
+  },
+
+  // ------------------------------------------------------- user blocks (16)
+  blockUser: async (id: number, payload?: UserBlockRequest): Promise<UserBlock> => {
+    const response = await api.post<UserBlock>(`/api/users/${id}/block`, payload ?? {});
+    return response.data;
+  },
+
+  unblockUser: async (id: number): Promise<void> => {
+    await api.delete(`/api/users/${id}/block`);
+  },
+
+  getMyBlockedUsers: async (): Promise<BlockedUser[]> => {
+    const response = await api.get<BlockedUser[]>('/api/users/me/blocked');
+    return response.data;
+  },
+
+  getBlockStatus: async (id: number): Promise<UserBlockStatus> => {
+    const response = await api.get<UserBlockStatus>(`/api/users/${id}/block-status`);
+    return response.data;
   },
 };

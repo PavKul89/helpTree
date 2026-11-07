@@ -42,6 +42,13 @@ public interface SearchRepository extends Repository<org.example.helptreeservice
               AND (lower(u.name) LIKE :pattern OR lower(COALESCE(u.city, '')) LIKE :pattern)
               AND (:cityPattern = '' OR lower(COALESCE(u.city, '')) LIKE :cityPattern)
               AND :categoryPattern = ''
+              AND NOT EXISTS (
+                  SELECT 1 FROM user_blocks_relations vb
+                  WHERE ((vb.blocker_id = u.id AND vb.blocked_id = :viewerId)
+                      OR (vb.blocker_id = :viewerId AND vb.blocked_id = u.id))
+                    AND (vb.expires_at IS NULL OR vb.expires_at > LOCALTIMESTAMP)
+                    AND vb.scope IN ('ALL', 'PROFILE')
+              )
             UNION ALL
             SELECT 'REVIEW', r.id, tu.name, COALESCE(r.comment, ''), CAST(NULL AS varchar),
                    CAST(NULL AS varchar), r.rating::double precision, r.created_at, r.to_user_id
@@ -53,6 +60,15 @@ public interface SearchRepository extends Repository<org.example.helptreeservice
               AND (lower(r.comment) LIKE :pattern OR lower(tu.name) LIKE :pattern)
               AND :cityPattern = ''
               AND :categoryPattern = ''
+              AND NOT EXISTS (
+                  SELECT 1 FROM user_blocks_relations vb
+                  WHERE ((vb.blocker_id = r.from_user_id AND vb.blocked_id = :viewerId)
+                      OR (vb.blocker_id = :viewerId AND vb.blocked_id = r.from_user_id)
+                      OR (vb.blocker_id = r.to_user_id AND vb.blocked_id = :viewerId)
+                      OR (vb.blocker_id = :viewerId AND vb.blocked_id = r.to_user_id))
+                    AND (vb.expires_at IS NULL OR vb.expires_at > LOCALTIMESTAMP)
+                    AND vb.scope IN ('ALL', 'PROFILE')
+              )
             """;
 
     @Query(value = "SELECT * FROM (" + UNION + ") s "
@@ -65,6 +81,7 @@ public interface SearchRepository extends Repository<org.example.helptreeservice
                                 @Param("cityPattern") String cityPattern,
                                 @Param("categoryPattern") String categoryPattern,
                                 @Param("type") String type,
+                                @Param("viewerId") Long viewerId,
                                 Pageable pageable);
 
     @Query(value = "SELECT * FROM (" + UNION + ") s "
@@ -77,6 +94,7 @@ public interface SearchRepository extends Repository<org.example.helptreeservice
                                 @Param("cityPattern") String cityPattern,
                                 @Param("categoryPattern") String categoryPattern,
                                 @Param("type") String type,
+                                @Param("viewerId") Long viewerId,
                                 Pageable pageable);
 
     /** Small type-ahead helper: at most one page per category. */
@@ -90,5 +108,6 @@ public interface SearchRepository extends Repository<org.example.helptreeservice
                                  @Param("cityPattern") String cityPattern,
                                  @Param("categoryPattern") String categoryPattern,
                                  @Param("type") String type,
+                                 @Param("viewerId") Long viewerId,
                                  Pageable pageable);
 }

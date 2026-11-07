@@ -10,6 +10,7 @@ import org.example.helptreeservice.entity.Post;
 import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.enums.CommentSort;
 import org.example.helptreeservice.enums.Role;
+import org.example.helptreeservice.enums.UserBlockScope;
 import org.example.helptreeservice.exception.AccountBlockedException;
 import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.ForbiddenException;
@@ -52,6 +53,8 @@ class CommentServiceTest {
     private UserRepository userRepository;
     @Mock
     private CommentMapper commentMapper;
+    @Mock
+    private UserBlockService userBlockService;
 
     private CommentProperties properties;
     private CommentService commentService;
@@ -70,7 +73,8 @@ class CommentServiceTest {
                 commentMapper,
                 new CommentContentSanitizer(properties),
                 new CommentRateLimiter(properties, mock(DistributedRateLimiter.class)),
-                properties);
+                properties,
+                userBlockService);
 
         author = user(1L, "Alice", false, Role.USER);
         post = post(5L, author);
@@ -163,6 +167,21 @@ class CommentServiceTest {
 
         assertThrows(NotFoundException.class,
                 () -> commentService.createComment(5L, request("hello", null), 1L));
+        verify(commentRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void createComment_shouldRejectWhenPostAuthorBlockedCommenter() {
+        User bob = user(2L, "Bob", false, Role.USER);
+        when(postRepository.findByIdAndDeletedFalse(5L)).thenReturn(Optional.of(post));
+        when(userRepository.findById(2L)).thenReturn(Optional.of(bob));
+        doThrow(new ForbiddenException("blocked")).when(userBlockService)
+                .assertInteractionAllowed(eq(2L), eq(1L), eq(UserBlockScope.ALL), anyString());
+
+        assertThrows(ForbiddenException.class,
+                () -> commentService.createComment(5L, request("hello", null), 2L));
+        verify(userBlockService).assertInteractionAllowed(2L, 1L, UserBlockScope.ALL,
+                "Автор заявки ограничил комментарии");
         verify(commentRepository, never()).saveAndFlush(any());
     }
 

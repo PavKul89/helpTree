@@ -12,6 +12,7 @@ import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.enums.HelpActorRole;
 import org.example.helptreeservice.enums.HelpStatus;
 import org.example.helptreeservice.enums.PostStatus;
+import org.example.helptreeservice.enums.UserBlockScope;
 import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.ConflictException;
 import org.example.helptreeservice.exception.ForbiddenException;
@@ -55,6 +56,7 @@ public class HelpService {
     private final EconomyConfig economyConfig;
     private final HelpStatusHistoryRepository statusHistoryRepository;
     private final HelpGraphMetrics helpGraphMetrics;
+    private final UserBlockService userBlockService;
 
     @Value("${app.graph.default-max-edges:500}")
     private int defaultMaxEdges;
@@ -109,6 +111,9 @@ public class HelpService {
         if (helper.getId().equals(receiver.getId())) {
             throw new BadRequestException("Нельзя помочь самому себе");
         }
+
+        userBlockService.assertInteractionAllowed(helper.getId(), receiver.getId(), UserBlockScope.HELP_REQUESTS,
+                "Один из пользователей ограничил отклики на заявки");
 
         // Помощь — способ выйти из долга, поэтому для помощника ограничением
         // является именно активная блокировка, а не размер долга.

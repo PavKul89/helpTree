@@ -13,6 +13,7 @@ import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.enums.CommentSort;
 import org.example.helptreeservice.enums.ModerationStatus;
 import org.example.helptreeservice.enums.Role;
+import org.example.helptreeservice.enums.UserBlockScope;
 import org.example.helptreeservice.exception.AccountBlockedException;
 import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.ForbiddenException;
@@ -50,11 +51,17 @@ public class CommentService {
     private final CommentContentSanitizer contentSanitizer;
     private final CommentRateLimiter rateLimiter;
     private final CommentProperties commentProperties;
+    private final UserBlockService userBlockService;
 
     @Transactional
     public CommentActionResponse createComment(Long postId, CreateCommentRequest request, Long userId) {
         Post post = requirePost(postId);
         User user = requireActiveUser(userId);
+        if (post.getUser() != null) {
+            // Comments have no narrower scope: only a full block closes them.
+            userBlockService.assertInteractionAllowed(userId, post.getUser().getId(), UserBlockScope.ALL,
+                    "Автор заявки ограничил комментарии");
+        }
         rateLimiter.checkAllowed(userId);
 
         String content = validateContent(request.getContent());

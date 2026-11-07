@@ -13,6 +13,7 @@ import org.example.helptreeservice.entity.Chat;
 import org.example.helptreeservice.entity.ChatUserState;
 import org.example.helptreeservice.entity.Message;
 import org.example.helptreeservice.entity.User;
+import org.example.helptreeservice.enums.UserBlockScope;
 import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.ForbiddenException;
 import org.example.helptreeservice.exception.NotFoundException;
@@ -50,6 +51,7 @@ public class ChatService {
     private final ChatContentSanitizer contentSanitizer;
     private final ChatRateLimiter chatRateLimiter;
     private final ChatProperties chatProperties;
+    private final UserBlockService userBlockService;
 
     /**
      * Creates or returns the single chat for an unordered participant pair.
@@ -79,6 +81,8 @@ public class ChatService {
         User participant = findUser(lockedUsers, participantId);
         assertCanUseChat(currentUser);
         assertCanUseChat(participant);
+        userBlockService.assertInteractionAllowed(currentUserId, participantId, UserBlockScope.MESSAGES,
+                "Один из пользователей ограничил переписку");
 
         Chat chat = chatRepository.findByUsers(currentUserId, participantId)
                 .orElseGet(() -> chatRepository.save(createCanonicalChat(currentUser, participant)));
@@ -123,6 +127,8 @@ public class ChatService {
         User recipient = getActiveUser(chat.otherParticipantId(currentUserId));
         assertCanUseChat(sender);
         assertCanUseChat(recipient);
+        userBlockService.assertInteractionAllowed(sender.getId(), recipient.getId(), UserBlockScope.MESSAGES,
+                "Один из пользователей ограничил переписку");
 
         String content = sanitizeContent(request != null ? request.getContent() : null);
         chatRateLimiter.checkAllowed(currentUserId);

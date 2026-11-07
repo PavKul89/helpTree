@@ -6,6 +6,7 @@ import org.example.helptreeservice.entity.Help;
 import org.example.helptreeservice.entity.Review;
 import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.enums.HelpStatus;
+import org.example.helptreeservice.enums.UserBlockScope;
 import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.ForbiddenException;
 import org.example.helptreeservice.mapper.ReviewMapper;
@@ -36,6 +37,7 @@ class ReviewServiceTest {
     @Mock private UserService userService;
     @Mock private WalletService walletService;
     @Mock private RatingService ratingService;
+    @Mock private UserBlockService userBlockService;
 
     private ReviewService reviewService;
 
@@ -43,7 +45,8 @@ class ReviewServiceTest {
     void setUp() {
         reviewService = new ReviewService(
                 reviewRepository, helpRepository, userRepository,
-                reviewMapper, userService, walletService, ratingService);
+                reviewMapper, userService, walletService, ratingService,
+                userBlockService);
     }
 
     @Test
@@ -71,6 +74,22 @@ class ReviewServiceTest {
 
         assertThrows(ForbiddenException.class,
                 () -> reviewService.createReview(request(10L), 3L));
+        verify(reviewRepository, never()).save(any(Review.class));
+        verifyNoInteractions(walletService);
+    }
+
+    @Test
+    void createReview_shouldRejectWhenProfileBlocked() {
+        User helper = user(1L);
+        User receiver = user(2L);
+        Help help = help(10L, HelpStatus.CONFIRMED, helper, receiver);
+        when(userRepository.findById(2L)).thenReturn(Optional.of(receiver));
+        when(helpRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(help));
+        doThrow(new ForbiddenException("blocked")).when(userBlockService)
+                .assertInteractionAllowed(eq(2L), eq(1L), eq(UserBlockScope.PROFILE), anyString());
+
+        assertThrows(ForbiddenException.class,
+                () -> reviewService.createReview(request(10L), 2L));
         verify(reviewRepository, never()).save(any(Review.class));
         verifyNoInteractions(walletService);
     }

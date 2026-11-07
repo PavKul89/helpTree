@@ -8,6 +8,7 @@ import org.example.helptreeservice.entity.Help;
 import org.example.helptreeservice.entity.Review;
 import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.enums.HelpStatus;
+import org.example.helptreeservice.enums.UserBlockScope;
 import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.ForbiddenException;
 import org.example.helptreeservice.exception.NotFoundException;
@@ -35,6 +36,7 @@ public class ReviewService {
     private final UserService userService;
     private final WalletService walletService;
     private final RatingService ratingService;
+    private final UserBlockService userBlockService;
 
     @Transactional
     public ReviewResponse createReview(CreateReviewRequest request, Long currentUserId) {
@@ -70,6 +72,9 @@ public class ReviewService {
         if (fromUser.getId().equals(toUser.getId())) {
             throw new BadRequestException("Нельзя оставить отзыв самому себе");
         }
+
+        userBlockService.assertInteractionAllowed(fromUser.getId(), toUser.getId(), UserBlockScope.PROFILE,
+                "Один из пользователей ограничил отзывы");
 
         // Учитываем и soft-deleted отзывы: иначе удаление позволяло бы
         // создать отзыв заново и повторно получить +2 HC.

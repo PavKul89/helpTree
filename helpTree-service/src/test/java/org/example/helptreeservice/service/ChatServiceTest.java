@@ -10,6 +10,7 @@ import org.example.helptreeservice.entity.Chat;
 import org.example.helptreeservice.entity.ChatUserState;
 import org.example.helptreeservice.entity.Message;
 import org.example.helptreeservice.entity.User;
+import org.example.helptreeservice.enums.UserBlockScope;
 import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.ForbiddenException;
 import org.example.helptreeservice.exception.NotFoundException;
@@ -73,6 +74,8 @@ class ChatServiceTest {
     private SimpMessagingTemplate messagingTemplate;
     @Mock
     private ChatRateLimiter chatRateLimiter;
+    @Mock
+    private UserBlockService userBlockService;
 
     @Spy
     private ChatProperties chatProperties = new ChatProperties();
@@ -195,6 +198,23 @@ class ChatServiceTest {
     }
 
     @Test
+    void createChat_shouldRejectUserBlock() {
+        when(userRepository.findAllByIdInForUpdate(List.of(1L, 2L)))
+                .thenReturn(List.of(user1, user2));
+        doThrow(new ForbiddenException("blocked")).when(userBlockService)
+                .assertInteractionAllowed(anyLong(), anyLong(),
+                        eq(UserBlockScope.MESSAGES), anyString());
+
+        CreateChatRequest request = new CreateChatRequest();
+        request.setParticipantId(2L);
+
+        assertThrows(ForbiddenException.class, () -> chatService.createChat(request, 1L));
+        verify(userBlockService).assertInteractionAllowed(1L, 2L, UserBlockScope.MESSAGES,
+                "Один из пользователей ограничил переписку");
+        verify(chatRepository, never()).save(any());
+    }
+
+    @Test
     void createChat_shouldReturnExistingChatAndRestoreVisibility() {
         Chat chat = chat();
         when(userRepository.findAllByIdInForUpdate(List.of(1L, 2L)))
@@ -263,6 +283,20 @@ class ChatServiceTest {
         user2.setBlockedUntil(LocalDateTime.now().plusHours(1));
         when(chatRepository.findById(10L)).thenReturn(Optional.of(chat));
         stubActiveUsers();
+
+        assertThrows(ForbiddenException.class, () -> chatService.sendMessage(
+                10L, new CreateMessageRequest("hello"), 1L));
+        verify(messageRepository, never()).save(any());
+    }
+
+    @Test
+    void sendMessage_shouldRejectUserBlock() {
+        Chat chat = chat();
+        when(chatRepository.findById(10L)).thenReturn(Optional.of(chat));
+        stubActiveUsers();
+        doThrow(new ForbiddenException("blocked")).when(userBlockService)
+                .assertInteractionAllowed(anyLong(), anyLong(),
+                        eq(UserBlockScope.MESSAGES), anyString());
 
         assertThrows(ForbiddenException.class, () -> chatService.sendMessage(
                 10L, new CreateMessageRequest("hello"), 1L));

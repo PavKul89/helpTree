@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowUpRight,
+  Ban,
   CalendarDays,
   Check,
   Clock3,
@@ -15,9 +16,15 @@ import {
   Star,
   Trophy,
   Upload,
+  UserCheck,
   X,
 } from 'lucide-react';
-import { authApi } from '../api/authApi';
+import {
+  authApi,
+  type BlockedUser,
+  type UserBlockScope,
+  type UserBlockStatus,
+} from '../api/authApi';
 import { achievementApi, type Achievement } from '../api/achievementApi';
 import { activityApi, type Activity } from '../api/activityApi';
 import { chatApi } from '../api/chatApi';
@@ -44,6 +51,13 @@ const EMPTY_SECTIONS: SectionState = {
 };
 
 const PROFILE_POST_PAGE_SIZE = 6;
+
+const BLOCK_SCOPE_LABELS: Record<UserBlockScope, string> = {
+  ALL: 'Всё взаимодействие',
+  MESSAGES: 'Сообщения и чаты',
+  PROFILE: 'Профиль и отзывы',
+  HELP_REQUESTS: 'Отклики на заявки',
+};
 
 const getErrorStatus = (error: unknown): number | undefined =>
   (error as { response?: { status?: number } })?.response?.status;
@@ -88,6 +102,11 @@ export const ProfilePage = () => {
   const [savingProfile, setSavingProfile] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [startingChat, setStartingChat] = useState(false);
+  const [blockStatus, setBlockStatus] = useState<UserBlockStatus | null>(null);
+  const [blockedUsers, setBlockedUsers] = useState<BlockedUser[]>([]);
+  const [blockScope, setBlockScope] = useState<UserBlockScope>('ALL');
+  const [showBlockForm, setShowBlockForm] = useState(false);
+  const [blocking, setBlocking] = useState(false);
   const [editForm, setEditForm] = useState({
     name: '',
     email: '',
@@ -183,6 +202,59 @@ export const ProfilePage = () => {
     };
   }, [currentUser?.id, invalidUserId, parsedUserId, routeUserId]);
 
+  const currentUserId = currentUser?.id;
+  const profileUserId = profileUser?.id;
+
+  // Block state is viewer-specific and lives outside the cached public profile.
+  useEffect(() => {
+    let cancelled = false;
+    setBlockStatus(null);
+    setShowBlockForm(false);
+
+    if (currentUserId == null || isOwnProfile || profileUserId == null) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    authApi
+      .getBlockStatus(profileUserId)
+      .then((status) => {
+        if (!cancelled) setBlockStatus(status);
+      })
+      .catch(() => {
+        if (!cancelled) setBlockStatus(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUserId, isOwnProfile, profileUserId]);
+
+  // The "my blocked users" list is only meaningful on the owner's own profile.
+  useEffect(() => {
+    let cancelled = false;
+    if (currentUserId == null || !isOwnProfile) {
+      setBlockedUsers([]);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    authApi
+      .getMyBlockedUsers()
+      .then((users) => {
+        if (!cancelled) setBlockedUsers(users);
+      })
+      .catch(() => {
+        if (!cancelled) setBlockedUsers([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUserId, isOwnProfile]);
+
   // Visibility is enforced by the server; do not filter activity in the browser.
   const publicActivities = activities;
 
@@ -203,6 +275,57 @@ export const ProfilePage = () => {
       setStartingChat(false);
     }
   }, [currentUser, isOwnProfile, navigate, profileUser, showToast]);
+
+  const handleBlockUser = async () => {
+    if (!profileUser || isOwnProfile) return;
+    if (!currentUser) {
+      navigate('/login');
+      return;
+    }
+
+    setBlocking(true);
+    try {
+      await authApi.blockUser(profileUser.id, { scope: blockScope });
+      const status = await authApi.getBlockStatus(profileUser.id);
+      setBlockStatus(status);
+      setShowBlockForm(false);
+      showToast('Пользователь заблокирован', 'success');
+    } catch {
+      showToast('Не удалось заблокировать пользователя.', 'error');
+    } finally {
+      setBlocking(false);
+    }
+  };
+
+  const handleUnblockUser = async () => {
+    if (!profileUser || isOwnProfile) return;
+    if (!currentUser) {
+      navigate('/login');
+      return;
+    }
+
+    setBlocking(true);
+    try {
+      await authApi.unblockUser(profileUser.id);
+      const status = await authApi.getBlockStatus(profileUser.id);
+      setBlockStatus(status);
+      showToast('Блокировка снята', 'success');
+    } catch {
+      showToast('Не удалось снять блокировку.', 'error');
+    } finally {
+      setBlocking(false);
+    }
+  };
+
+  const handleUnblockFromList = async (targetId: number) => {
+    try {
+      await authApi.unblockUser(targetId);
+      setBlockedUsers((current) => current.filter((entry) => entry.userId !== targetId));
+      showToast('Блокировка снята', 'success');
+    } catch {
+      showToast('Не удалось снять блокировку.', 'error');
+    }
+  };
 
   const handleSaveProfile = async () => {
     if (!currentUser) return;
@@ -459,15 +582,78 @@ export const ProfilePage = () => {
                 {isEditing ? 'Закрыть' : 'Редактировать'}
               </button>
             ) : (
-              <button
-                type="button"
-                className="profile-button profile-button--primary"
-                onClick={handleStartChat}
-                disabled={startingChat}
-              >
-                <MessageCircle size={16} />
-                {startingChat ? 'Открываем…' : currentUser ? 'Написать' : 'Войти и написать'}
-              </button>
+              <div className="profile-block-actions">
+                <button
+                  type="button"
+                  className="profile-button profile-button--primary"
+                  onClick={handleStartChat}
+                  disabled={startingChat}
+                >
+                  <MessageCircle size={16} />
+                  {startingChat ? 'Открываем…' : currentUser ? 'Написать' : 'Войти и написать'}
+                </button>
+                {currentUser && blockStatus?.blockedByMe ? (
+                  <button
+                    type="button"
+                    className="profile-button profile-button--secondary"
+                    onClick={handleUnblockUser}
+                    disabled={blocking}
+                  >
+                    <UserCheck size={16} />
+                    {blocking ? 'Снимаем…' : 'Разблокировать'}
+                  </button>
+                ) : currentUser ? (
+                  <button
+                    type="button"
+                    className="profile-button profile-button--secondary"
+                    onClick={() => setShowBlockForm((visible) => !visible)}
+                    disabled={blocking}
+                  >
+                    <Ban size={16} />
+                    Заблокировать
+                  </button>
+                ) : null}
+                {currentUser && !blockStatus?.blockedByMe && showBlockForm && (
+                  <div className="profile-block-form">
+                    <label>
+                      Область блокировки
+                      <select
+                        value={blockScope}
+                        onChange={(event) => setBlockScope(event.target.value as UserBlockScope)}
+                      >
+                        {(Object.keys(BLOCK_SCOPE_LABELS) as UserBlockScope[]).map((scope) => (
+                          <option key={scope} value={scope}>
+                            {BLOCK_SCOPE_LABELS[scope]}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="profile-block-form-actions">
+                      <button
+                        type="button"
+                        className="profile-button profile-button--primary"
+                        onClick={handleBlockUser}
+                        disabled={blocking}
+                      >
+                        {blocking ? 'Блокируем…' : 'Подтвердить'}
+                      </button>
+                      <button
+                        type="button"
+                        className="profile-button profile-button--secondary"
+                        onClick={() => setShowBlockForm(false)}
+                      >
+                        Отмена
+                      </button>
+                    </div>
+                    <p>Блокировка действует в обе стороны и проверяется на сервере.</p>
+                  </div>
+                )}
+                {blockStatus?.active && blockStatus.blockedMe && (
+                  <span className="profile-block-note">
+                    Другая сторона ограничила часть взаимодействий.
+                  </span>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -638,6 +824,49 @@ export const ProfilePage = () => {
         </section>
 
         <div className="profile-side-sections">
+          {isOwnProfile && (
+            <section className="profile-section" aria-labelledby="profile-blocked-title">
+              <div className="profile-section-heading">
+                <div>
+                  <span className="profile-eyebrow">Безопасность</span>
+                  <h2 id="profile-blocked-title">Заблокированные</h2>
+                </div>
+                <Ban size={18} className="profile-section-mark" />
+              </div>
+              {blockedUsers.length === 0 ? (
+                <div className="profile-empty profile-empty--compact">
+                  Вы никого не блокировали.
+                </div>
+              ) : (
+                <ul className="profile-blocked-list">
+                  {blockedUsers.map((entry) => (
+                    <li className="profile-blocked-item" key={entry.id}>
+                      <Link to={`/profile/${entry.userId}`} className="profile-blocked-user">
+                        <Avatar
+                          name={entry.name}
+                          avatarUrl={entry.avatarUrl ?? undefined}
+                          size="small"
+                        />
+                        <span>
+                          <strong>{entry.name}</strong>
+                          <small>{BLOCK_SCOPE_LABELS[entry.scope]}</small>
+                        </span>
+                      </Link>
+                      <button
+                        type="button"
+                        className="profile-blocked-unblock"
+                        onClick={() => void handleUnblockFromList(entry.userId)}
+                      >
+                        <UserCheck size={14} />
+                        Разблокировать
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )}
+
           <section className="profile-section" aria-labelledby="profile-achievements-title">
             <div className="profile-section-heading">
               <div>

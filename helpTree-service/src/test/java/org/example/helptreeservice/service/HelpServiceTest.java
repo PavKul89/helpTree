@@ -11,6 +11,7 @@ import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.enums.HelpActorRole;
 import org.example.helptreeservice.enums.HelpStatus;
 import org.example.helptreeservice.enums.PostStatus;
+import org.example.helptreeservice.enums.UserBlockScope;
 import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.ConflictException;
 import org.example.helptreeservice.exception.ForbiddenException;
@@ -54,6 +55,7 @@ class HelpServiceTest {
     @Mock private ImageService imageService;
     @Mock private HelpStatusHistoryRepository statusHistoryRepository;
     @Mock private HelpGraphMetrics helpGraphMetrics;
+    @Mock private UserBlockService userBlockService;
 
     private HelpService helpService;
 
@@ -72,7 +74,8 @@ class HelpServiceTest {
                 imageService,
                 economyConfig,
                 statusHistoryRepository,
-                helpGraphMetrics
+                helpGraphMetrics,
+                userBlockService
         );
 
         lenient().when(helpMapper.toResponse(any(Help.class))).thenAnswer(invocation -> {
@@ -129,6 +132,20 @@ class HelpServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(author));
 
         assertThrows(BadRequestException.class, () -> helpService.acceptHelp(request(10L), 1L));
+        verify(helpRepository, never()).saveAndFlush(any(Help.class));
+    }
+
+    @Test
+    void acceptHelp_shouldRejectWhenHelpRequestBlocked() {
+        User author = user(2L);
+        User helper = user(1L);
+        Post post = post(10L, PostStatus.OPEN, author);
+        when(postRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(post));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(helper));
+        doThrow(new ForbiddenException("blocked")).when(userBlockService)
+                .assertInteractionAllowed(eq(1L), eq(2L), eq(UserBlockScope.HELP_REQUESTS), anyString());
+
+        assertThrows(ForbiddenException.class, () -> helpService.acceptHelp(request(10L), 1L));
         verify(helpRepository, never()).saveAndFlush(any(Help.class));
     }
 
