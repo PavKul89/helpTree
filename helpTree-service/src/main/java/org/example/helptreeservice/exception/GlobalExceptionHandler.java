@@ -1,18 +1,22 @@
 package org.example.helptreeservice.exception;
 
-import org.example.helptreeservice.dto.error.ErrorResponse;
-import org.example.helptreeservice.enums.ErrorType;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
+import org.example.helptreeservice.dto.error.ErrorResponse;
+import org.example.helptreeservice.dto.error.FieldErrorDto;
+import org.example.helptreeservice.enums.ErrorType;
+import org.example.helptreeservice.util.TraceIds;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.BindException;
+import org.springframework.validation.BindingResult;
 import org.springframework.validation.FieldError;
+import org.springframework.validation.ObjectError;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -26,11 +30,21 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
-import java.util.HashMap;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 
+/**
+ * Single source of the error contract for MVC endpoints.
+ *
+ * <p>Every branch returns {@link ErrorResponse} with a stable {@code code} and
+ * the current request's {@code traceId}. Internal exception messages, SQL,
+ * class names and stack traces are never copied into the response; they stay in
+ * the server log, correlated by the same trace id.</p>
+ */
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
@@ -38,336 +52,173 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(NotFoundException.class)
     public ResponseEntity<ErrorResponse> handleNotFoundException(NotFoundException ex, HttpServletRequest request) {
         log.info("Resource not found: {}", ex.getMessage());
-        ErrorResponse error = ErrorResponse.builder()
-                .status(HttpStatus.NOT_FOUND.value())
-                .error(ErrorType.NOT_FOUND.getTitle())
-                .message(ex.getMessage())
-                .path(request.getRequestURI())
-                .build();
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+        return error(HttpStatus.NOT_FOUND, ErrorType.NOT_FOUND, ex.getMessage(), request);
     }
 
     @ExceptionHandler(ConflictException.class)
     public ResponseEntity<ErrorResponse> handleConflictException(ConflictException ex, HttpServletRequest request) {
         log.info("Conflict: {}", ex.getMessage());
-        ErrorResponse error = ErrorResponse.builder()
-                .status(HttpStatus.CONFLICT.value())
-                .error(ErrorType.CONFLICT.getTitle())
-                .message(ex.getMessage())
-                .path(request.getRequestURI())
-                .build();
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
+        return error(HttpStatus.CONFLICT, ErrorType.CONFLICT, ex.getMessage(), request);
     }
 
     @ExceptionHandler(BadRequestException.class)
     public ResponseEntity<ErrorResponse> handleBadRequestException(BadRequestException ex, HttpServletRequest request) {
         log.info("Bad request: {}", ex.getMessage());
-        ErrorResponse error = ErrorResponse.builder()
-                .status(HttpStatus.BAD_REQUEST.value())
-                .error(ErrorType.BAD_REQUEST.getTitle())
-                .message(ex.getMessage())
-                .path(request.getRequestURI())
-                .build();
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+        return error(HttpStatus.BAD_REQUEST, ErrorType.BAD_REQUEST, ex.getMessage(), request);
     }
 
     @ExceptionHandler(ForbiddenException.class)
     public ResponseEntity<ErrorResponse> handleForbiddenException(ForbiddenException ex, HttpServletRequest request) {
         log.warn("Access denied: {}", ex.getMessage());
-        ErrorResponse error = ErrorResponse.builder()
-                .status(HttpStatus.FORBIDDEN.value())
-                .error(ErrorType.FORBIDDEN.getTitle())
-                .message(ex.getMessage())
-                .path(request.getRequestURI())
-                .build();
-        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
+        return error(HttpStatus.FORBIDDEN, ErrorType.FORBIDDEN, ex.getMessage(), request);
     }
 
     @ExceptionHandler(AccountBlockedException.class)
     public ResponseEntity<ErrorResponse> handleAccountBlockedException(
             AccountBlockedException ex, HttpServletRequest request) {
         log.warn("Blocked account for {}: {}", request.getRequestURI(), ex.getMessage());
-        ErrorResponse error = ErrorResponse.builder()
-                .status(HttpStatus.FORBIDDEN.value())
-                .error(ErrorType.FORBIDDEN.getTitle())
-                .message(ex.getMessage())
-                .path(request.getRequestURI())
-                .build();
-        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
+        return error(HttpStatus.FORBIDDEN, ErrorType.ACCOUNT_BLOCKED, ex.getMessage(), request);
     }
 
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ErrorResponse> handleAccessDeniedException(AccessDeniedException ex, HttpServletRequest request) {
         log.warn("Spring Security access denied for {}: {}", request.getRequestURI(), ex.getMessage());
-        ErrorResponse error = ErrorResponse.builder()
-                .status(HttpStatus.FORBIDDEN.value())
-                .error(ErrorType.FORBIDDEN.getTitle())
-                .message("Доступ запрещен")
-                .path(request.getRequestURI())
-                .build();
-        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
+        return error(HttpStatus.FORBIDDEN, ErrorType.FORBIDDEN, "Доступ запрещен", request);
     }
 
     @ExceptionHandler(UnauthorizedException.class)
     public ResponseEntity<ErrorResponse> handleUnauthorizedException(UnauthorizedException ex, HttpServletRequest request) {
         log.warn("Unauthorized: {}", ex.getMessage());
-        ErrorResponse error = ErrorResponse.builder()
-                .status(HttpStatus.UNAUTHORIZED.value())
-                .error(ErrorType.UNAUTHORIZED.getTitle())
-                .message(ex.getMessage())
-                .path(request.getRequestURI())
-                .build();
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
+        return error(HttpStatus.UNAUTHORIZED, ErrorType.UNAUTHORIZED, ex.getMessage(), request);
     }
 
     @ExceptionHandler(RateLimitExceededException.class)
     public ResponseEntity<ErrorResponse> handleRateLimitExceeded(
             RateLimitExceededException ex, HttpServletRequest request) {
         log.warn("Rate limit exceeded for {}: {}", request.getRequestURI(), ex.getMessage());
-        ErrorResponse error = ErrorResponse.builder()
-                .status(HttpStatus.TOO_MANY_REQUESTS.value())
-                .error(ErrorType.TOO_MANY_REQUESTS.getTitle())
-                .message(ex.getMessage())
-                .path(request.getRequestURI())
-                .build();
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
                 .header("Retry-After", Long.toString(ex.getRetryAfterSeconds()))
-                .body(error);
+                .body(body(HttpStatus.TOO_MANY_REQUESTS, ErrorType.TOO_MANY_REQUESTS,
+                        ex.getMessage(), request, List.of()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleValidationExceptions(
             MethodArgumentNotValidException ex, HttpServletRequest request) {
-        Map<String, String> errors = new HashMap<>();
-        ex.getBindingResult().getAllErrors().forEach((error) -> {
-            String fieldName = ((FieldError) error).getField();
-            String errorMessage = error.getDefaultMessage();
-            errors.put(fieldName, errorMessage);
-        });
-
-        log.warn("Validation failed for request {}: {}", request.getRequestURI(), errors);
-
-        ErrorResponse response = ErrorResponse.builder()
-                .status(HttpStatus.BAD_REQUEST.value())
-                .error(ErrorType.VALIDATION_FAILED.getTitle())
-                .message("Request validation failed. See 'errors' for details.")
-                .path(request.getRequestURI())
-                .errors(errors)
-                .build();
-
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        List<FieldErrorDto> fieldErrors = toFieldErrors(ex.getBindingResult());
+        log.warn("Validation failed for request {}: {}", request.getRequestURI(), fieldErrors);
+        return error(HttpStatus.BAD_REQUEST, ErrorType.VALIDATION_FAILED,
+                "Проверьте правильность заполнения полей", request, fieldErrors);
     }
 
     @ExceptionHandler(BindException.class)
     public ResponseEntity<ErrorResponse> handleBindException(BindException ex, HttpServletRequest request) {
-        Map<String, String> errors = new HashMap<>();
-        ex.getBindingResult().getAllErrors().forEach((error) -> {
-            String fieldName = ((FieldError) error).getField();
-            String errorMessage = error.getDefaultMessage();
-            errors.put(fieldName, errorMessage);
-        });
-
-        log.warn("Binding failed for request {}: {}", request.getRequestURI(), errors);
-
-        ErrorResponse response = ErrorResponse.builder()
-                .status(HttpStatus.BAD_REQUEST.value())
-                .error(ErrorType.VALIDATION_FAILED.getTitle())
-                .message("Request binding failed. See 'errors' for details.")
-                .path(request.getRequestURI())
-                .errors(errors)
-                .build();
-
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        List<FieldErrorDto> fieldErrors = toFieldErrors(ex.getBindingResult());
+        log.warn("Binding failed for request {}: {}", request.getRequestURI(), fieldErrors);
+        return error(HttpStatus.BAD_REQUEST, ErrorType.VALIDATION_FAILED,
+                "Проверьте правильность заполнения полей", request, fieldErrors);
     }
 
     @ExceptionHandler(ConstraintViolationException.class)
     public ResponseEntity<ErrorResponse> handleConstraintViolation(ConstraintViolationException ex, HttpServletRequest request) {
-        Map<String, String> errors = new HashMap<>();
+        List<FieldErrorDto> fieldErrors = new ArrayList<>();
         for (ConstraintViolation<?> violation : ex.getConstraintViolations()) {
-            String path = violation.getPropertyPath().toString();
-            errors.put(path, violation.getMessage());
+            fieldErrors.add(new FieldErrorDto(
+                    fieldName(violation.getPropertyPath().toString()),
+                    violation.getMessage(),
+                    null));
         }
 
-        log.warn("Constraint violations for request {}: {}", request.getRequestURI(), errors);
+        log.warn("Constraint violations for request {}: {}", request.getRequestURI(), fieldErrors);
+        return error(HttpStatus.BAD_REQUEST, ErrorType.VALIDATION_FAILED,
+                "Проверьте правильность заполнения полей", request, fieldErrors);
+    }
 
-        ErrorResponse response = ErrorResponse.builder()
-                .status(HttpStatus.BAD_REQUEST.value())
-                .error(ErrorType.VALIDATION_FAILED.getTitle())
-                .message("Constraint validation failed. See 'errors' for details.")
-                .path(request.getRequestURI())
-                .errors(errors)
-                .build();
-
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+    @ExceptionHandler(WebExchangeBindException.class)
+    public ResponseEntity<ErrorResponse> handleWebExchangeBindException(WebExchangeBindException ex, HttpServletRequest request) {
+        List<FieldErrorDto> fieldErrors = toFieldErrors(ex.getBindingResult());
+        log.warn("WebExchange binding failed for request {}: {}", request.getRequestURI(), fieldErrors);
+        return error(HttpStatus.BAD_REQUEST, ErrorType.VALIDATION_FAILED,
+                "Проверьте правильность заполнения полей", request, fieldErrors);
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ErrorResponse> handleHttpMessageNotReadable(HttpMessageNotReadableException ex, HttpServletRequest request) {
         log.warn("Malformed request for {}: {}", request.getRequestURI(), ex.getMostSpecificCause().getMessage());
-
-        ErrorResponse response = ErrorResponse.builder()
-                .status(HttpStatus.BAD_REQUEST.value())
-                .error(ErrorType.BAD_REQUEST.getTitle())
-                .message("Неверный формат запроса")
-                .path(request.getRequestURI())
-                .build();
-
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        return error(HttpStatus.BAD_REQUEST, ErrorType.BAD_REQUEST, "Неверный формат запроса", request);
     }
 
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ErrorResponse> handleMethodArgumentTypeMismatch(MethodArgumentTypeMismatchException ex, HttpServletRequest request) {
-        String message = String.format("Parameter '%s' should be of type %s", ex.getName(), ex.getRequiredType() != null ? ex.getRequiredType().getSimpleName() : "unknown");
+        String message = String.format("Параметр '%s' должен иметь тип %s", ex.getName(),
+                ex.getRequiredType() != null ? ex.getRequiredType().getSimpleName() : "unknown");
         log.warn("Type mismatch for request {}: {}", request.getRequestURI(), message);
-
-        ErrorResponse response = ErrorResponse.builder()
-                .status(HttpStatus.BAD_REQUEST.value())
-                .error(ErrorType.BAD_REQUEST.getTitle())
-                .message(message)
-                .path(request.getRequestURI())
-                .build();
-
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        return error(HttpStatus.BAD_REQUEST, ErrorType.BAD_REQUEST, message, request);
     }
 
     @ExceptionHandler(MissingServletRequestParameterException.class)
     public ResponseEntity<ErrorResponse> handleMissingServletRequestParameter(MissingServletRequestParameterException ex, HttpServletRequest request) {
-        String message = String.format("Required request parameter '%s' is missing", ex.getParameterName());
+        String message = String.format("Обязательный параметр '%s' отсутствует", ex.getParameterName());
         log.warn("Missing parameter for request {}: {}", request.getRequestURI(), message);
-
-        ErrorResponse response = ErrorResponse.builder()
-                .status(HttpStatus.BAD_REQUEST.value())
-                .error(ErrorType.BAD_REQUEST.getTitle())
-                .message(message)
-                .path(request.getRequestURI())
-                .build();
-
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        return error(HttpStatus.BAD_REQUEST, ErrorType.BAD_REQUEST, message, request);
     }
 
     @ExceptionHandler(MissingRequestHeaderException.class)
     public ResponseEntity<ErrorResponse> handleMissingRequestHeader(
             MissingRequestHeaderException ex, HttpServletRequest request) {
-        String message = String.format("Required request header '%s' is missing", ex.getHeaderName());
+        String message = String.format("Обязательный заголовок '%s' отсутствует", ex.getHeaderName());
         log.warn("Missing header for request {}: {}", request.getRequestURI(), message);
-
-        ErrorResponse response = ErrorResponse.builder()
-                .status(HttpStatus.BAD_REQUEST.value())
-                .error(ErrorType.BAD_REQUEST.getTitle())
-                .message(message)
-                .path(request.getRequestURI())
-                .build();
-
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        return error(HttpStatus.BAD_REQUEST, ErrorType.BAD_REQUEST, message, request);
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ErrorResponse> handleDataIntegrityViolation(DataIntegrityViolationException ex, HttpServletRequest request) {
-        log.error("Data integrity violation for {}: {}", request.getRequestURI(), ex.getMostSpecificCause().getMessage());
-
-        ErrorResponse response = ErrorResponse.builder()
-                .status(HttpStatus.CONFLICT.value())
-                .error(ErrorType.CONFLICT.getTitle())
-                .message("Нарушение целостности данных. Возможно, запись уже существует.")
-                .path(request.getRequestURI())
-                .build();
-
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+        log.error("Data integrity violation for {}: {}", request.getRequestURI(),
+                ex.getMostSpecificCause().getMessage());
+        return error(HttpStatus.CONFLICT, ErrorType.CONFLICT,
+                "Нарушение целостности данных. Возможно, запись уже существует.", request);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ErrorResponse> handleIllegalArgument(IllegalArgumentException ex, HttpServletRequest request) {
         log.warn("Illegal argument for {}: {}", request.getRequestURI(), ex.getMessage());
-        ErrorResponse response = ErrorResponse.builder()
-                .status(HttpStatus.BAD_REQUEST.value())
-                .error(ErrorType.BAD_REQUEST.getTitle())
-                .message("Некорректный запрос")
-                .path(request.getRequestURI())
-                .build();
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        return error(HttpStatus.BAD_REQUEST, ErrorType.BAD_REQUEST, "Некорректный запрос", request);
     }
 
     @ExceptionHandler(MissingServletRequestPartException.class)
     public ResponseEntity<ErrorResponse> handleMissingServletRequestPart(MissingServletRequestPartException ex, HttpServletRequest request) {
-        String message = String.format("Required part '%s' is not present", ex.getRequestPartName());
+        String message = String.format("Обязательная часть запроса '%s' отсутствует", ex.getRequestPartName());
         log.warn("Missing request part for {}: {}", request.getRequestURI(), message);
-        ErrorResponse response = ErrorResponse.builder()
-                .status(HttpStatus.BAD_REQUEST.value())
-                .error(ErrorType.BAD_REQUEST.getTitle())
-                .message(message)
-                .path(request.getRequestURI())
-                .build();
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        return error(HttpStatus.BAD_REQUEST, ErrorType.BAD_REQUEST, message, request);
     }
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<ErrorResponse> handleMaxUploadSizeExceeded(MaxUploadSizeExceededException ex, HttpServletRequest request) {
         log.warn("File size exceeded for {}: {}", request.getRequestURI(), ex.getMessage());
-        ErrorResponse response = ErrorResponse.builder()
-                .status(HttpStatus.BAD_REQUEST.value())
-                .error(ErrorType.BAD_REQUEST.getTitle())
-                .message("Размер файла превышает максимально допустимый")
-                .path(request.getRequestURI())
-                .build();
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
-    }
-
-    @ExceptionHandler(WebExchangeBindException.class)
-    public ResponseEntity<ErrorResponse> handleWebExchangeBindException(WebExchangeBindException ex, HttpServletRequest request) {
-        Map<String, String> errors = new HashMap<>();
-        ex.getBindingResult().getAllErrors().forEach((error) -> {
-            String fieldName = ((FieldError) error).getField();
-            String errorMessage = error.getDefaultMessage();
-            errors.put(fieldName, errorMessage);
-        });
-
-        log.warn("WebExchange binding failed for request {}: {}", request.getRequestURI(), errors);
-        ErrorResponse response = ErrorResponse.builder()
-                .status(HttpStatus.BAD_REQUEST.value())
-                .error(ErrorType.VALIDATION_FAILED.getTitle())
-                .message("Validation failed. See 'errors' for details.")
-                .path(request.getRequestURI())
-                .errors(errors)
-                .build();
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        return error(HttpStatus.PAYLOAD_TOO_LARGE, ErrorType.PAYLOAD_TOO_LARGE,
+                "Размер загружаемого файла превышает максимально допустимый", request);
     }
 
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<ErrorResponse> handleNoResourceFound(NoResourceFoundException ex, HttpServletRequest request) {
         log.info("No static resource for {}: {}", request.getRequestURI(), ex.getMessage());
-        ErrorResponse error = ErrorResponse.builder()
-                .status(HttpStatus.NOT_FOUND.value())
-                .error(ErrorType.NOT_FOUND.getTitle())
-                .message("Ресурс не найден")
-                .path(request.getRequestURI())
-                .build();
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+        return error(HttpStatus.NOT_FOUND, ErrorType.NOT_FOUND, "Ресурс не найден", request);
     }
 
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
     public ResponseEntity<ErrorResponse> handleMethodNotSupported(
             HttpRequestMethodNotSupportedException ex, HttpServletRequest request) {
         log.warn("Method {} not supported for {}", ex.getMethod(), request.getRequestURI());
-        ErrorResponse error = ErrorResponse.builder()
-                .status(HttpStatus.METHOD_NOT_ALLOWED.value())
-                .error(ErrorType.METHOD_NOT_ALLOWED.getTitle())
-                .message("Метод запроса не поддерживается для этого ресурса")
-                .path(request.getRequestURI())
-                .build();
-        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).body(error);
+        return error(HttpStatus.METHOD_NOT_ALLOWED, ErrorType.METHOD_NOT_ALLOWED,
+                "Метод запроса не поддерживается для этого ресурса", request);
     }
 
     @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
     public ResponseEntity<ErrorResponse> handleMediaTypeNotSupported(
             HttpMediaTypeNotSupportedException ex, HttpServletRequest request) {
         log.warn("Unsupported media type {} for {}", ex.getContentType(), request.getRequestURI());
-        ErrorResponse error = ErrorResponse.builder()
-                .status(HttpStatus.UNSUPPORTED_MEDIA_TYPE.value())
-                .error(ErrorType.UNSUPPORTED_MEDIA_TYPE.getTitle())
-                .message("Неподдерживаемый тип содержимого запроса")
-                .path(request.getRequestURI())
-                .build();
-        return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE).body(error);
+        return error(HttpStatus.UNSUPPORTED_MEDIA_TYPE, ErrorType.UNSUPPORTED_MEDIA_TYPE,
+                "Неподдерживаемый тип содержимого запроса", request);
     }
 
     @ExceptionHandler({CompletionException.class, ExecutionException.class})
@@ -392,6 +243,9 @@ public class GlobalExceptionHandler {
         if (cause instanceof UnauthorizedException e) {
             return handleUnauthorizedException(e, request);
         }
+        if (cause instanceof AccountBlockedException e) {
+            return handleAccountBlockedException(e, request);
+        }
         if (cause instanceof MaxUploadSizeExceededException e) {
             return handleMaxUploadSizeExceeded(e, request);
         }
@@ -404,12 +258,63 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGenericException(Exception ex, HttpServletRequest request) {
         log.error("Unexpected error for {}: {}", request.getRequestURI(), ex.getMessage(), ex);
-        ErrorResponse error = ErrorResponse.builder()
-                .status(HttpStatus.INTERNAL_SERVER_ERROR.value())
-                .error(ErrorType.INTERNAL_SERVER_ERROR.getTitle())
-                .message("Произошла непредвиденная ошибка")
-                .path(request.getRequestURI())
+        return error(HttpStatus.INTERNAL_SERVER_ERROR, ErrorType.INTERNAL_SERVER_ERROR,
+                "Произошла непредвиденная ошибка", request);
+    }
+
+    private ResponseEntity<ErrorResponse> error(HttpStatus status,
+                                                ErrorType type,
+                                                String message,
+                                                HttpServletRequest request) {
+        return error(status, type, message, request, List.of());
+    }
+
+    private ResponseEntity<ErrorResponse> error(HttpStatus status,
+                                                ErrorType type,
+                                                String message,
+                                                HttpServletRequest request,
+                                                List<FieldErrorDto> fieldErrors) {
+        return ResponseEntity.status(status)
+                .body(body(status, type, message, request, fieldErrors));
+    }
+
+    private ErrorResponse body(HttpStatus status,
+                               ErrorType type,
+                               String message,
+                               HttpServletRequest request,
+                               List<FieldErrorDto> fieldErrors) {
+        return ErrorResponse.builder()
+                .status(status.value())
+                .code(type.getCode())
+                .message(message)
+                .traceId(TraceIds.current(request))
+                .fieldErrors(fieldErrors != null ? fieldErrors : List.of())
+                .path(request != null ? request.getRequestURI() : null)
                 .build();
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+    }
+
+    private static List<FieldErrorDto> toFieldErrors(BindingResult bindingResult) {
+        List<FieldErrorDto> result = new ArrayList<>();
+        // LinkedHashMap keeps the first message for a repeated field while the
+        // full list still exposes several independent violations.
+        Map<String, FieldErrorDto> byFieldAndCode = new LinkedHashMap<>();
+        for (ObjectError objectError : bindingResult.getAllErrors()) {
+            String field = objectError instanceof FieldError fieldError
+                    ? fieldError.getField()
+                    : objectError.getObjectName();
+            FieldErrorDto dto = new FieldErrorDto(
+                    field, objectError.getDefaultMessage(), objectError.getCode());
+            byFieldAndCode.putIfAbsent(field + "\u0000" + objectError.getCode(), dto);
+        }
+        result.addAll(byFieldAndCode.values());
+        return result;
+    }
+
+    private static String fieldName(String propertyPath) {
+        if (propertyPath == null || propertyPath.isBlank()) {
+            return "request";
+        }
+        int lastDot = propertyPath.lastIndexOf('.');
+        return lastDot >= 0 ? propertyPath.substring(lastDot + 1) : propertyPath;
     }
 }

@@ -1,5 +1,6 @@
 package org.example.helptreeservice.dto.reports;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -19,6 +20,8 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@Schema(name = "AdminReportResponse",
+        description = "Administrative queue projection including reporter email and internal note")
 public class AdminReportResponse {
 
     private Long id;

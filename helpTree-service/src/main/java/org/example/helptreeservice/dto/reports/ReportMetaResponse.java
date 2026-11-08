@@ -1,5 +1,6 @@
 package org.example.helptreeservice.dto.reports;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -16,6 +17,7 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@Schema(name = "ReportMetaResponse", description = "Server-provided catalogue for the report form")
 public class ReportMetaResponse {
 
     private List<ReportTargetType> targetTypes;

@@ -1,5 +1,8 @@
 package org.example.helptreeservice.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.example.helptreeservice.config.PaginationConfig;
@@ -19,6 +22,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/reviews")
 @RequiredArgsConstructor
+@Tag(name = "Reviews & Ratings", description = "Отзывы и рейтинг доверия")
 public class ReviewController {
 
     private final ReviewService reviewService;
@@ -26,6 +30,8 @@ public class ReviewController {
     private final PaginationConfig paginationConfig;
 
     @PostMapping
+    @Operation(summary = "Оставить отзыв",
+            description = "Только участник завершённой помощи; повторный отзыв на ту же помощь отклоняется 409.")
     public ResponseEntity<ReviewResponse> createReview(@Valid @RequestBody CreateReviewRequest request) {
         Long currentUserId = authService.getCurrentUser().getUserId();
         ReviewResponse response = reviewService.createReview(request, currentUserId);
@@ -33,6 +39,8 @@ public class ReviewController {
     }
 
     @GetMapping("/help/{helpId}")
+    @Operation(summary = "Отзывы по помощи (постранично)")
+    @SecurityRequirements
     public ResponseEntity<PageResponse<ReviewResponse>> getReviewsByHelp(
             @PathVariable Long helpId,
             @RequestParam(required = false) Integer page,
@@ -42,6 +50,8 @@ public class ReviewController {
     }
 
     @GetMapping("/user/{userId}")
+    @Operation(summary = "Отзывы о пользователе (постранично)")
+    @SecurityRequirements
     public ResponseEntity<PageResponse<ReviewResponse>> getReviewsByUser(
             @PathVariable Long userId,
             @RequestParam(required = false) Integer page,
@@ -51,6 +61,7 @@ public class ReviewController {
     }
 
     @DeleteMapping("/{id}")
+    @Operation(summary = "Удалить свой отзыв")
     public ResponseEntity<Void> deleteReview(@PathVariable Long id) {
         Long currentUserId = authService.getCurrentUser().getUserId();
         reviewService.deleteReview(id, currentUserId);

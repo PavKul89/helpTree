@@ -21,6 +21,7 @@ import {
 import { imagesApi } from '../api/imagesApi';
 import type { Post } from '../types';
 import { useAuth } from '../context/AuthContext';
+import { extractFieldErrors, type ApiErrorBody } from '../utils/apiErrors';
 import { CATEGORIES, getCategoryIcon } from '../utils/categoryIcons';
 import { getStatusLabel } from '../utils/statusHelpers';
 import './PostForm.css';
@@ -81,9 +82,8 @@ type LeaveTarget =
   | { type: 'history' }
   | { type: 'href'; href: string };
 
-interface ServerErrorBody {
+interface ServerErrorBody extends ApiErrorBody {
   message?: string;
-  errors?: Record<string, string>;
 }
 
 const getInitials = (name: string): string =>
@@ -437,12 +437,12 @@ export const PostForm = ({
     )?.response;
     const statusCode = response?.status;
     const data = response?.data;
-    const serverFields = data?.errors;
+    const serverFields = extractFieldErrors(data);
 
     const nextFieldErrors: FieldErrors = {};
-    if (serverFields?.title) nextFieldErrors.title = serverFields.title;
-    if (serverFields?.description) nextFieldErrors.description = serverFields.description;
-    if (serverFields?.category) nextFieldErrors.category = serverFields.category;
+    if (serverFields.title) nextFieldErrors.title = serverFields.title;
+    if (serverFields.description) nextFieldErrors.description = serverFields.description;
+    if (serverFields.category) nextFieldErrors.category = serverFields.category;
 
     if (Object.keys(nextFieldErrors).length > 0) {
       setFieldErrors((previous) => ({ ...previous, ...nextFieldErrors }));

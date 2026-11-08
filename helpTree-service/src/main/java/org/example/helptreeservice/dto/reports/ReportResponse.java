@@ -1,5 +1,6 @@
 package org.example.helptreeservice.dto.reports;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -18,6 +19,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@Schema(name = "ReportResponse", description = "User-facing report projection without internal notes")
 public class ReportResponse {
 
     private Long id;

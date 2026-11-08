@@ -1,5 +1,6 @@
 package org.example.helptreeservice.dto.users;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -20,6 +21,8 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@Schema(name = "UserBlockStatus",
+        description = "Viewer-specific block state; both directions are independent")
 public class UserBlockStatusResponse {
 
     private Long userId;

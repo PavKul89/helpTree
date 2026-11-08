@@ -1,5 +1,8 @@
 package org.example.helptreeservice.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.example.helptreeservice.config.PaginationConfig;
 import org.example.helptreeservice.dto.common.PageResponse;
@@ -26,12 +29,17 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/search")
 @RequiredArgsConstructor
+@Tag(name = "Search & Stats", description = "Поиск и публичная статистика")
 public class SearchController {
 
     private final SearchService searchService;
     private final PaginationConfig paginationConfig;
 
     @GetMapping
+    @Operation(summary = "Поиск по публичным сущностям (постранично)",
+            description = "type=POSTS|USERS|REVIEWS|ALL. Ответ — PageResponse. "
+                    + "Глубокая пагинация поддерживается, но лучше сужать запрос.")
+    @SecurityRequirements
     public ResponseEntity<PageResponse<SearchResultDto>> search(
             @RequestParam String q,
             @RequestParam(defaultValue = "ALL") SearchType type,

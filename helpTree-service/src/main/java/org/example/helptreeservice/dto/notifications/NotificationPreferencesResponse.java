@@ -1,5 +1,6 @@
 package org.example.helptreeservice.dto.notifications;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -14,6 +15,8 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@Schema(name = "NotificationPreferencesResponse",
+        description = "Full effective notification matrix plus the enumerations the client may render")
 public class NotificationPreferencesResponse {
 
     private List<NotificationPreferenceDto> preferences;

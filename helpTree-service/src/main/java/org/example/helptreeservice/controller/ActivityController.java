@@ -1,5 +1,8 @@
 package org.example.helptreeservice.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.example.helptreeservice.config.PaginationConfig;
 import org.example.helptreeservice.dto.activity.ActivityDto;
 import org.example.helptreeservice.dto.common.PageResponse;
@@ -11,6 +14,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api")
 @RequiredArgsConstructor
+@Tag(name = "Activity", description = "Публичная лента активности пользователя")
 public class ActivityController {
 
     private final ActivityService activityService;
@@ -21,6 +25,10 @@ public class ActivityController {
      * {@code size}; both are clamped to the configured maximum.
      */
     @GetMapping("/activities")
+    @Operation(summary = "Лента активности",
+            description = "Без userId возвращает пустую страницу. limit — legacy alias для size; "
+                    + "size ограничивается сервером. Ответ — PageResponse.")
+    @SecurityRequirements
     public ResponseEntity<PageResponse<ActivityDto>> getUserActivities(
             @RequestParam(required = false, name = "userId") Long userId,
             @RequestParam(required = false) Integer page,
@@ -38,6 +46,8 @@ public class ActivityController {
     }
 
     @GetMapping("/users/{userId}/activities")
+    @Operation(summary = "Лента активности конкретного пользователя (постранично)")
+    @SecurityRequirements
     public ResponseEntity<PageResponse<ActivityDto>> getUserActivitiesById(
             @PathVariable Long userId,
             @RequestParam(required = false) Integer page,

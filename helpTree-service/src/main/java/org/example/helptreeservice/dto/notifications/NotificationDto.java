@@ -1,5 +1,6 @@
 package org.example.helptreeservice.dto.notifications;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -14,6 +15,7 @@ import java.util.Map;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@Schema(name = "Notification", description = "Public projection of a stored notification")
 public class NotificationDto {
 
     private Long id;

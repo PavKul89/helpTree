@@ -1,8 +1,15 @@
 package org.example.helptreeservice.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.example.helptreeservice.config.PaginationConfig;
 import org.example.helptreeservice.dto.common.PageResponse;
 import org.example.helptreeservice.dto.graph.HelpGraphDto;
+import org.example.helptreeservice.dto.graph.PublicHelpGraphDto;
 import org.example.helptreeservice.dto.helps.CancelHelpRequest;
 import org.example.helptreeservice.dto.helps.HelpHistoryEntryDto;
 import org.example.helptreeservice.dto.helps.HelpRequest;
@@ -28,6 +35,7 @@ import java.util.List;
 @RequestMapping("/api/helps")
 @Slf4j
 @RequiredArgsConstructor
+@Tag(name = "Helps & Graph", description = "Отклики, история помощи и публичный граф связей")
 public class HelpController {
 
     private final HelpService helpService;
@@ -36,6 +44,8 @@ public class HelpController {
     private final PaginationConfig paginationConfig;
 
     @PostMapping("/accept")
+    @Operation(summary = "Откликнуться на заявку",
+            description = "Создаёт запись помощи. Требуется авторизация; автор не может откликнуться на свою заявку.")
     public ResponseEntity<HelpResponse> acceptHelp(@Valid @RequestBody HelpRequest request) {
         Long actorId = requireCurrentUserId("Для отклика на пост необходимо войти в систему");
         HelpResponse response = helpService.acceptHelp(request, actorId);
@@ -43,6 +53,8 @@ public class HelpController {
     }
 
     @GetMapping("/post/{postId}")
+    @Operation(summary = "Отклики на заявку (постранично)",
+            description = "Возвращает PageResponse. Видимость откликов проверяется сервером.")
     public ResponseEntity<PageResponse<HelpResponse>> getHelpsByPost(
             @PathVariable Long postId,
             @RequestParam(required = false) Integer page,
@@ -52,6 +64,8 @@ public class HelpController {
     }
 
     @PostMapping("/{helpId}/complete")
+    @Operation(summary = "Отметить помощь выполненной",
+            description = "Исполнитель или ADMIN. Идемпотентная смена состояния.")
     public ResponseEntity<HelpResponse> completeHelp(@PathVariable Long helpId,
                                                      @RequestParam(required = false) String reason) {
         Long actorId = requireCurrentUserId("Для завершения помощи необходимо войти в систему");
@@ -63,6 +77,8 @@ public class HelpController {
     }
 
     @PostMapping("/{helpId}/confirm")
+    @Operation(summary = "Подтвердить выполнение помощи",
+            description = "Получатель помощи или ADMIN. Начисление монет выполняется сервером.")
     public ResponseEntity<HelpResponse> confirmHelp(@PathVariable Long helpId,
                                                     @RequestParam(required = false) String reason) {
         Long actorId = requireCurrentUserId("Для подтверждения помощи необходимо войти в систему");
@@ -74,6 +90,7 @@ public class HelpController {
     }
 
     @PostMapping("/{helpId}/cancel")
+    @Operation(summary = "Отменить помощь")
     public ResponseEntity<HelpResponse> cancelHelp(
             @PathVariable Long helpId,
             @RequestBody(required = false) @Valid CancelHelpRequest request) {
@@ -84,6 +101,7 @@ public class HelpController {
     }
 
     @GetMapping("/{helpId}/history")
+    @Operation(summary = "История изменений помощи")
     public ResponseEntity<List<HelpHistoryEntryDto>> getHelpHistory(@PathVariable Long helpId) {
         Long actorId = requireCurrentUserId("Для просмотра истории помощи необходимо войти в систему");
         return ResponseEntity.ok(helpService.getHelpHistory(helpId, actorId, authService.isAdmin()));
@@ -114,6 +132,12 @@ public class HelpController {
     }
 
     @GetMapping("/graph")
+    @Operation(summary = "Граф связей помощи",
+            description = "Публичный граф обезличивается. Приватный граф (с именами и деталями) "
+                    + "возвращается только владельцу или ADMIN. Параметры depth и maxEdges ограничивают размер.")
+    @ApiResponse(responseCode = "200", description = "Приватный или публичный граф",
+            content = @Content(schema = @Schema(oneOf = {HelpGraphDto.class, PublicHelpGraphDto.class})))
+    @SecurityRequirements
     public ResponseEntity<?> getHelpGraph(
             @RequestParam(required = false) Long userId,
             @RequestParam(required = false) Integer depth,
@@ -126,6 +150,8 @@ public class HelpController {
     }
 
     @GetMapping("/stats")
+    @Operation(summary = "Публичная статистика помощи")
+    @SecurityRequirements
     public ResponseEntity<org.example.helptreeservice.dto.graph.HelpStatsDto> getHelpStats() {
         return ResponseEntity.ok(helpService.getHelpStats());
     }
@@ -137,6 +163,7 @@ public class HelpController {
     }
 
     @GetMapping("/new-responses")
+    @Operation(summary = "Новые отклики на мои заявки")
     public ResponseEntity<List<org.example.helptreeservice.dto.helps.NewResponseDto>> getNewResponses(
             @RequestParam(required = false) String since) {
         Long actorId = requireCurrentUserId("Необходимо войти в систему");

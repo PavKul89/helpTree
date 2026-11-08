@@ -56,7 +56,12 @@ class RateLimiterFilterTest {
 
         assertEquals(429, response.getStatus());
         assertEquals("37", response.getHeader("Retry-After"));
-        assertTrue(response.getContentAsString().contains("Too Many Requests"));
+        assertTrue(response.getContentType().startsWith("application/json"));
+        String body = response.getContentAsString();
+        assertTrue(body.contains("\"status\":429"));
+        assertTrue(body.contains("\"code\":\"TOO_MANY_REQUESTS\""));
+        assertTrue(body.contains("\"path\":\"/api/auth/login\""));
+        assertTrue(body.contains("\"fieldErrors\":[]"));
         verify(chain, never()).doFilter(request, response);
     }
 

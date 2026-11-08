@@ -1,5 +1,7 @@
 package org.example.helptreeservice.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -46,6 +48,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/admin/users")
 @RequiredArgsConstructor
+@Tag(name = "Admin — Users", description = "Административное управление пользователями")
 public class AdminUserController {
 
     private static final Set<String> ALLOWED_SORTS = Set.of(
@@ -56,6 +59,8 @@ public class AdminUserController {
     private final PaginationConfig paginationConfig;
 
     @GetMapping
+    @Operation(summary = "Справочник пользователей (ADMIN, постранично)",
+            description = "Фильтры по строке, роли, статусу, блокировке и признаку удаления.")
     public ResponseEntity<PageResponse<UserDto>> search(
             @RequestParam(required = false) Integer page,
             @RequestParam(required = false) Integer size,
@@ -77,6 +82,8 @@ public class AdminUserController {
      * administrator can see that the account exists and cannot be restored.
      */
     @GetMapping("/deleted")
+    @Operation(summary = "Удалённые аккаунты (ADMIN, постранично)",
+            description = "Включает анонимизированные записи; восстановление невозможно после анонимизации.")
     public ResponseEntity<PageResponse<UserDto>> getDeleted(
             @RequestParam(required = false) Integer page,
             @RequestParam(required = false) Integer size,
@@ -92,12 +99,14 @@ public class AdminUserController {
     }
 
     @GetMapping("/{id}")
+    @Operation(summary = "Карточка пользователя (ADMIN)")
     public ResponseEntity<UserDto> get(@PathVariable Long id) {
         requireAdmin();
         return ResponseEntity.ok(adminUserService.get(id));
     }
 
     @PostMapping
+    @Operation(summary = "Создать пользователя с паролем (ADMIN)")
     public ResponseEntity<UserDto> create(@Valid @RequestBody AdminCreateUserRequest request) {
         Long adminId = requireAdmin();
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -105,6 +114,8 @@ public class AdminUserController {
     }
 
     @PostMapping("/invite")
+    @Operation(summary = "Пригласить пользователя (ADMIN)",
+            description = "Создаёт аккаунт и одноразовый токен приглашения.")
     public ResponseEntity<UserDto> invite(@Valid @RequestBody AdminInviteUserRequest request) {
         Long adminId = requireAdmin();
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -112,6 +123,7 @@ public class AdminUserController {
     }
 
     @PatchMapping("/{id}/role")
+    @Operation(summary = "Сменить роль пользователя (ADMIN)")
     public ResponseEntity<UserDto> changeRole(
             @PathVariable Long id,
             @Valid @RequestBody AdminRoleChangeRequest request) {
@@ -121,6 +133,7 @@ public class AdminUserController {
     }
 
     @DeleteMapping("/{id}")
+    @Operation(summary = "Мягко удалить пользователя (ADMIN)")
     public ResponseEntity<Void> delete(
             @PathVariable Long id,
             @RequestParam String reason) {
@@ -130,6 +143,7 @@ public class AdminUserController {
     }
 
     @PostMapping("/{id}/restore")
+    @Operation(summary = "Восстановить удалённого пользователя (ADMIN)")
     public ResponseEntity<Void> restore(
             @PathVariable Long id,
             @Valid @RequestBody AdminReasonRequest request) {
@@ -139,6 +153,8 @@ public class AdminUserController {
     }
 
     @PostMapping("/{id}/anonymize")
+    @Operation(summary = "Анонимизировать аккаунт (ADMIN)",
+            description = "Необратимо; требует подтверждения email. Пишется в аудит.")
     public ResponseEntity<Void> anonymize(
             @PathVariable Long id,
             @Valid @RequestBody AdminAnonymizeRequest request) {
@@ -148,6 +164,7 @@ public class AdminUserController {
     }
 
     @PutMapping("/{id}/rating")
+    @Operation(summary = "Скорректировать рейтинг пользователя (ADMIN)")
     public ResponseEntity<Void> changeRating(@PathVariable Long id,
                                              @Valid @RequestBody AdminRatingRequest request) {
         Long adminId = requireAdmin();
@@ -156,12 +173,14 @@ public class AdminUserController {
     }
 
     @GetMapping("/{id}/sessions")
+    @Operation(summary = "Активные сессии пользователя (ADMIN)")
     public ResponseEntity<List<AdminSessionDto>> sessions(@PathVariable Long id) {
         requireAdmin();
         return ResponseEntity.ok(adminUserService.sessions(id));
     }
 
     @DeleteMapping("/{id}/sessions/{sessionId}")
+    @Operation(summary = "Отозвать сессию пользователя (ADMIN)")
     public ResponseEntity<Void> revokeSession(@PathVariable Long id,
                                               @PathVariable UUID sessionId,
                                               @RequestParam String reason) {
@@ -171,6 +190,7 @@ public class AdminUserController {
     }
 
     @DeleteMapping("/{id}/sessions")
+    @Operation(summary = "Отозвать все сессии пользователя (ADMIN)")
     public ResponseEntity<Void> revokeAllSessions(@PathVariable Long id,
                                                   @RequestParam String reason) {
         Long adminId = requireAdmin();
@@ -179,6 +199,8 @@ public class AdminUserController {
     }
 
     @PostMapping("/bulk")
+    @Operation(summary = "Массовые операции над пользователями (ADMIN)",
+            description = "Частичный успех: результат содержит succeeded/failed по каждому id.")
     public ResponseEntity<AdminBulkResultDto> bulk(
             @Valid @RequestBody AdminBulkUsersRequest request) {
         Long adminId = requireAdmin();
@@ -186,6 +208,7 @@ public class AdminUserController {
     }
 
     @GetMapping("/{id}/export")
+    @Operation(summary = "Экспорт данных пользователя (ADMIN)")
     public ResponseEntity<Map<String, Object>> export(
             @PathVariable Long id,
             @RequestParam String reason) {
@@ -194,6 +217,7 @@ public class AdminUserController {
     }
 
     @GetMapping("/{id}/audit")
+    @Operation(summary = "История аудита пользователя (ADMIN, постранично)")
     public ResponseEntity<PageResponse<AdminAuditLogDto>> auditHistory(
             @PathVariable Long id,
             @RequestParam(required = false) Integer page,

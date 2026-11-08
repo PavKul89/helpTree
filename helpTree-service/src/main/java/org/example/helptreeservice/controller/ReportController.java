@@ -1,5 +1,7 @@
 package org.example.helptreeservice.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.example.helptreeservice.config.PaginationConfig;
@@ -29,6 +31,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/reports")
 @RequiredArgsConstructor
+@Tag(name = "Reports", description = "Жалобы пользователей и модерация")
 public class ReportController {
 
     private final ReportService reportService;
@@ -36,6 +39,8 @@ public class ReportController {
     private final PaginationConfig paginationConfig;
 
     @PostMapping
+    @Operation(summary = "Подать жалобу",
+            description = "Идемпотентно при наличии Idempotency-Key: повтор с тем же ключом не создаёт дубль.")
     public ResponseEntity<ReportResponse> create(
             @Valid @RequestBody CreateReportRequest request,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
@@ -45,6 +50,7 @@ public class ReportController {
     }
 
     @GetMapping("/me")
+    @Operation(summary = "Мои жалобы (постранично)")
     public ResponseEntity<PageResponse<ReportResponse>> getMyReports(
             @RequestParam(required = false) ReportStatus status,
             @RequestParam(required = false) ReportTargetType targetType,
@@ -58,12 +64,14 @@ public class ReportController {
     }
 
     @GetMapping("/meta")
+    @Operation(summary = "Справочник причин и типов жалоб")
     public ResponseEntity<ReportMetaResponse> getMeta() {
         requireUserId();
         return ResponseEntity.ok(reportService.getMeta());
     }
 
     @GetMapping("/{reportId}")
+    @Operation(summary = "Детали своей жалобы")
     public ResponseEntity<ReportDetailsResponse> getMyReport(@PathVariable Long reportId) {
         Long userId = requireUserId();
         return ResponseEntity.ok(reportService.getMyReport(reportId, userId));

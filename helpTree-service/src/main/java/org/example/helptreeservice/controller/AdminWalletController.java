@@ -1,5 +1,7 @@
 package org.example.helptreeservice.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import org.example.helptreeservice.config.PaginationConfig;
@@ -36,6 +38,7 @@ import java.util.Set;
 @RestController
 @RequestMapping("/api/admin/wallet")
 @RequiredArgsConstructor
+@Tag(name = "Admin — Wallet & Audit", description = "Калибровка кошельков и аудит действий")
 public class AdminWalletController {
 
     private final AuthorizationService authService;
@@ -45,6 +48,8 @@ public class AdminWalletController {
     private final PaginationConfig paginationConfig;
 
     @GetMapping("/accounts")
+    @Operation(summary = "Кошельки пользователей (ADMIN, постранично)",
+            description = "Фильтры по строке, балансу, VIP, блокировке и долгу; sort ограничен whitelist.")
     public ResponseEntity<PageResponse<AdminWalletAccountDto>> getAccounts(
             @RequestParam(required = false) String q,
             @RequestParam(required = false) Long minBalance,
@@ -102,6 +107,8 @@ public class AdminWalletController {
     }
 
     @GetMapping("/reconciliation")
+    @Operation(summary = "Аномалии баланса (ADMIN, постранично)",
+            description = "Агрегация выполняется в БД; страницы не сортируются.")
     public ResponseEntity<PageResponse<BalanceAnomalyDto>> getReconciliation(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
@@ -112,7 +119,8 @@ public class AdminWalletController {
     }
 
     @GetMapping("/audits")
-    public ResponseEntity<Page<AdminCoinAuditDto>> getAudits(
+    @Operation(summary = "Аудит изменений кошельков (ADMIN, постранично)")
+    public ResponseEntity<PageResponse<AdminCoinAuditDto>> getAudits(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) Long userId,
@@ -131,7 +139,8 @@ public class AdminWalletController {
             return cb.and(predicates.toArray(new Predicate[0]));
         };
 
-        return ResponseEntity.ok(auditRepository.findAll(spec, pageable).map(this::toDto));
+        return ResponseEntity.ok(PageResponse.from(
+                auditRepository.findAll(spec, pageable).map(this::toDto)));
     }
 
     private void requireAdmin() {

@@ -1,6 +1,5 @@
 package org.example.helptreeservice.security;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -8,12 +7,13 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.example.helptreeservice.enums.ErrorType;
 import org.example.helptreeservice.exception.AccountBlockedException;
 import org.example.helptreeservice.exception.UnauthorizedException;
 import org.example.helptreeservice.service.AuthSessionService;
 import org.example.helptreeservice.service.JwtService;
+import org.example.helptreeservice.util.ApiErrorWriter;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -22,7 +22,6 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 /**
@@ -39,8 +38,6 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
     private final AuthSessionService authSessionService;
-
-    private final ObjectMapper objectMapper = new ObjectMapper();
 
     private static final Set<String> PUBLIC_AUTH_POST_PATHS = Set.of(
             "/api/auth/register",
@@ -83,7 +80,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 filterChain.doFilter(request, response);
                 return;
             }
-            sendError(response, HttpStatus.UNAUTHORIZED, "Требуется авторизация");
+            sendError(request, response, HttpStatus.UNAUTHORIZED, ErrorType.UNAUTHORIZED,
+                    "Требуется авторизация");
             return;
         }
 
@@ -105,7 +103,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                             isBlockedSelfServicePath(request, userId));
 
             if (path.startsWith("/internal/") && !"ADMIN".equals(authenticatedUser.role())) {
-                sendError(response, HttpStatus.FORBIDDEN,
+                sendError(request, response, HttpStatus.FORBIDDEN, ErrorType.FORBIDDEN,
                         "Только администратор имеет доступ к внутренним эндпоинтам");
                 return;
             }
@@ -126,7 +124,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 filterChain.doFilter(request, response);
                 return;
             }
-            sendError(response, HttpStatus.FORBIDDEN, e.getMessage());
+            sendError(request, response, HttpStatus.FORBIDDEN, ErrorType.ACCOUNT_BLOCKED, e.getMessage());
             return;
         } catch (Exception e) {
             // Public GET endpoints stay accessible without a valid token. A valid
@@ -137,7 +135,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 return;
             }
             log.debug("Rejected access token for {}: {}", path, e.getMessage());
-            sendError(response, HttpStatus.UNAUTHORIZED, "Невалидный или истёкший токен");
+            sendError(request, response, HttpStatus.UNAUTHORIZED, ErrorType.UNAUTHORIZED,
+                    "Невалидный или истёкший токен");
             return;
         }
 
@@ -210,7 +209,11 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         if (PUBLIC_AUTH_POST_PATHS.contains(path) && "POST".equals(method)) {
             return true;
         }
-        if (path.startsWith("/swagger-ui/") || path.startsWith("/v3/api-docs/")) {
+        if (path.startsWith("/swagger-ui/")
+                || path.equals("/swagger-ui.html")
+                || path.equals("/v3/api-docs")
+                || path.equals("/v3/api-docs.yaml")
+                || path.startsWith("/v3/api-docs/")) {
             return true;
         }
         if (path.startsWith("/ws/")) {
@@ -248,14 +251,11 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         return false;
     }
 
-    private void sendError(HttpServletResponse response, HttpStatus status, String message) throws IOException {
-        response.setStatus(status.value());
-        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        String body = objectMapper.writeValueAsString(Map.of(
-                "status", status.value(),
-                "error", status.getReasonPhrase(),
-                "message", message
-        ));
-        response.getWriter().write(body);
+    private void sendError(HttpServletRequest request,
+                           HttpServletResponse response,
+                           HttpStatus status,
+                           ErrorType type,
+                           String message) throws IOException {
+        ApiErrorWriter.write(request, response, status, type, message);
     }
 }

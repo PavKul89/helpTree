@@ -1,5 +1,8 @@
 package org.example.helptreeservice.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.example.helptreeservice.dto.achievement.AchievementDto;
 import org.example.helptreeservice.service.AchievementService;
 import org.example.helptreeservice.service.PrivacyPolicy;
@@ -12,6 +15,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api")
 @RequiredArgsConstructor
+@Tag(name = "Achievements", description = "Каталог достижений и прогресс пользователя")
 public class AchievementController {
 
     private final AchievementService achievementService;
@@ -25,6 +29,10 @@ public class AchievementController {
      * feed).
      */
     @GetMapping("/achievements")
+    @Operation(summary = "Каталог достижений",
+            description = "Без userId — публичный каталог. С userId — прогресс только для владельца и ADMIN, "
+                    + "иначе только полученные достижения.")
+    @SecurityRequirements
     public ResponseEntity<List<AchievementDto>> getAllAchievements(
             @RequestParam(required = false, name = "userId") Long userId) {
         if (userId == null) {
@@ -37,6 +45,8 @@ public class AchievementController {
     }
 
     @GetMapping("/users/{userId}/achievements")
+    @Operation(summary = "Полученные достижения пользователя")
+    @SecurityRequirements
     public ResponseEntity<List<AchievementDto>> getUserAchievements(@PathVariable Long userId) {
         return ResponseEntity.ok(achievementService.getUserAchievements(userId));
     }

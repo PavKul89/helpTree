@@ -6,6 +6,7 @@ import { authApi } from '../api/authApi';
 import { AuthField } from '../components/AuthField';
 import { AuthLayout } from '../components/AuthLayout';
 import { useAuth } from '../context/AuthContext';
+import { getApiErrorInfo } from '../utils/apiErrors';
 
 type RegisterField = 'name' | 'email' | 'password' | 'phone' | 'city';
 type FieldErrors = Partial<Record<RegisterField, string>>;
@@ -88,16 +89,28 @@ export const RegisterPage = () => {
       setValues((current) => ({ ...current, password: '' }));
       navigate('/');
     } catch (requestError: unknown) {
-      if (axios.isAxiosError<{ errors?: Partial<Record<RegisterField, string>> }>(requestError)) {
-        const serverErrors = requestError.response?.data?.errors;
-        if (serverErrors && Object.keys(serverErrors).length > 0) {
+      if (axios.isAxiosError(requestError)) {
+        const info = getApiErrorInfo(requestError);
+        const serverErrors: FieldErrors = {};
+        (Object.keys(info.fields) as RegisterField[]).forEach((field) => {
+          if (field === 'name' || field === 'email' || field === 'password'
+              || field === 'phone' || field === 'city') {
+            serverErrors[field] = info.fields[field];
+          }
+        });
+
+        if (Object.keys(serverErrors).length > 0) {
           setFieldErrors((current) => ({ ...current, ...serverErrors }));
-        } else if (requestError.response?.status === 409) {
+        } else if (info.status === 409) {
           setError('Аккаунт с таким email уже существует. Войдите или укажите другой email.');
-        } else if (!requestError.response) {
+        } else if (!info.status) {
           setError('Не удалось связаться с сервером. Проверьте подключение и попробуйте ещё раз.');
         } else {
-          setError('Не удалось создать аккаунт. Проверьте данные и попробуйте ещё раз.');
+          setError(
+            info.traceId
+              ? `Не удалось создать аккаунт. Попробуйте ещё раз. Код обращения: ${info.traceId}`
+              : 'Не удалось создать аккаунт. Проверьте данные и попробуйте ещё раз.'
+          );
         }
       } else {
         setError('Не удалось создать аккаунт. Попробуйте ещё раз.');

@@ -1,5 +1,8 @@
 package org.example.helptreeservice.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.example.helptreeservice.config.EconomyConfig;
 import org.example.helptreeservice.config.PaginationConfig;
 import org.example.helptreeservice.dto.common.PageResponse;
@@ -34,6 +37,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/posts")
 @RequiredArgsConstructor
+@Tag(name = "Posts", description = "Заявки о помощи")
 public class PostController {
 
     private final PostService postService;
@@ -44,6 +48,7 @@ public class PostController {
     private final PaginationConfig paginationConfig;
 
     @PostMapping
+    @Operation(summary = "Создать заявку о помощи")
     public ResponseEntity<PostDto> createPost(@Valid @RequestBody CreatePostRequest request) {
         var user = authService.getCurrentUser();
         if (user == null) {
@@ -57,6 +62,10 @@ public class PostController {
     }
 
     @GetMapping
+    @Operation(summary = "Лента заявок (постранично)",
+            description = "Публичная лента. Отменённые заявки скрыты, если вызывающий не автор и не ADMIN. "
+                    + "Ответ — PageResponse.")
+    @SecurityRequirements
     public ResponseEntity<PageResponse<PublicPostDto>> getPosts(
             @RequestParam(required = false) Long userId,
             @RequestParam(required = false) PostStatus status,
@@ -84,6 +93,9 @@ public class PostController {
      * rounded coordinates and no boost expiry.
      */
     @GetMapping("/{id}")
+    @Operation(summary = "Заявка по id",
+            description = "Публичная проекция для всех, кроме автора и ADMIN, которые получают полную проекцию.")
+    @SecurityRequirements
     public ResponseEntity<?> getPostById(@PathVariable Long id) {
         PostDto post = postService.getPostById(id);
         if (privacyPolicy.canViewFullPost(post.getUserId())) {
@@ -94,6 +106,8 @@ public class PostController {
 
     /** Authenticated owner view with every status and the full projection. */
     @GetMapping("/mine")
+    @Operation(summary = "Мои заявки (постранично)",
+            description = "Авторизованный владельческий вид: все статусы и полная проекция.")
     public ResponseEntity<PageResponse<PostDto>> getMyPosts(
             @PageableDefault(page = 0, size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
         var currentUser = authService.getCurrentUser();
@@ -140,6 +154,8 @@ public class PostController {
     }
 
     @GetMapping("/user/{userId}")
+    @Operation(summary = "Заявки пользователя (постранично)")
+    @SecurityRequirements
     public ResponseEntity<PageResponse<PublicPostDto>> getPostsByUser(
             @PathVariable Long userId,
             @PageableDefault(page = 0, size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
@@ -159,6 +175,9 @@ public class PostController {
     }
 
     @GetMapping("/map")
+    @Operation(summary = "Заявки на карте (постранично)",
+            description = "Фильтры bbox или latitude/longitude + radius. Ответ — PageResponse.")
+    @SecurityRequirements
     public ResponseEntity<PageResponse<PublicPostDto>> getPostsOnMap(
             @RequestParam(required = false) String bbox,
             @RequestParam(required = false) Double latitude,

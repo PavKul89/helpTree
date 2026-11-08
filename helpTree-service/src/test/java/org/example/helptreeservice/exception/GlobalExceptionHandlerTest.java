@@ -1,16 +1,29 @@
 package org.example.helptreeservice.exception;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.example.helptreeservice.dto.error.ErrorResponse;
+import org.example.helptreeservice.dto.error.FieldErrorDto;
+import org.example.helptreeservice.enums.ErrorType;
+import org.example.helptreeservice.util.ApiErrorWriter;
+import org.example.helptreeservice.util.TraceIds;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.validation.BeanPropertyBindingResult;
+import org.springframework.validation.BindException;
+import org.springframework.validation.FieldError;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -23,13 +36,15 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
-    void notFound_shouldReturn404() {
+    void notFound_shouldReturn404WithStableCode() {
         ResponseEntity<ErrorResponse> response = handler.handleNotFoundException(
                 new NotFoundException("Пост не найден"), request("/api/posts/1"));
 
         assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
         assertEquals(404, response.getBody().getStatus());
-        assertEquals("Not Found", response.getBody().getError());
+        assertEquals(ErrorType.NOT_FOUND.getCode(), response.getBody().getCode());
+        assertEquals("Пост не найден", response.getBody().getMessage());
+        assertEquals("/api/posts/1", response.getBody().getPath());
     }
 
     @Test
@@ -39,7 +54,7 @@ class GlobalExceptionHandlerTest {
 
         assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
         assertEquals(403, response.getBody().getStatus());
-        assertEquals("Forbidden", response.getBody().getError());
+        assertEquals(ErrorType.FORBIDDEN.getCode(), response.getBody().getCode());
     }
 
     @Test
@@ -49,7 +64,7 @@ class GlobalExceptionHandlerTest {
                 request("/api/admin"));
 
         assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
-        assertEquals("Forbidden", response.getBody().getError());
+        assertEquals(ErrorType.FORBIDDEN.getCode(), response.getBody().getCode());
         assertEquals("Доступ запрещен", response.getBody().getMessage());
         assertFalse(response.getBody().getMessage().contains("ROLE_USER"));
     }
@@ -61,7 +76,17 @@ class GlobalExceptionHandlerTest {
 
         assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
         assertEquals(401, response.getBody().getStatus());
-        assertEquals("Unauthorized", response.getBody().getError());
+        assertEquals(ErrorType.UNAUTHORIZED.getCode(), response.getBody().getCode());
+    }
+
+    @Test
+    void blockedAccount_shouldReturn403WithDedicatedCode() {
+        ResponseEntity<ErrorResponse> response = handler.handleAccountBlockedException(
+                new AccountBlockedException("Аккаунт заблокирован до завтра"), request("/api/posts"));
+
+        assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
+        assertEquals(ErrorType.ACCOUNT_BLOCKED.getCode(), response.getBody().getCode());
+        assertEquals("Аккаунт заблокирован до завтра", response.getBody().getMessage());
     }
 
     @Test
@@ -71,7 +96,7 @@ class GlobalExceptionHandlerTest {
 
         assertEquals(HttpStatus.CONFLICT, response.getStatusCode());
         assertEquals(409, response.getBody().getStatus());
-        assertEquals("Conflict", response.getBody().getError());
+        assertEquals(ErrorType.CONFLICT.getCode(), response.getBody().getCode());
     }
 
     @Test
@@ -88,13 +113,13 @@ class GlobalExceptionHandlerTest {
     @Test
     void methodNotSupported_shouldReturn405() {
         HttpRequestMethodNotSupportedException ex =
-                new HttpRequestMethodNotSupportedException("PATCH", java.util.List.of("GET"));
+                new HttpRequestMethodNotSupportedException("PATCH", List.of("GET"));
 
         ResponseEntity<ErrorResponse> response = handler.handleMethodNotSupported(ex, request("/api/posts"));
 
         assertEquals(HttpStatus.METHOD_NOT_ALLOWED, response.getStatusCode());
         assertEquals(405, response.getBody().getStatus());
-        assertEquals("Method Not Allowed", response.getBody().getError());
+        assertEquals(ErrorType.METHOD_NOT_ALLOWED.getCode(), response.getBody().getCode());
     }
 
     @Test
@@ -106,7 +131,71 @@ class GlobalExceptionHandlerTest {
 
         assertEquals(HttpStatus.UNSUPPORTED_MEDIA_TYPE, response.getStatusCode());
         assertEquals(415, response.getBody().getStatus());
-        assertEquals("Unsupported Media Type", response.getBody().getError());
+        assertEquals(ErrorType.UNSUPPORTED_MEDIA_TYPE.getCode(), response.getBody().getCode());
+    }
+
+    @Test
+    void uploadTooLarge_shouldReturn413() {
+        MaxUploadSizeExceededException ex = new MaxUploadSizeExceededException(10_000_000L);
+
+        ResponseEntity<ErrorResponse> response = handler.handleMaxUploadSizeExceeded(ex, request("/api/images"));
+
+        assertEquals(HttpStatus.PAYLOAD_TOO_LARGE, response.getStatusCode());
+        assertEquals(413, response.getBody().getStatus());
+        assertEquals(ErrorType.PAYLOAD_TOO_LARGE.getCode(), response.getBody().getCode());
+    }
+
+    @Test
+    void validation_shouldReturnFieldErrors() {
+        BeanPropertyBindingResult bindingResult =
+                new BeanPropertyBindingResult(new Object(), "createUserRequest");
+        bindingResult.addError(new FieldError(
+                "createUserRequest", "email", "invalid@", false,
+                new String[]{"Email"}, null, "Некорректный email"));
+        bindingResult.addError(new FieldError(
+                "createUserRequest", "password", "Пароль слишком короткий"));
+
+        ResponseEntity<ErrorResponse> response = handler.handleBindException(
+                new BindException(bindingResult), request("/api/auth/register"));
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertEquals(ErrorType.VALIDATION_FAILED.getCode(), response.getBody().getCode());
+        List<FieldErrorDto> fieldErrors = response.getBody().getFieldErrors();
+        assertEquals(2, fieldErrors.size());
+        assertEquals("email", fieldErrors.get(0).field());
+        assertEquals("Некорректный email", fieldErrors.get(0).message());
+        assertEquals("Email", fieldErrors.get(0).code());
+        assertEquals("password", fieldErrors.get(1).field());
+    }
+
+    @Test
+    void nonValidationError_shouldReturnEmptyFieldErrors() {
+        ResponseEntity<ErrorResponse> response = handler.handleNotFoundException(
+                new NotFoundException("Нет"), request("/api/posts/1"));
+
+        assertNotNull(response.getBody().getFieldErrors());
+        assertTrue(response.getBody().getFieldErrors().isEmpty());
+    }
+
+    @Test
+    void traceId_shouldBeCopiedFromRequestAttribute() {
+        MockHttpServletRequest request = request("/api/posts");
+        request.setAttribute(TraceIds.REQUEST_ATTRIBUTE, "trace-123");
+
+        ResponseEntity<ErrorResponse> response = handler.handleNotFoundException(
+                new NotFoundException("Нет"), request);
+
+        assertEquals("trace-123", response.getBody().getTraceId());
+    }
+
+    @Test
+    void rateLimit_shouldSetRetryAfterAnd429() {
+        ResponseEntity<ErrorResponse> response = handler.handleRateLimitExceeded(
+                new RateLimitExceededException("Слишком часто", 42), request("/api/auth/login"));
+
+        assertEquals(HttpStatus.TOO_MANY_REQUESTS, response.getStatusCode());
+        assertEquals(ErrorType.TOO_MANY_REQUESTS.getCode(), response.getBody().getCode());
+        assertEquals("42", response.getHeaders().getFirst("Retry-After"));
     }
 
     @Test
@@ -142,9 +231,30 @@ class GlobalExceptionHandlerTest {
 
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
         assertEquals(500, response.getBody().getStatus());
+        assertEquals(ErrorType.INTERNAL_SERVER_ERROR.getCode(), response.getBody().getCode());
         assertEquals("Произошла непредвиденная ошибка", response.getBody().getMessage());
         assertFalse(response.getBody().getMessage().contains("PSQLException"));
         assertFalse(response.getBody().getMessage().contains("users"));
-        assertNull(response.getBody().getErrors());
+        assertTrue(response.getBody().getFieldErrors().isEmpty());
+    }
+
+    @Test
+    void filterErrorWriter_shouldMatchMvcEnvelope() throws Exception {
+        MockHttpServletRequest request = request("/api/auth/login");
+        request.setAttribute(TraceIds.REQUEST_ATTRIBUTE, "trace-filter");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        ApiErrorWriter.write(request, response, HttpStatus.UNAUTHORIZED,
+                ErrorType.UNAUTHORIZED, "Требуется авторизация");
+
+        assertEquals(401, response.getStatus());
+        JsonNode body = new ObjectMapper().readTree(response.getContentAsString());
+        assertEquals(401, body.get("status").asInt());
+        assertEquals(ErrorType.UNAUTHORIZED.getCode(), body.get("code").asText());
+        assertEquals("Требуется авторизация", body.get("message").asText());
+        assertEquals("trace-filter", body.get("traceId").asText());
+        assertEquals("/api/auth/login", body.get("path").asText());
+        assertTrue(body.get("fieldErrors").isArray());
+        assertTrue(body.get("fieldErrors").isEmpty());
     }
 }

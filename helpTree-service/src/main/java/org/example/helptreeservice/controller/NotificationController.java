@@ -1,5 +1,7 @@
 package org.example.helptreeservice.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.example.helptreeservice.config.PaginationConfig;
@@ -25,6 +27,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/notifications")
 @RequiredArgsConstructor
+@Tag(name = "Notifications", description = "Уведомления и настройки доставки")
 public class NotificationController {
 
     private final NotificationService notificationService;
@@ -32,6 +35,8 @@ public class NotificationController {
     private final PaginationConfig paginationConfig;
 
     @GetMapping
+    @Operation(summary = "Мои уведомления (постранично)",
+            description = "Пользователь всегда берётся из токена; параметра userId нет.")
     public ResponseEntity<PageResponse<NotificationDto>> getNotifications(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(required = false) Integer size,
@@ -44,26 +49,32 @@ public class NotificationController {
     }
 
     @GetMapping("/unread-count")
+    @Operation(summary = "Количество непрочитанных уведомлений")
     public ResponseEntity<UnreadCountResponse> getUnreadCount() {
         return ResponseEntity.ok(notificationService.getUnreadCount(requireUserId()));
     }
 
     @PostMapping("/{notificationId}/read")
+    @Operation(summary = "Отметить уведомление прочитанным",
+            description = "Идемпотентно.")
     public ResponseEntity<UnreadCountResponse> markRead(@PathVariable Long notificationId) {
         return ResponseEntity.ok(notificationService.markRead(requireUserId(), notificationId));
     }
 
     @PostMapping("/read-all")
+    @Operation(summary = "Отметить все уведомления прочитанными")
     public ResponseEntity<MarkAllReadResponse> markAllRead() {
         return ResponseEntity.ok(notificationService.markAllRead(requireUserId()));
     }
 
     @GetMapping("/preferences")
+    @Operation(summary = "Настройки уведомлений")
     public ResponseEntity<NotificationPreferencesResponse> getPreferences() {
         return ResponseEntity.ok(notificationService.getPreferences(requireUserId()));
     }
 
     @PutMapping("/preferences")
+    @Operation(summary = "Обновить настройки уведомлений")
     public ResponseEntity<NotificationPreferencesResponse> updatePreferences(
             @Valid @RequestBody UpdateNotificationPreferencesRequest request) {
         return ResponseEntity.ok(

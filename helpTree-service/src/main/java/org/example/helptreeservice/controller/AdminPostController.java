@@ -1,5 +1,7 @@
 package org.example.helptreeservice.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.example.helptreeservice.config.PaginationConfig;
@@ -31,6 +33,7 @@ import java.util.Set;
 @RestController
 @RequestMapping("/api/admin/posts")
 @RequiredArgsConstructor
+@Tag(name = "Admin — Moderation", description = "Административные очереди и модерация")
 public class AdminPostController {
 
     private static final Set<String> ALLOWED_SORTS = Set.of(
@@ -41,6 +44,8 @@ public class AdminPostController {
     private final PaginationConfig paginationConfig;
 
     @GetMapping("/deleted")
+    @Operation(summary = "Удалённые заявки (ADMIN, постранично)",
+            description = "Фильтры q/category; sort ограничен whitelist.")
     public ResponseEntity<PageResponse<PostDto>> getDeleted(
             @RequestParam(required = false) String q,
             @RequestParam(required = false) String category,
@@ -54,6 +59,7 @@ public class AdminPostController {
     }
 
     @DeleteMapping("/{id}")
+    @Operation(summary = "Мягко удалить заявку с причиной (ADMIN)")
     public ResponseEntity<Void> delete(@PathVariable Long id,
                                        @RequestParam String reason) {
         Long adminId = requireAdmin();
@@ -62,6 +68,7 @@ public class AdminPostController {
     }
 
     @PostMapping("/{id}/restore")
+    @Operation(summary = "Восстановить удалённую заявку (ADMIN)")
     public ResponseEntity<Void> restore(@PathVariable Long id,
                                         @Valid @RequestBody AdminReasonRequest request) {
         Long adminId = requireAdmin();
@@ -70,6 +77,7 @@ public class AdminPostController {
     }
 
     @PatchMapping("/{id}/status")
+    @Operation(summary = "Сменить статус заявки (ADMIN)")
     public ResponseEntity<PostDto> changeStatus(@PathVariable Long id,
                                                 @Valid @RequestBody AdminPostStatusRequest request) {
         Long adminId = requireAdmin();
@@ -78,6 +86,8 @@ public class AdminPostController {
     }
 
     @PostMapping("/bulk")
+    @Operation(summary = "Массовые операции над заявками (ADMIN)",
+            description = "Частичный успех: результат содержит succeeded/failed по каждому id.")
     public ResponseEntity<AdminBulkResultDto> bulk(@Valid @RequestBody AdminBulkPostsRequest request) {
         Long adminId = requireAdmin();
         PostStatus status = request.getStatus() == null || request.getStatus().isBlank()

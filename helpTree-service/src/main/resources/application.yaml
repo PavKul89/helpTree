@@ -135,6 +135,11 @@ logging:
 
 
 app:
+  api:
+    # Advertised in OpenAPI and the X-API-Version header. A breaking change
+    # moves to /api/v2 while the previous version stays available; see
+    # docs/API_CONTRACT.md.
+    version: ${API_VERSION:1}
   jwtSecret: ${JWT_SECRET:dev-only-secret-not-for-production-64chars-minimum-length!!}
   jwtExpirationMs: 86400000
   auth:

@@ -1,12 +1,15 @@
 package org.example.helptreeservice.security;
 
+import org.example.helptreeservice.enums.ErrorType;
 import org.example.helptreeservice.filter.RateLimiterFilter;
 import org.example.helptreeservice.security.JwtAuthFilter;
+import org.example.helptreeservice.util.ApiErrorWriter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -89,7 +92,7 @@ public class SecurityConfig {
             .addFilterAfter(rateLimiterFilter, JwtAuthFilter.class)
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info", "/actuator/prometheus").permitAll()
-                .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
+                .requestMatchers("/swagger-ui/**", "/v3/api-docs", "/v3/api-docs.yaml", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
                 .requestMatchers("/ws/**").permitAll()
                 .requestMatchers(HttpMethod.POST,
                         "/api/auth/register",
@@ -114,6 +117,16 @@ public class SecurityConfig {
                 // misconfigured controller can never be reached by a non-admin.
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
                 .anyRequest().authenticated()
+            )
+            .exceptionHandling(exceptions -> exceptions
+                // Keep the error envelope identical to @RestControllerAdvice even
+                // when Spring Security rejects the request before MVC runs.
+                .authenticationEntryPoint((request, response, authException) ->
+                        ApiErrorWriter.write(request, response, HttpStatus.UNAUTHORIZED,
+                                ErrorType.UNAUTHORIZED, "Требуется авторизация"))
+                .accessDeniedHandler((request, response, accessDeniedException) ->
+                        ApiErrorWriter.write(request, response, HttpStatus.FORBIDDEN,
+                                ErrorType.FORBIDDEN, "Доступ запрещен"))
             );
         return http.build();
     }

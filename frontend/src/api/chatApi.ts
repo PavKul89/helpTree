@@ -1,12 +1,6 @@
 import api from './axios';
+import type { PageResponse } from './pagination';
 import type { Chat, Message, CreateChatRequest } from '../types';
-
-interface MessagesResponse {
-  content: Message[];
-  totalElements: number;
-  totalPages: number;
-  number: number;
-}
 
 export interface MessagesCursorResponse {
   items: Message[];
@@ -29,8 +23,8 @@ export const chatApi = {
     await api.delete(`/api/chats/${chatId}`);
   },
 
-  getMessages: async (chatId: number, page = 0, size = 20): Promise<MessagesResponse> => {
-    const response = await api.get<MessagesResponse>(`/api/chats/${chatId}/messages`, {
+  getMessages: async (chatId: number, page = 0, size = 20): Promise<PageResponse<Message>> => {
+    const response = await api.get<PageResponse<Message>>(`/api/chats/${chatId}/messages`, {
       params: { page, size },
     });
     return response.data;

@@ -1,5 +1,7 @@
 package org.example.helptreeservice.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.example.helptreeservice.config.PaginationConfig;
@@ -48,6 +50,7 @@ import java.time.LocalDateTime;
 @RestController
 @RequestMapping("/api/admin/reports")
 @RequiredArgsConstructor
+@Tag(name = "Admin — Moderation", description = "Административные очереди и модерация")
 public class AdminReportController {
 
     private final AuthorizationService authService;
@@ -55,6 +58,8 @@ public class AdminReportController {
     private final PaginationConfig paginationConfig;
 
     @GetMapping
+    @Operation(summary = "Очередь жалоб (ADMIN, постранично)",
+            description = "Фильтры по статусу, типу цели, причине, приоритету и исполнителю.")
     public ResponseEntity<PageResponse<AdminReportResponse>> getReports(
             @RequestParam(required = false) ReportStatus status,
             @RequestParam(required = false) ReportTargetType targetType,
@@ -77,6 +82,7 @@ public class AdminReportController {
     }
 
     @GetMapping("/sla")
+    @Operation(summary = "SLA модерации (ADMIN)")
     public ResponseEntity<org.example.helptreeservice.dto.reports.ModerationSlaDto> getSla(
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
@@ -87,12 +93,14 @@ public class AdminReportController {
     }
 
     @GetMapping("/{reportId}")
+    @Operation(summary = "Детали жалобы (ADMIN)")
     public ResponseEntity<AdminReportDetailsResponse> getReport(@PathVariable Long reportId) {
         requireAdmin();
         return ResponseEntity.ok(reportService.getAdminReport(reportId));
     }
 
     @PatchMapping("/{reportId}")
+    @Operation(summary = "Изменить приоритет/заметку жалобы (ADMIN)")
     public ResponseEntity<AdminReportResponse> updateReport(
             @PathVariable Long reportId,
             @Valid @RequestBody UpdateReportRequest request) {
@@ -101,6 +109,7 @@ public class AdminReportController {
     }
 
     @PostMapping("/{reportId}/assign")
+    @Operation(summary = "Назначить модератора (ADMIN)")
     public ResponseEntity<AdminReportResponse> assignReport(
             @PathVariable Long reportId,
             @RequestBody(required = false) AssignReportRequest request) {
@@ -109,6 +118,8 @@ public class AdminReportController {
     }
 
     @PostMapping("/{reportId}/actions")
+    @Operation(summary = "Применить решение по жалобе (ADMIN)",
+            description = "Основной endpoint модерации: санкция и закрытие жалобы выполняются атомарно.")
     public ResponseEntity<ModerationActionResponse> applyAction(
             @PathVariable Long reportId,
             @Valid @RequestBody ModerationActionRequest request) {
@@ -121,6 +132,9 @@ public class AdminReportController {
      * {@code POST /api/admin/reports/{id}/actions}.
      */
     @PostMapping("/{reportId}/resolve")
+    @Operation(summary = "Закрыть жалобу (legacy)",
+            description = "Устаревший wrapper над POST /{reportId}/actions; новые клиенты должны использовать actions.",
+            deprecated = true)
     public ResponseEntity<ReportResponse> resolveReport(
             @PathVariable Long reportId,
             @Valid @RequestBody ResolveReportRequest request) {

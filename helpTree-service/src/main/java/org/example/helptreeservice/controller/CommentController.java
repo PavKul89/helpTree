@@ -1,5 +1,8 @@
 package org.example.helptreeservice.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,6 +25,7 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/posts/{postId}/comments")
 @RequiredArgsConstructor
 @Slf4j
+@Tag(name = "Comments", description = "Комментарии к заявкам")
 public class CommentController {
 
     private final CommentService commentService;
@@ -29,6 +33,7 @@ public class CommentController {
     private final AuthorizationService authorizationService;
 
     @PostMapping
+    @Operation(summary = "Добавить комментарий к заявке")
     public ResponseEntity<CommentActionResponse> createComment(
             @PathVariable Long postId,
             @Valid @RequestBody CreateCommentRequest request) {
@@ -38,6 +43,9 @@ public class CommentController {
     }
 
     @GetMapping
+    @Operation(summary = "Комментарии к заявке (постранично)",
+            description = "Собственный контракт CommentPageResponse с полем content и счётчиками.")
+    @SecurityRequirements
     public ResponseEntity<CommentPageResponse> getComments(
             @PathVariable Long postId,
             @RequestParam(defaultValue = "0") int page,
@@ -47,6 +55,8 @@ public class CommentController {
     }
 
     @DeleteMapping("/{commentId}")
+    @Operation(summary = "Удалить комментарий",
+            description = "Автор или ADMIN. Идемпотентное представление результата.")
     public ResponseEntity<CommentActionResponse> deleteComment(
             @PathVariable Long postId,
             @PathVariable Long commentId) {
@@ -56,6 +66,7 @@ public class CommentController {
     }
 
     @PostMapping("/{commentId}/reports")
+    @Operation(summary = "Пожаловаться на комментарий")
     public ResponseEntity<ReportResponse> reportComment(
             @PathVariable Long postId,
             @PathVariable Long commentId,

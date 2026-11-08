@@ -2,6 +2,9 @@ package org.example.helptreeservice.controller;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.helptreeservice.dto.auth.AuthResponse;
@@ -41,6 +44,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
+@Tag(name = "Auth", description = "Регистрация, вход, сессии и восстановление доступа")
 public class AuthController {
 
     private final AuthService authService;
@@ -48,12 +52,18 @@ public class AuthController {
     private final ClientInfoResolver clientInfoResolver;
 
     @PostMapping("/register")
+    @Operation(summary = "Зарегистрировать аккаунт",
+            description = "Создаёт пользователя и сразу возвращает пару access/refresh токенов.")
+    @SecurityRequirements
     public ResponseEntity<AuthResponse> register(@Valid @RequestBody CreateUserRequest request) {
         AuthResponse response = authService.register(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @PostMapping("/login")
+    @Operation(summary = "Войти по email и паролю",
+            description = "Возвращает access/refresh токены. Защищено распределённым rate limit.")
+    @SecurityRequirements
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request,
                                               HttpServletRequest httpRequest) {
         AuthResponse response = authService.login(
@@ -64,6 +74,9 @@ public class AuthController {
     }
 
     @PostMapping("/refresh")
+    @Operation(summary = "Обновить access token",
+            description = "Принимает refresh token и возвращает новую пару токенов.")
+    @SecurityRequirements
     public ResponseEntity<AuthResponse> refresh(@Valid @RequestBody RefreshTokenRequest request,
                                                 HttpServletRequest httpRequest) {
         AuthResponse response = authService.refresh(
@@ -74,6 +87,7 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
+    @Operation(summary = "Завершить текущую сессию")
     public ResponseEntity<Void> logout(@RequestBody(required = false) LogoutRequest request) {
         UserContext user = requireCurrentUser();
         UUID sessionId = requireCurrentSession();
@@ -83,6 +97,7 @@ public class AuthController {
     }
 
     @PostMapping("/logout-all")
+    @Operation(summary = "Завершить все сессии пользователя")
     public ResponseEntity<Void> logoutAll() {
         UserContext user = requireCurrentUser();
         authService.logoutAll(user.getUserId());
@@ -90,6 +105,7 @@ public class AuthController {
     }
 
     @GetMapping("/sessions")
+    @Operation(summary = "Список активных сессий")
     public ResponseEntity<List<SessionDto>> listSessions() {
         UserContext user = requireCurrentUser();
         return ResponseEntity.ok(authService.listSessions(user.getUserId(), requireCurrentSession()));
@@ -126,6 +142,9 @@ public class AuthController {
     }
 
     @PostMapping("/password/reset/request")
+    @Operation(summary = "Запросить письмо для сброса пароля",
+            description = "Ответ всегда одинаковый и не раскрывает, существует ли аккаунт.")
+    @SecurityRequirements
     public ResponseEntity<Map<String, String>> requestPasswordReset(
             @Valid @RequestBody PasswordResetRequest request) {
         authService.requestPasswordReset(request.getEmail());
@@ -135,6 +154,8 @@ public class AuthController {
     }
 
     @PostMapping("/password/reset/confirm")
+    @Operation(summary = "Подтвердить сброс пароля")
+    @SecurityRequirements
     public ResponseEntity<Void> confirmPasswordReset(
             @Valid @RequestBody PasswordResetConfirmRequest request) {
         authService.confirmPasswordReset(request.getToken(), request.getNewPassword());
@@ -149,6 +170,8 @@ public class AuthController {
     }
 
     @PostMapping("/email/verification/confirm")
+    @Operation(summary = "Подтвердить email по токену")
+    @SecurityRequirements
     public ResponseEntity<Void> confirmEmailVerification(
             @Valid @RequestBody EmailVerificationConfirmRequest request) {
         authService.confirmEmailVerification(request.getToken());
@@ -163,6 +186,8 @@ public class AuthController {
     }
 
     @PostMapping("/email/change/confirm")
+    @Operation(summary = "Подтвердить смену email по токену")
+    @SecurityRequirements
     public ResponseEntity<Void> confirmEmailChange(@Valid @RequestBody EmailChangeConfirmRequest request) {
         authService.confirmEmailChange(request.getToken());
         return ResponseEntity.noContent().build();

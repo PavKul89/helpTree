@@ -1,25 +1,24 @@
 package org.example.helptreeservice.filter;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.example.helptreeservice.config.RateLimitConfig;
+import org.example.helptreeservice.enums.ErrorType;
 import org.example.helptreeservice.security.ClientInfoResolver;
 import org.example.helptreeservice.service.ratelimit.DistributedRateLimiter;
 import org.example.helptreeservice.service.ratelimit.RateLimitDecision;
+import org.example.helptreeservice.util.ApiErrorWriter;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.time.Duration;
 import java.util.Locale;
-import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
@@ -47,9 +46,6 @@ public class RateLimiterFilter extends OncePerRequestFilter {
     private final RateLimitConfig config;
     private final DistributedRateLimiter rateLimiter;
     private final ClientInfoResolver clientInfoResolver;
-    // The application does not expose a shared ObjectMapper bean; the JWT filter
-    // uses the same local instance so error bodies stay independent of MVC config.
-    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public RateLimiterFilter(RateLimitConfig config,
                              DistributedRateLimiter rateLimiter,
@@ -103,17 +99,11 @@ public class RateLimiterFilter extends OncePerRequestFilter {
                 rule.route(), ip, rule.limit());
 
         response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
-        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setHeader(HttpHeaders.RETRY_AFTER, String.valueOf(decision.retryAfterSeconds()));
         response.setHeader(HttpHeaders.CACHE_CONTROL, "no-store");
 
-        String body = objectMapper.writeValueAsString(Map.of(
-                "status", HttpStatus.TOO_MANY_REQUESTS.value(),
-                "error", HttpStatus.TOO_MANY_REQUESTS.getReasonPhrase(),
-                "message", "Превышен лимит запросов. Попробуйте позже.",
-                "path", path
-        ));
-        response.getWriter().write(body);
+        ApiErrorWriter.write(request, response, HttpStatus.TOO_MANY_REQUESTS,
+                ErrorType.TOO_MANY_REQUESTS, "Превышен лимит запросов. Попробуйте позже.");
     }
 
     private boolean shouldSkip(HttpServletRequest request) {

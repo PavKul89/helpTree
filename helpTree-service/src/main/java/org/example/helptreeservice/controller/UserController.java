@@ -1,5 +1,8 @@
 package org.example.helptreeservice.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.extern.slf4j.Slf4j;
 import org.example.helptreeservice.config.EconomyConfig;
 import org.example.helptreeservice.config.PaginationConfig;
@@ -51,6 +54,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/users")
 @RequiredArgsConstructor
+@Tag(name = "Users & Blocks", description = "Профили, справочник пользователей и пользовательские блокировки")
 public class UserController {
 
     private final UserService userService;
@@ -70,6 +74,8 @@ public class UserController {
     }
 
     @GetMapping
+    @Operation(summary = "Административный справочник пользователей",
+            description = "Только ADMIN. Постраничный список с фильтрами по роли, статусу и блокировке.")
     public ResponseEntity<PageResponse<UserDto>> getAllUsers(
             @RequestParam(required = false) Integer page,
             @RequestParam(required = false) Integer size,
@@ -89,6 +95,9 @@ public class UserController {
     }
 
     @GetMapping("/public")
+    @Operation(summary = "Публичный справочник пользователей",
+            description = "Доступен без токена; приватные поля скрыты.")
+    @SecurityRequirements
     public ResponseEntity<PageResponse<UserPublicDto>> getAllUsersPublic(
             @RequestParam(required = false) Integer page,
             @RequestParam(required = false) Integer size,
@@ -105,6 +114,7 @@ public class UserController {
     }
 
     @GetMapping("/me")
+    @Operation(summary = "Текущий профиль")
     public ResponseEntity<UserDto> getCurrentUser() {
         UserContext user = authService.getCurrentUser();
         if (user == null) {
@@ -114,6 +124,8 @@ public class UserController {
     }
 
     @GetMapping("/{id}/public")
+    @Operation(summary = "Публичный профиль пользователя")
+    @SecurityRequirements
     public ResponseEntity<UserPublicDto> getUserPublic(@PathVariable Long id) {
         UserContext viewer = authService.getCurrentUser();
         if (viewer != null && !viewer.getUserId().equals(id)) {
@@ -129,6 +141,9 @@ public class UserController {
      * idempotent and update the existing pair instead of failing.
      */
     @PostMapping("/{id}/block")
+    @Operation(summary = "Заблокировать пользователя",
+            description = "Создаёт или обновляет блокировку вызывающего против указанного пользователя. "
+                    + "Идемпотентно; пустое тело означает бессрочную блокировку ALL.")
     public ResponseEntity<UserBlockResponse> blockUser(
             @PathVariable Long id,
             @Valid @RequestBody(required = false) BlockUserRequest request) {
@@ -138,6 +153,8 @@ public class UserController {
 
     /** Removes the caller's block. A missing block is not an error (idempotent). */
     @DeleteMapping("/{id}/block")
+    @Operation(summary = "Снять блокировку пользователя",
+            description = "Идемпотентно: отсутствующая блокировка не является ошибкой.")
     public ResponseEntity<Void> unblockUser(@PathVariable Long id) {
         UserContext viewer = requireCurrentUser();
         userBlockService.unblockUser(viewer.getUserId(), id);
@@ -146,6 +163,8 @@ public class UserController {
 
     /** Users the caller currently blocks. Expired rows are not returned. */
     @GetMapping("/me/blocked")
+    @Operation(summary = "Список заблокированных пользователей",
+            description = "Возвращает только активные (не истёкшие) блокировки вызывающего.")
     public ResponseEntity<List<BlockedUserResponse>> getMyBlockedUsers() {
         UserContext viewer = requireCurrentUser();
         return ResponseEntity.ok(userBlockService.getBlockedUsers(viewer.getUserId()));
@@ -153,6 +172,7 @@ public class UserController {
 
     /** Viewer-specific block state used to render the profile controls. */
     @GetMapping("/{id}/block-status")
+    @Operation(summary = "Статус блокировки для текущего зрителя")
     public ResponseEntity<UserBlockStatusResponse> getBlockStatus(@PathVariable Long id) {
         UserContext viewer = requireCurrentUser();
         return ResponseEntity.ok(userBlockService.getBlockStatus(viewer.getUserId(), id));
@@ -292,7 +312,9 @@ public class UserController {
     }
 
     @GetMapping("/{id}/wallet/transactions")
-    public ResponseEntity<Page<CoinTransactionDto>> getTransactions(
+    @Operation(summary = "История операций кошелька",
+            description = "Доступно владельцу аккаунта и ADMIN. Постраничный формат PageResponse.")
+    public ResponseEntity<PageResponse<CoinTransactionDto>> getTransactions(
             @PathVariable Long id,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
@@ -303,7 +325,8 @@ public class UserController {
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
         requireOwnerOrAdmin(id, "Вы можете просматривать только свои транзакции");
-        return ResponseEntity.ok(walletService.getTransactions(id, page, size, type, from, to, direction));
+        return ResponseEntity.ok(PageResponse.from(
+                walletService.getTransactions(id, page, size, type, from, to, direction)));
     }
 
     @GetMapping("/{id}/wallet/pricing")

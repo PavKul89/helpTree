@@ -1,17 +1,19 @@
 package org.example.helptreeservice.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.example.helptreeservice.config.PaginationConfig;
 import org.example.helptreeservice.dto.admin.AdminBulkResultDto;
 import org.example.helptreeservice.dto.admin.AdminBulkReviewsRequest;
+import org.example.helptreeservice.dto.common.PageResponse;
 import org.example.helptreeservice.dto.reviews.ReviewResponse;
 import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.ForbiddenException;
 import org.example.helptreeservice.exception.UnauthorizedException;
 import org.example.helptreeservice.service.AuthorizationService;
 import org.example.helptreeservice.service.ReviewService;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
+import org.example.helptreeservice.util.PageRequests;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -38,6 +40,7 @@ import java.time.LocalDateTime;
 @RestController
 @RequestMapping("/api/admin/reviews")
 @RequiredArgsConstructor
+@Tag(name = "Admin — Moderation", description = "Административные очереди и модерация")
 public class AdminReviewController {
 
     private final AuthorizationService authService;
@@ -45,7 +48,9 @@ public class AdminReviewController {
     private final PaginationConfig paginationConfig;
 
     @GetMapping
-    public ResponseEntity<Page<ReviewResponse>> getReviews(
+    @Operation(summary = "Все отзывы (ADMIN, постранично)",
+            description = "Фильтры по автору, оценке и диапазону дат. Сортировка по createdAt DESC.")
+    public ResponseEntity<PageResponse<ReviewResponse>> getReviews(
             @RequestParam(required = false) Long userId,
             @RequestParam(required = false) Integer rating,
             @RequestParam(required = false)
@@ -63,11 +68,14 @@ public class AdminReviewController {
             throw new BadRequestException("Параметр from не может быть позже параметра to");
         }
 
-        Pageable pageable = resolvePageable(page, size);
-        return ResponseEntity.ok(reviewService.getAdminReviews(userId, rating, from, to, pageable));
+        Pageable pageable = PageRequests.of(page, size, paginationConfig,
+                Sort.by(Sort.Direction.DESC, "createdAt"));
+        return ResponseEntity.ok(PageResponse.from(
+                reviewService.getAdminReviews(userId, rating, from, to, pageable)));
     }
 
     @DeleteMapping("/{id}")
+    @Operation(summary = "Удалить отзыв с причиной (ADMIN)")
     public ResponseEntity<Void> delete(@PathVariable Long id,
                                        @RequestParam String reason) {
         Long adminId = requireAdmin();
@@ -76,6 +84,8 @@ public class AdminReviewController {
     }
 
     @PostMapping("/bulk")
+    @Operation(summary = "Массовое удаление отзывов (ADMIN)",
+            description = "Частичный успех: результат содержит succeeded/failed по каждому id.")
     public ResponseEntity<AdminBulkResultDto> bulkDelete(
             @Valid @RequestBody AdminBulkReviewsRequest request) {
         Long adminId = requireAdmin();
@@ -96,16 +106,5 @@ public class AdminReviewController {
             throw new UnauthorizedException("Вы не авторизованы");
         }
         return current.getUserId();
-    }
-
-    private Pageable resolvePageable(int page, int size) {
-        if (page < 0) {
-            throw new BadRequestException("Параметр page не может быть отрицательным");
-        }
-        if (size < 1) {
-            throw new BadRequestException("Параметр size должен быть положительным");
-        }
-        int resolvedSize = Math.min(size, paginationConfig.getMaxPageSize());
-        return PageRequest.of(page, resolvedSize, Sort.by(Sort.Direction.DESC, "createdAt"));
     }
 }

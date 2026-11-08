@@ -1,5 +1,7 @@
 package org.example.helptreeservice.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.example.helptreeservice.config.PaginationConfig;
 import org.example.helptreeservice.dto.admin.AdminAuditLogDto;
@@ -33,6 +35,7 @@ import java.util.Set;
 @RestController
 @RequestMapping("/api/admin/audit")
 @RequiredArgsConstructor
+@Tag(name = "Admin — Wallet & Audit", description = "Калибровка кошельков и аудит действий")
 public class AdminAuditController {
 
     private static final Set<String> ALLOWED_SORTS = Set.of(
@@ -43,6 +46,8 @@ public class AdminAuditController {
     private final PaginationConfig paginationConfig;
 
     @GetMapping
+    @Operation(summary = "Журнал административных действий (ADMIN, постранично)",
+            description = "Фильтры по администратору, действию, сущности и датам; sort ограничен whitelist.")
     public ResponseEntity<PageResponse<AdminAuditLogDto>> search(
             @RequestParam(required = false) Long adminId,
             @RequestParam(required = false) String action,
@@ -64,6 +69,7 @@ public class AdminAuditController {
     }
 
     @GetMapping("/stats")
+    @Operation(summary = "Агрегированная статистика аудита (ADMIN)")
     public ResponseEntity<AdminAuditStatsDto> stats(
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
@@ -74,6 +80,8 @@ public class AdminAuditController {
     }
 
     @GetMapping(value = "/export", produces = "text/csv")
+    @Operation(summary = "Экспорт аудита в CSV (ADMIN)",
+            description = "Возвращает text/csv с BOM для корректного открытия в Excel.")
     public ResponseEntity<byte[]> export(
             @RequestParam(required = false) Long adminId,
             @RequestParam(required = false) String action,
