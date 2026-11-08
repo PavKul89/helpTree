@@ -32,6 +32,9 @@ import { AdminUserDetailPage } from './pages/admin/AdminUserDetailPage';
 import { AdminRequestsPage } from './pages/admin/AdminRequestsPage';
 import { AdminReviewsPage } from './pages/admin/AdminReviewsPage';
 import { AdminReportsPage } from './pages/admin/AdminReportsPage';
+import { AdminAuditPage } from './pages/admin/AdminAuditPage';
+import { AdminSlaPage } from './pages/admin/AdminSlaPage';
+import { AdminWalletPage } from './pages/admin/AdminWalletPage';
 
 // Leaflet and the map page are loaded only when /map is opened.
 const MapPage = lazy(() => import('./pages/MapPage'));
@@ -187,6 +190,9 @@ function AppContent() {
           <Route path="requests" element={<AdminRequestsPage />} />
           <Route path="reports" element={<AdminReportsPage />} />
           <Route path="reviews" element={<AdminReviewsPage />} />
+          <Route path="audit" element={<AdminAuditPage />} />
+          <Route path="sla" element={<AdminSlaPage />} />
+          <Route path="wallet" element={<AdminWalletPage />} />
           <Route path="*" element={<Navigate to="/admin" replace />} />
         </Route>
       </Routes>

@@ -10,6 +10,7 @@ import org.example.helptreeservice.dto.wallet.WalletPricingDto;
 import org.example.helptreeservice.entity.AdminCoinAudit;
 import org.example.helptreeservice.entity.CoinTransaction;
 import org.example.helptreeservice.entity.User;
+import org.example.helptreeservice.enums.AdminAuditAction;
 import org.example.helptreeservice.enums.NotificationType;
 import org.example.helptreeservice.enums.TransactionDirection;
 import org.example.helptreeservice.enums.TransactionType;
@@ -71,6 +72,7 @@ public class WalletService {
     private final PaginationConfig paginationConfig;
     private final PublicProfileCache publicProfileCache;
     private final NotificationService notificationService;
+    private final AdminAuditService adminAuditService;
 
     // ------------------------------------------------------------------ read
 
@@ -477,7 +479,7 @@ public class WalletService {
                 user, amount, TransactionType.ADMIN_BONUS, description, null, null, ref);
 
         if (applied.applied()) {
-            adminAuditRepository.save(AdminCoinAudit.builder()
+            AdminCoinAudit coinAudit = adminAuditRepository.save(AdminCoinAudit.builder()
                     .adminId(adminId)
                     .userId(userId)
                     .amount(amount)
@@ -486,6 +488,15 @@ public class WalletService {
                     .reason(normalizedReason)
                     .transactionId(applied.transaction().getId())
                     .build());
+
+            adminAuditService.record(adminId, AdminAuditAction.COINS_ADJUSTED,
+                    AdminAuditService.ENTITY_WALLET, userId,
+                    Map.of("balance", balanceBefore),
+                    Map.of("balance", currentBalance(user),
+                            "delta", amount,
+                            "transactionId", applied.transaction().getId(),
+                            "coinAuditId", coinAudit.getId()),
+                    normalizedReason);
         }
 
         log.info("Админ {} начислил {} монет пользователю {} (причина: {})",

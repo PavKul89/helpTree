@@ -79,6 +79,14 @@ export const AdminUsersPage: React.FC = () => {
   const [restoring, setRestoring] = useState(false);
   const [restoreError, setRestoreError] = useState<string | null>(null);
 
+  const [selected, setSelected] = useState<number[]>([]);
+  const [bulkAction, setBulkAction] = useState<'DELETE' | 'RESTORE' | 'CHANGE_ROLE'>('DELETE');
+  const [bulkRole, setBulkRole] = useState<'USER' | 'ADMIN'>('USER');
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkReason, setBulkReason] = useState('');
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkError, setBulkError] = useState<string | null>(null);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -122,6 +130,10 @@ export const AdminUsersPage: React.FC = () => {
   useEffect(() => {
     setPage(0);
   }, [deferredSearch, roleFilter, statusFilter, sort, scope]);
+
+  useEffect(() => {
+    setSelected([]);
+  }, [reloadKey, page, deferredSearch, roleFilter, statusFilter, sort, scope]);
 
   useEffect(() => {
     if (page > totalPages - 1) setPage(totalPages - 1);
@@ -176,6 +188,62 @@ export const AdminUsersPage: React.FC = () => {
     search.trim().length > 0 || roleFilter !== 'ALL' || statusFilter !== 'ALL' || sort !== 'created-desc';
 
   const isDeletedScope = scope === 'deleted';
+
+  const toggleSelected = (id: number) => {
+    setSelected((previous) =>
+      previous.includes(id) ? previous.filter((value) => value !== id) : [...previous, id]
+    );
+  };
+
+  const selectableUsers = users.filter((user) => !(isDeletedScope && user.anonymizedAt));
+  const allSelected = Boolean(
+    selectableUsers.length > 0 && selected.length === selectableUsers.length
+  );
+
+  const toggleAll = () => {
+    setSelected(allSelected ? [] : selectableUsers.map((user) => user.id));
+  };
+
+  const openBulkDialog = () => {
+    setBulkError(null);
+    setBulkReason('');
+    setBulkAction(isDeletedScope ? 'RESTORE' : 'DELETE');
+    setBulkRole('USER');
+    setBulkOpen(true);
+  };
+
+  const handleBulk = async () => {
+    if (bulkBusy || !bulkReason.trim() || selected.length === 0) return;
+    setBulkBusy(true);
+    setBulkError(null);
+    try {
+      const result = await adminApi.bulkUsers({
+        action: bulkAction,
+        ids: selected,
+        role: bulkAction === 'CHANGE_ROLE' ? bulkRole : undefined,
+        reason: bulkReason.trim(),
+      });
+      const label =
+        bulkAction === 'DELETE'
+          ? 'удалено'
+          : bulkAction === 'RESTORE'
+            ? 'восстановлено'
+            : 'изменено';
+      showToast(
+        `Массовая операция: ${result.succeeded} из ${result.requested} ${label}.` +
+          (result.failed > 0 ? ` Ошибок: ${result.failed}.` : ''),
+        result.failed > 0 ? 'info' : 'success'
+      );
+      setBulkOpen(false);
+      setBulkReason('');
+      setSelected([]);
+      setReloadKey((value) => value + 1);
+    } catch (bulkFailure) {
+      setBulkError(getApiErrorMessage(bulkFailure, 'Не удалось выполнить массовую операцию.'));
+    } finally {
+      setBulkBusy(false);
+    }
+  };
 
   return (
     <div className="admin-stack">
@@ -352,148 +420,202 @@ export const AdminUsersPage: React.FC = () => {
           }
         />
       ) : (
-        <section className="admin-section admin-section--flush" aria-labelledby="admin-users-table-title">
-          <div className="admin-table-heading">
-            <h2 id="admin-users-table-title" className="admin-visually-hidden">
-              Пользователи
-            </h2>
-            <span className="admin-table-hint">Страница {page + 1} из {totalPages}</span>
+        <>
+          {selected.length > 0 && (
+            <div className="admin-toolbar-card admin-bulk-bar">
+              <span>
+                Выбрано <strong>{selected.length}</strong>
+              </span>
+              <div className="admin-toolbar-actions">
+                <button
+                  type="button"
+                  className="admin-button admin-button--ghost admin-button--compact"
+                  onClick={() => setSelected([])}
+                >
+                  Снять выбор
+                </button>
+                <button
+                  type="button"
+                  className="admin-button admin-button--primary admin-button--compact"
+                  onClick={openBulkDialog}
+                >
+                  Массовая операция
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="admin-bulk-select-all">
+            <label>
+              <input
+                type="checkbox"
+                checked={allSelected}
+                onChange={toggleAll}
+                disabled={selectableUsers.length === 0}
+              />
+              Выбрать все на странице
+              {isDeletedScope && selectableUsers.length !== users.length && (
+                <span className="admin-muted"> (анонимизированные недоступны)</span>
+              )}
+            </label>
           </div>
 
-          <div className="admin-table-wrap">
-            <table className="admin-table">
-              <thead>
-                <tr>
-                  <th scope="col">Пользователь</th>
-                  <th scope="col">Роль</th>
-                  <th scope="col">Статус</th>
-                  <th scope="col" className="admin-col-optional">Рейтинг</th>
-                  <th scope="col" className="admin-col-optional">Помощь / долг</th>
-                  <th scope="col" className="admin-col-optional">HC</th>
-                  <th scope="col" className="admin-col-optional">Город</th>
-                  <th scope="col" className="admin-col-wide">
-                    {isDeletedScope ? 'Удалён' : 'Создан'}
-                  </th>
-                  <th scope="col">
-                    <span className="admin-visually-hidden">Действия</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((user) => {
-                  const blocked = isUserBlocked(user);
-                  const anonymized = Boolean(user.anonymizedAt);
-                  return (
-                    <tr key={user.id}>
-                      <td>
-                        <div className="admin-user-cell">
-                          <AdminAvatar name={user.name} avatarUrl={user.avatarUrl} size="small" />
-                          <div>
-                            <Link to={`/admin/users/${user.id}`} className="admin-user-link">
-                              {user.name}
-                            </Link>
-                            <span>{user.email}</span>
+          <section className="admin-section admin-section--flush" aria-labelledby="admin-users-table-title">
+            <div className="admin-table-heading">
+              <h2 id="admin-users-table-title" className="admin-visually-hidden">
+                Пользователи
+              </h2>
+              <span className="admin-table-hint">Страница {page + 1} из {totalPages}</span>
+            </div>
+
+            <div className="admin-table-wrap">
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th scope="col">
+                      <span className="admin-visually-hidden">Выбор</span>
+                    </th>
+                    <th scope="col">Пользователь</th>
+                    <th scope="col">Роль</th>
+                    <th scope="col">Статус</th>
+                    <th scope="col" className="admin-col-optional">Рейтинг</th>
+                    <th scope="col" className="admin-col-optional">Помощь / долг</th>
+                    <th scope="col" className="admin-col-optional">HC</th>
+                    <th scope="col" className="admin-col-optional">Город</th>
+                    <th scope="col" className="admin-col-wide">
+                      {isDeletedScope ? 'Удалён' : 'Создан'}
+                    </th>
+                    <th scope="col">
+                      <span className="admin-visually-hidden">Действия</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.map((user) => {
+                    const blocked = isUserBlocked(user);
+                    const anonymized = Boolean(user.anonymizedAt);
+                    const selectable = !(isDeletedScope && anonymized);
+                    return (
+                      <tr key={user.id}>
+                        <td>
+                          <input
+                            type="checkbox"
+                            checked={selected.includes(user.id)}
+                            onChange={() => toggleSelected(user.id)}
+                            disabled={!selectable}
+                            aria-label={`Выбрать пользователя ${user.name}`}
+                          />
+                        </td>
+                        <td>
+                          <div className="admin-user-cell">
+                            <AdminAvatar name={user.name} avatarUrl={user.avatarUrl} size="small" />
+                            <div>
+                              <Link to={`/admin/users/${user.id}`} className="admin-user-link">
+                                {user.name}
+                              </Link>
+                              <span>{user.email}</span>
+                            </div>
                           </div>
-                        </div>
-                      </td>
-                      <td>
-                        <span className={`admin-badge ${user.role === 'ADMIN' ? 'admin-badge--lime' : 'admin-badge--neutral'}`}>
-                          {user.role}
-                        </span>
-                      </td>
-                      <td>
-                        <div className="admin-badge-row">
-                          <span className={`admin-badge admin-badge--status-${user.status.toLowerCase()}`}>
-                            {USER_STATUS_LABELS[user.status] ?? user.status}
+                        </td>
+                        <td>
+                          <span className={`admin-badge ${user.role === 'ADMIN' ? 'admin-badge--lime' : 'admin-badge--neutral'}`}>
+                            {user.role}
                           </span>
-                          {blocked && (
-                            <span className="admin-badge admin-badge--danger" title="Аккаунт заблокирован">
-                              <Ban size={11} aria-hidden="true" />
-                              блок
+                        </td>
+                        <td>
+                          <div className="admin-badge-row">
+                            <span className={`admin-badge admin-badge--status-${user.status.toLowerCase()}`}>
+                              {USER_STATUS_LABELS[user.status] ?? user.status}
                             </span>
-                          )}
-                          {user.deleted && (
-                            <span className="admin-badge admin-badge--danger" title="Аккаунт мягко удалён">
-                              <Archive size={11} aria-hidden="true" />
-                              удалён
-                            </span>
-                          )}
-                          {anonymized && (
-                            <span className="admin-badge admin-badge--neutral" title="Персональные данные анонимизированы">
-                              анонимизирован
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="admin-col-optional">{formatRating(user.rating)}</td>
-                      <td className="admin-col-optional">
-                        {formatNumber(user.helpedCount)} / {formatNumber(user.debtCount)}
-                      </td>
-                      <td className="admin-col-optional">{formatNumber(user.helpCoins)}</td>
-                      <td className="admin-col-optional">{user.city || '—'}</td>
-                      <td className="admin-col-wide">
-                        {formatDateTime(isDeletedScope ? user.deletedAt ?? user.createdAt : user.createdAt)}
-                      </td>
-                      <td>
-                        <div className="admin-row-actions">
-                          <Link
-                            to={`/admin/users/${user.id}`}
-                            className="admin-icon-btn"
-                            aria-label={`Открыть пользователя ${user.name}`}
-                            title="Открыть"
-                          >
-                            <ChevronRight size={17} aria-hidden="true" />
-                          </Link>
-                          {isDeletedScope ? (
-                            <button
-                              type="button"
+                            {blocked && (
+                              <span className="admin-badge admin-badge--danger" title="Аккаунт заблокирован">
+                                <Ban size={11} aria-hidden="true" />
+                                блок
+                              </span>
+                            )}
+                            {user.deleted && (
+                              <span className="admin-badge admin-badge--danger" title="Аккаунт мягко удалён">
+                                <Archive size={11} aria-hidden="true" />
+                                удалён
+                              </span>
+                            )}
+                            {anonymized && (
+                              <span className="admin-badge admin-badge--neutral" title="Персональные данные анонимизированы">
+                                анонимизирован
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="admin-col-optional">{formatRating(user.rating)}</td>
+                        <td className="admin-col-optional">
+                          {formatNumber(user.helpedCount)} / {formatNumber(user.debtCount)}
+                        </td>
+                        <td className="admin-col-optional">{formatNumber(user.helpCoins)}</td>
+                        <td className="admin-col-optional">{user.city || '—'}</td>
+                        <td className="admin-col-wide">
+                          {formatDateTime(isDeletedScope ? user.deletedAt ?? user.createdAt : user.createdAt)}
+                        </td>
+                        <td>
+                          <div className="admin-row-actions">
+                            <Link
+                              to={`/admin/users/${user.id}`}
                               className="admin-icon-btn"
-                              onClick={() => {
-                                setRestoreError(null);
-                                setRestoreReason('');
-                                setRestoreTarget(user);
-                              }}
-                              disabled={anonymized}
-                              aria-label={`Восстановить пользователя ${user.name}`}
-                              title={
-                                anonymized
-                                  ? 'Анонимизированный аккаунт нельзя восстановить'
-                                  : 'Восстановить'
-                              }
+                              aria-label={`Открыть пользователя ${user.name}`}
+                              title="Открыть"
                             >
-                              <ArchiveRestore size={16} aria-hidden="true" />
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              className="admin-icon-btn admin-icon-btn--danger"
-                              onClick={() => {
-                                setDeleteError(null);
-                                setDeleteReason('');
-                                setDeleteTarget(user);
-                              }}
-                              aria-label={`Удалить пользователя ${user.name}`}
-                              title="Удалить"
-                            >
-                              <Trash2 size={16} aria-hidden="true" />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                              <ChevronRight size={17} aria-hidden="true" />
+                            </Link>
+                            {isDeletedScope ? (
+                              <button
+                                type="button"
+                                className="admin-icon-btn"
+                                onClick={() => {
+                                  setRestoreError(null);
+                                  setRestoreReason('');
+                                  setRestoreTarget(user);
+                                }}
+                                disabled={anonymized}
+                                aria-label={`Восстановить пользователя ${user.name}`}
+                                title={
+                                  anonymized
+                                    ? 'Анонимизированный аккаунт нельзя восстановить'
+                                    : 'Восстановить'
+                                }
+                              >
+                                <ArchiveRestore size={16} aria-hidden="true" />
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className="admin-icon-btn admin-icon-btn--danger"
+                                onClick={() => {
+                                  setDeleteError(null);
+                                  setDeleteReason('');
+                                  setDeleteTarget(user);
+                                }}
+                                aria-label={`Удалить пользователя ${user.name}`}
+                                title="Удалить"
+                              >
+                                <Trash2 size={16} aria-hidden="true" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
 
-          <Pagination
-            page={page + 1}
-            totalPages={totalPages}
-            onPageChange={(nextPage) => setPage(nextPage - 1)}
-            style={{ marginTop: '18px' }}
-          />
-        </section>
+            <Pagination
+              page={page + 1}
+              totalPages={totalPages}
+              onPageChange={(nextPage) => setPage(nextPage - 1)}
+              style={{ marginTop: '18px' }}
+            />
+          </section>
+        </>
       )}
 
       <CreateUserDialog
@@ -564,6 +686,65 @@ export const AdminUsersPage: React.FC = () => {
           }
         }}
       />
+
+      <AdminConfirmDialog
+        open={bulkOpen}
+        title="Массовая операция с пользователями"
+        description={`Будет обработано аккаунтов: ${selected.length}. Каждый элемент применяется отдельно.`}
+        consequences={[
+          'Успешные элементы не откатываются, если один из ID вернул ошибку.',
+          'Итог операции и причина сохраняются в admin_audit_log как BULK_OPERATION.',
+          'Снятие роли ADMIN с последнего администратора сервер отклонит.',
+        ]}
+        confirmText="Выполнить"
+        tone={bulkAction === 'DELETE' ? 'danger' : 'default'}
+        busy={bulkBusy}
+        error={bulkError}
+        reason={bulkReason}
+        onReasonChange={setBulkReason}
+        reasonRequired
+        reasonPlaceholder="Например: массовая блокировка спам-аккаунтов"
+        reasonHint="Причина обязательна и сохраняется в admin_audit_log."
+        onConfirm={handleBulk}
+        onClose={() => {
+          if (!bulkBusy) {
+            setBulkOpen(false);
+            setBulkReason('');
+            setBulkError(null);
+          }
+        }}
+      >
+        <label className="admin-field admin-field--wide">
+          <span>Действие</span>
+          <select
+            value={bulkAction}
+            onChange={(event) =>
+              setBulkAction(event.target.value as 'DELETE' | 'RESTORE' | 'CHANGE_ROLE')
+            }
+          >
+            {isDeletedScope ? (
+              <option value="RESTORE">Восстановить</option>
+            ) : (
+              <>
+                <option value="DELETE">Удалить</option>
+                <option value="CHANGE_ROLE">Изменить роль</option>
+              </>
+            )}
+          </select>
+        </label>
+        {bulkAction === 'CHANGE_ROLE' && (
+          <label className="admin-field admin-field--wide">
+            <span>Новая роль</span>
+            <select
+              value={bulkRole}
+              onChange={(event) => setBulkRole(event.target.value as 'USER' | 'ADMIN')}
+            >
+              <option value="USER">USER</option>
+              <option value="ADMIN">ADMIN</option>
+            </select>
+          </label>
+        )}
+      </AdminConfirmDialog>
     </div>
   );
 };

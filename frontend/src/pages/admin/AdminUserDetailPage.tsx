@@ -12,6 +12,7 @@ import {
   Gift,
   Loader2,
   MessageSquare,
+  Monitor,
   Pencil,
   RefreshCw,
   ShieldCheck,
@@ -24,6 +25,7 @@ import {
 import {
   adminApi,
   type AdminAuditLog,
+  type AdminSession,
   type AdminUser,
   type AdminUserRole,
   type RatingResponse,
@@ -70,6 +72,20 @@ const AUDIT_ACTION_LABELS: Record<string, string> = {
   USER_RESTORED: 'Аккаунт восстановлен',
   USER_ANONYMIZED: 'Данные анонимизированы',
   USER_DATA_EXPORTED: 'Экспорт данных',
+  POST_DELETED: 'Заявка удалена',
+  POST_RESTORED: 'Заявка восстановлена',
+  POST_STATUS_CHANGED: 'Изменён статус заявки',
+  REVIEW_DELETED: 'Отзыв удалён',
+  REPORT_ASSIGNED: 'Назначен модератор',
+  REPORT_UPDATED: 'Жалоба обновлена',
+  REPORT_STATUS_CHANGED: 'Изменён статус жалобы',
+  MODERATION_ACTION: 'Модерационное решение',
+  COINS_ADJUSTED: 'Начисление HelpCoins',
+  RATING_CHANGED: 'Изменён рейтинг',
+  SESSION_REVOKED: 'Сессия отозвана',
+  SESSION_REVOKED_ALL: 'Отозваны все сессии',
+  HELP_OVERRIDE: 'Административный override помощи',
+  BULK_OPERATION: 'Массовая операция',
 };
 
 const TRANSACTION_LABELS: Record<string, string> = {
@@ -137,6 +153,7 @@ export const AdminUserDetailPage: React.FC = () => {
   const [editOpen, setEditOpen] = useState(false);
 
   const [ratingValue, setRatingValue] = useState('');
+  const [ratingReason, setRatingReason] = useState('');
   const [ratingBusy, setRatingBusy] = useState(false);
   const [ratingError, setRatingError] = useState<string | null>(null);
 
@@ -185,12 +202,29 @@ export const AdminUserDetailPage: React.FC = () => {
   const [auditReloadKey, setAuditReloadKey] = useState(0);
 
   const [postTarget, setPostTarget] = useState<Post | null>(null);
+  const [postReason, setPostReason] = useState('');
   const [postBusy, setPostBusy] = useState(false);
   const [postDeleteError, setPostDeleteError] = useState<string | null>(null);
 
   const [reviewTarget, setReviewTarget] = useState<Review | null>(null);
+  const [reviewReason, setReviewReason] = useState('');
   const [reviewBusy, setReviewBusy] = useState(false);
   const [reviewDeleteError, setReviewDeleteError] = useState<string | null>(null);
+
+  const [sessions, setSessions] = useState<AdminSession[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(true);
+  const [sessionsError, setSessionsError] = useState<string | null>(null);
+  const [sessionsReloadKey, setSessionsReloadKey] = useState(0);
+
+  const [sessionTarget, setSessionTarget] = useState<AdminSession | null>(null);
+  const [sessionReason, setSessionReason] = useState('');
+  const [sessionBusy, setSessionBusy] = useState(false);
+  const [sessionError, setSessionError] = useState<string | null>(null);
+
+  const [revokeAllOpen, setRevokeAllOpen] = useState(false);
+  const [revokeAllReason, setRevokeAllReason] = useState('');
+  const [revokeAllBusy, setRevokeAllBusy] = useState(false);
+  const [revokeAllError, setRevokeAllError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!Number.isFinite(id) || id <= 0) {
@@ -212,6 +246,7 @@ export const AdminUserDetailPage: React.FC = () => {
         if (cancelled) return;
         setUser(loadedUser);
         setRatingValue(String(loadedUser.rating ?? ''));
+        setRatingReason('');
         setRoleValue(loadedUser.role);
         setRoleReason('');
         setRoleError(null);
@@ -300,6 +335,32 @@ export const AdminUserDetailPage: React.FC = () => {
     if (!Number.isFinite(id) || id <= 0) return;
 
     let cancelled = false;
+    setSessionsLoading(true);
+    setSessionsError(null);
+
+    adminApi
+      .getUserSessions(id)
+      .then((data) => {
+        if (!cancelled) setSessions(data);
+      })
+      .catch((loadFailure) => {
+        if (!cancelled) {
+          setSessionsError(getApiErrorMessage(loadFailure, 'Список сессий недоступен.'));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setSessionsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id, sessionsReloadKey]);
+
+  useEffect(() => {
+    if (!Number.isFinite(id) || id <= 0) return;
+
+    let cancelled = false;
     setAuditLoading(true);
     setAuditError(null);
 
@@ -358,12 +419,19 @@ export const AdminUserDetailPage: React.FC = () => {
       setRatingError('Рейтинг должен быть числом от 0 до 5.');
       return;
     }
+    const reason = ratingReason.trim();
+    if (!reason) {
+      setRatingError('Причина изменения рейтинга обязательна.');
+      return;
+    }
 
     setRatingBusy(true);
     setRatingError(null);
     try {
-      await adminApi.updateUserRating(id, parsed);
+      await adminApi.updateUserRating(id, parsed, reason);
       setUser((previous) => (previous ? { ...previous, rating: parsed } : previous));
+      setRatingReason('');
+      setAuditReloadKey((value) => value + 1);
       showToast(`Рейтинг профиля обновлён: ${parsed.toFixed(2)}.`, 'success');
     } catch (ratingFailure) {
       setRatingError(getApiErrorMessage(ratingFailure, 'Не удалось изменить рейтинг.'));
@@ -555,14 +623,16 @@ export const AdminUserDetailPage: React.FC = () => {
   };
 
   const handleDeletePost = async () => {
-    if (!postTarget || postBusy) return;
+    if (!postTarget || postBusy || !postReason.trim()) return;
     setPostBusy(true);
     setPostDeleteError(null);
     try {
-      await adminApi.deletePost(postTarget.id);
+      await adminApi.deletePost(postTarget.id, postReason.trim());
       setPosts((previous) => previous.filter((post) => post.id !== postTarget.id));
       showToast(`Заявка «${postTarget.title}» удалена.`, 'success');
       setPostTarget(null);
+      setPostReason('');
+      setAuditReloadKey((value) => value + 1);
     } catch (deleteFailure) {
       setPostDeleteError(getApiErrorMessage(deleteFailure, 'Не удалось удалить заявку.'));
     } finally {
@@ -571,18 +641,58 @@ export const AdminUserDetailPage: React.FC = () => {
   };
 
   const handleDeleteReview = async () => {
-    if (!reviewTarget || reviewBusy) return;
+    if (!reviewTarget || reviewBusy || !reviewReason.trim()) return;
     setReviewBusy(true);
     setReviewDeleteError(null);
     try {
-      await adminApi.deleteReview(reviewTarget.id);
+      await adminApi.deleteReview(reviewTarget.id, reviewReason.trim());
       setReviews((previous) => previous.filter((review) => review.id !== reviewTarget.id));
       showToast('Отзыв удалён.', 'success');
       setReviewTarget(null);
+      setReviewReason('');
+      setAuditReloadKey((value) => value + 1);
     } catch (deleteFailure) {
       setReviewDeleteError(getApiErrorMessage(deleteFailure, 'Не удалось удалить отзыв.'));
     } finally {
       setReviewBusy(false);
+    }
+  };
+
+  const refreshSessions = () => setSessionsReloadKey((value) => value + 1);
+
+  const handleRevokeSession = async () => {
+    if (!sessionTarget || sessionBusy || !sessionReason.trim()) return;
+    setSessionBusy(true);
+    setSessionError(null);
+    try {
+      await adminApi.revokeUserSession(id, sessionTarget.id, sessionReason.trim());
+      showToast('Сессия отозвана.', 'success');
+      setSessionTarget(null);
+      setSessionReason('');
+      refreshSessions();
+      setAuditReloadKey((value) => value + 1);
+    } catch (revokeFailure) {
+      setSessionError(getApiErrorMessage(revokeFailure, 'Не удалось отозвать сессию.'));
+    } finally {
+      setSessionBusy(false);
+    }
+  };
+
+  const handleRevokeAllSessions = async () => {
+    if (revokeAllBusy || !revokeAllReason.trim()) return;
+    setRevokeAllBusy(true);
+    setRevokeAllError(null);
+    try {
+      await adminApi.revokeAllUserSessions(id, revokeAllReason.trim());
+      showToast('Все активные сессии пользователя отозваны.', 'success');
+      setRevokeAllOpen(false);
+      setRevokeAllReason('');
+      refreshSessions();
+      setAuditReloadKey((value) => value + 1);
+    } catch (revokeFailure) {
+      setRevokeAllError(getApiErrorMessage(revokeFailure, 'Не удалось отозвать сессии.'));
+    } finally {
+      setRevokeAllBusy(false);
     }
   };
 
@@ -898,6 +1008,19 @@ export const AdminUserDetailPage: React.FC = () => {
                   aria-label="Новое значение рейтинга"
                 />
               </label>
+              <label className="admin-field admin-field--wide">
+                <span>Причина (обязательно)</span>
+                <input
+                  value={ratingReason}
+                  onChange={(event) => {
+                    setRatingReason(event.target.value);
+                    setRatingError(null);
+                  }}
+                  maxLength={1000}
+                  placeholder="Например: пересчёт по апелляции"
+                  aria-label="Причина изменения рейтинга"
+                />
+              </label>
               <button type="submit" className="admin-button admin-button--primary" disabled={ratingBusy}>
                 {ratingBusy ? (
                   <Loader2 size={16} className="admin-spinner" aria-hidden="true" />
@@ -913,8 +1036,8 @@ export const AdminUserDetailPage: React.FC = () => {
               </div>
             )}
             <p className="admin-field-hint">
-              <code>PUT /api/users/{user.id}/rating?rating=…</code>. Меняет только поле рейтинга
-              профиля.
+              <code>PUT /api/admin/users/{user.id}/rating</code>. Причина обязательна и сохраняется в
+              журнале аудита вместе с предыдущим и новым значением.
             </p>
           </div>
 
@@ -1080,6 +1203,120 @@ export const AdminUserDetailPage: React.FC = () => {
           </p>
         </section>
       </div>
+
+      <section className="admin-section" aria-labelledby="admin-sessions-title">
+        <div className="admin-section-head">
+          <div>
+            <span className="admin-eyebrow">Безопасность</span>
+            <h2 id="admin-sessions-title">Активные сессии</h2>
+            <p className="admin-section-description">
+              <code>GET /api/admin/users/{user.id}/sessions</code>. Отзыв сессии завершает
+              refresh-токен и записывается в журнал аудита с обязательной причиной.
+            </p>
+          </div>
+          <div className="admin-toolbar-actions">
+            <button
+              type="button"
+              className="admin-button admin-button--ghost admin-button--compact"
+              onClick={refreshSessions}
+              disabled={sessionsLoading}
+            >
+              <RefreshCw size={15} aria-hidden="true" />
+              Обновить
+            </button>
+            <button
+              type="button"
+              className="admin-button admin-button--danger admin-button--compact"
+              onClick={() => {
+                setRevokeAllError(null);
+                setRevokeAllReason('');
+                setRevokeAllOpen(true);
+              }}
+              disabled={sessionsLoading || sessions.length === 0}
+            >
+              <ShieldOff size={15} aria-hidden="true" />
+              Отозвать все
+            </button>
+          </div>
+        </div>
+
+        {sessionsLoading ? (
+          <AdminLoadingBlock rows={3} />
+        ) : sessionsError ? (
+          <div className="admin-inline-alert" role="alert">
+            <span>{sessionsError}</span>
+            <button
+              type="button"
+              className="admin-button admin-button--ghost admin-button--compact"
+              onClick={refreshSessions}
+            >
+              Повторить
+            </button>
+          </div>
+        ) : sessions.length === 0 ? (
+          <AdminEmptyState
+            title="Активных сессий нет"
+            description="У пользователя нет действующих refresh-сессий."
+          />
+        ) : (
+          <div className="admin-table-wrap">
+            <table className="admin-table admin-table--compact">
+              <thead>
+                <tr>
+                  <th scope="col">Устройство</th>
+                  <th scope="col">Создана</th>
+                  <th scope="col">Последняя активность</th>
+                  <th scope="col">Истекает</th>
+                  <th scope="col">IP</th>
+                  <th scope="col">
+                    <span className="admin-visually-hidden">Действия</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {sessions.map((session) => (
+                  <tr key={session.id}>
+                    <td>
+                      <div className="admin-user-cell">
+                        <Monitor size={16} aria-hidden="true" />
+                        <div>
+                          <span>{session.deviceName || 'Неизвестное устройство'}</span>
+                          {session.current && (
+                            <span className="admin-badge admin-badge--lime">текущая</span>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    <td>{formatDateTime(session.createdAt)}</td>
+                    <td>{session.lastUsedAt ? formatDateTime(session.lastUsedAt) : '—'}</td>
+                    <td>{formatDateTime(session.expiresAt)}</td>
+                    <td>{session.ipAddress || '—'}</td>
+                    <td>
+                      <button
+                        type="button"
+                        className="admin-icon-btn admin-icon-btn--danger"
+                        onClick={() => {
+                          setSessionError(null);
+                          setSessionReason('');
+                          setSessionTarget(session);
+                        }}
+                        aria-label="Отозвать сессию"
+                        title="Отозвать сессию"
+                      >
+                        <ShieldOff size={16} aria-hidden="true" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p className="admin-field-hint">
+          Отозванные сессии исчезают из списка. Само действие <code>SESSION_REVOKED</code> или{' '}
+          <code>SESSION_REVOKED_ALL</code> остаётся в журнале аудита.
+        </p>
+      </section>
 
       <section className="admin-section" aria-labelledby="admin-wallet-title">
         <div className="admin-section-head">
@@ -1436,15 +1673,21 @@ export const AdminUserDetailPage: React.FC = () => {
               почему изменил аккаунт.
             </p>
           </div>
-          <button
-            type="button"
-            className="admin-button admin-button--ghost admin-button--compact"
-            onClick={() => setAuditReloadKey((value) => value + 1)}
-            disabled={auditLoading}
-          >
-            <RefreshCw size={15} aria-hidden="true" />
-            Обновить
-          </button>
+          <div className="admin-toolbar-actions">
+            <Link to="/admin/audit" className="admin-button admin-button--ghost admin-button--compact">
+              <ClipboardList size={15} aria-hidden="true" />
+              Весь журнал
+            </Link>
+            <button
+              type="button"
+              className="admin-button admin-button--ghost admin-button--compact"
+              onClick={() => setAuditReloadKey((value) => value + 1)}
+              disabled={auditLoading}
+            >
+              <RefreshCw size={15} aria-hidden="true" />
+              Обновить
+            </button>
+          </div>
         </div>
 
         {auditLoading ? (
@@ -1738,10 +1981,16 @@ export const AdminUserDetailPage: React.FC = () => {
         confirmText="Удалить заявку"
         busy={postBusy}
         error={postDeleteError}
+        reason={postReason}
+        onReasonChange={setPostReason}
+        reasonRequired
+        reasonPlaceholder="Например: нарушение правил публикации"
+        reasonHint="Причина обязательна и сохраняется в admin_audit_log."
         onConfirm={handleDeletePost}
         onClose={() => {
           if (!postBusy) {
             setPostTarget(null);
+            setPostReason('');
             setPostDeleteError(null);
           }
         }}
@@ -1762,11 +2011,73 @@ export const AdminUserDetailPage: React.FC = () => {
         confirmText="Удалить отзыв"
         busy={reviewBusy}
         error={reviewDeleteError}
+        reason={reviewReason}
+        onReasonChange={setReviewReason}
+        reasonRequired
+        reasonPlaceholder="Например: оскорбления, не относящийся к помощи текст"
+        reasonHint="Причина обязательна и сохраняется в admin_audit_log."
         onConfirm={handleDeleteReview}
         onClose={() => {
           if (!reviewBusy) {
             setReviewTarget(null);
+            setReviewReason('');
             setReviewDeleteError(null);
+          }
+        }}
+      />
+
+      <AdminConfirmDialog
+        open={Boolean(sessionTarget)}
+        title="Отозвать сессию?"
+        description={
+          sessionTarget
+            ? `Устройство: ${sessionTarget.deviceName || 'неизвестно'} · IP ${sessionTarget.ipAddress || '—'}.`
+            : undefined
+        }
+        consequences={[
+          'Refresh-токен этой сессии перестанет действовать.',
+          'Пользователь будет вынужден войти заново на этом устройстве.',
+        ]}
+        confirmText="Отозвать сессию"
+        busy={sessionBusy}
+        error={sessionError}
+        reason={sessionReason}
+        onReasonChange={setSessionReason}
+        reasonRequired
+        reasonPlaceholder="Например: подозрение на компрометацию"
+        reasonHint="Причина обязательна и сохраняется в admin_audit_log."
+        onConfirm={handleRevokeSession}
+        onClose={() => {
+          if (!sessionBusy) {
+            setSessionTarget(null);
+            setSessionReason('');
+            setSessionError(null);
+          }
+        }}
+      />
+
+      <AdminConfirmDialog
+        open={revokeAllOpen}
+        title="Отозвать все сессии?"
+        description="Все активные сессии пользователя будут завершены."
+        consequences={[
+          'Пользователь будет вынужден войти заново на всех устройствах.',
+          'Действие необратимо, но фиксируется в журнале аудита.',
+        ]}
+        confirmText="Отозвать все"
+        busy={revokeAllBusy}
+        error={revokeAllError}
+        reason={revokeAllReason}
+        onReasonChange={setRevokeAllReason}
+        reasonRequired
+        reasonPlaceholder="Например: массовая компрометация аккаунта"
+        reasonHint="Причина обязательна и сохраняется в admin_audit_log."
+        onConfirm={handleRevokeAllSessions}
+        onClose={() => {
+          if (!revokeAllBusy) {
+            setRevokeAllOpen(false);
+            setRevokeAllReason('');
+            setRevokeAllError(null);
           }
         }}
       />

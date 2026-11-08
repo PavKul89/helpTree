@@ -8,9 +8,12 @@ import {
   Leaf,
   LogOut,
   Menu,
+  ScrollText,
   ShieldCheck,
   Star,
+  Timer,
   Users,
+  Wallet,
   X,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -57,6 +60,24 @@ const NAV_ITEMS: AdminNavItem[] = [
     description: 'Отзывы получателей',
     icon: Star,
   },
+  {
+    to: '/admin/sla',
+    label: 'SLA модерации',
+    description: 'Скорость обработки жалоб',
+    icon: Timer,
+  },
+  {
+    to: '/admin/wallet',
+    label: 'Кошельки',
+    description: 'Балансы и фильтры',
+    icon: Wallet,
+  },
+  {
+    to: '/admin/audit',
+    label: 'Журнал аудита',
+    description: 'Действия администраторов',
+    icon: ScrollText,
+  },
 ];
 
 const getSectionMeta = (pathname: string): { title: string; description: string } => {
@@ -94,6 +115,24 @@ const getSectionMeta = (pathname: string): { title: string; description: string 
     return {
       title: 'Жалобы',
       description: 'Очередь модерации, история и санкции.',
+    };
+  }
+  if (pathname.startsWith('/admin/sla')) {
+    return {
+      title: 'SLA модерации',
+      description: 'Среднее время ответа, разрешения и состояние очереди.',
+    };
+  }
+  if (pathname.startsWith('/admin/wallet')) {
+    return {
+      title: 'Кошельки',
+      description: 'Балансы HelpCoins, VIP, блокировки и задолженности.',
+    };
+  }
+  if (pathname.startsWith('/admin/audit')) {
+    return {
+      title: 'Журнал аудита',
+      description: 'Кто, когда и что изменил в административных операциях.',
     };
   }
   return {

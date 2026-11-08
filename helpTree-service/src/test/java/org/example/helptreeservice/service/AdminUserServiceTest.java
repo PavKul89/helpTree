@@ -27,6 +27,7 @@ import org.springframework.data.domain.Pageable;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -41,6 +42,7 @@ class AdminUserServiceTest {
     @Mock private AccountSecurityService accountSecurityService;
     @Mock private AdminAuditService adminAuditService;
     @Mock private UserDataExportService userDataExportService;
+    @Mock private AuthSessionService authSessionService;
 
     @InjectMocks private AdminUserService adminUserService;
 
@@ -377,5 +379,55 @@ class AdminUserServiceTest {
                 .thenReturn(page);
 
         assertSame(page, adminUserService.auditHistory(4L, Pageable.unpaged()));
+    }
+
+    @Test
+    void changeRatingShouldRejectBlankReason() {
+        assertThrows(BadRequestException.class,
+                () -> adminUserService.changeRating(4L, 4.5, "  ", ADMIN_ID));
+
+        verifyNoInteractions(userService, adminAuditService);
+    }
+
+    @Test
+    void changeRatingShouldAuditBeforeAndAfter() {
+        User user = entity(4L, Role.USER, false, "u@test.com");
+        user.setRating(3.0);
+        when(userRepository.findById(4L)).thenReturn(Optional.of(user));
+
+        adminUserService.changeRating(4L, 4.5, "Восстановление рейтинга", ADMIN_ID);
+
+        verify(userService).updateUserRating(4L, 4.5);
+        verify(adminAuditService).record(eq(ADMIN_ID), eq(AdminAuditAction.RATING_CHANGED),
+                eq(AdminAuditService.ENTITY_USER), eq(4L),
+                argThat(before -> "3.0".equals(before.get("rating"))),
+                argThat(after -> "4.5".equals(after.get("rating"))),
+                eq("Восстановление рейтинга"));
+    }
+
+    @Test
+    void revokeSessionShouldRequireReasonAndAudit() {
+        UUID sessionId = UUID.randomUUID();
+
+        assertThrows(BadRequestException.class,
+                () -> adminUserService.revokeSession(4L, sessionId, " ", ADMIN_ID));
+        verifyNoInteractions(authSessionService, adminAuditService);
+
+        adminUserService.revokeSession(4L, sessionId, "Смена устройства", ADMIN_ID);
+
+        verify(authSessionService).revokeSession(4L, sessionId, "Смена устройства");
+        verify(adminAuditService).record(eq(ADMIN_ID), eq(AdminAuditAction.SESSION_REVOKED),
+                eq(AdminAuditService.ENTITY_SESSION), eq(4L), anyMap(), anyMap(),
+                eq("Смена устройства"));
+    }
+
+    @Test
+    void revokeAllSessionsShouldAudit() {
+        adminUserService.revokeAllSessions(4L, "Подозрительная активность", ADMIN_ID);
+
+        verify(authSessionService).revokeAllSessionsForUser(4L, "Подозрительная активность");
+        verify(adminAuditService).record(eq(ADMIN_ID), eq(AdminAuditAction.SESSION_REVOKED_ALL),
+                eq(AdminAuditService.ENTITY_SESSION), eq(4L), isNull(), anyMap(),
+                eq("Подозрительная активность"));
     }
 }

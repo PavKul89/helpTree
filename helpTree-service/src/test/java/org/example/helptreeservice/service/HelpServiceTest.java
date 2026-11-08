@@ -10,6 +10,7 @@ import org.example.helptreeservice.entity.Post;
 import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.enums.HelpActorRole;
 import org.example.helptreeservice.enums.HelpStatus;
+import org.example.helptreeservice.enums.AdminAuditAction;
 import org.example.helptreeservice.enums.PostStatus;
 import org.example.helptreeservice.enums.UserBlockScope;
 import org.example.helptreeservice.exception.BadRequestException;
@@ -39,6 +40,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
@@ -58,6 +60,7 @@ class HelpServiceTest {
     @Mock private HelpGraphMetrics helpGraphMetrics;
     @Mock private UserBlockService userBlockService;
     @Mock private NotificationService notificationService;
+    @Mock private AdminAuditService adminAuditService;
 
     private HelpService helpService;
 
@@ -78,7 +81,8 @@ class HelpServiceTest {
                 statusHistoryRepository,
                 helpGraphMetrics,
                 userBlockService,
-                notificationService
+                notificationService,
+                adminAuditService
         );
 
         lenient().when(helpMapper.toResponse(any(Help.class))).thenAnswer(invocation -> {
@@ -229,6 +233,23 @@ class HelpServiceTest {
         verify(ratingService).recalculateUsers(List.of(1L));
         verifyNoInteractions(walletService, achievementService);
         verify(statusHistoryRepository).save(any(HelpStatusHistory.class));
+    }
+
+    @Test
+    void completeHelp_adminOverrideRequiresReasonAndWritesAudit() {
+        Help help = help(5L, HelpStatus.ACCEPTED, user(1L), user(2L));
+        when(helpRepository.findByIdForUpdate(5L)).thenReturn(Optional.of(help));
+
+        assertThrows(BadRequestException.class,
+                () -> helpService.completeHelp(5L, 99L, true, "  "));
+        verifyNoInteractions(adminAuditService);
+
+        HelpResponse response = helpService.completeHelp(5L, 99L, true, "Ручное завершение");
+
+        assertEquals("COMPLETED", response.getStatus());
+        verify(adminAuditService).record(eq(99L), eq(AdminAuditAction.HELP_OVERRIDE),
+                eq(AdminAuditService.ENTITY_HELP), eq(5L), anyMap(), anyMap(),
+                eq("Ручное завершение"));
     }
 
     @Test

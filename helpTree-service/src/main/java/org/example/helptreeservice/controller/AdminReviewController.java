@@ -2,9 +2,12 @@ package org.example.helptreeservice.controller;
 
 import lombok.RequiredArgsConstructor;
 import org.example.helptreeservice.config.PaginationConfig;
+import org.example.helptreeservice.dto.admin.AdminBulkResultDto;
+import org.example.helptreeservice.dto.admin.AdminBulkReviewsRequest;
 import org.example.helptreeservice.dto.reviews.ReviewResponse;
 import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.ForbiddenException;
+import org.example.helptreeservice.exception.UnauthorizedException;
 import org.example.helptreeservice.service.AuthorizationService;
 import org.example.helptreeservice.service.ReviewService;
 import org.springframework.data.domain.Page;
@@ -13,10 +16,15 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import jakarta.validation.Valid;
 
 import java.time.LocalDateTime;
 
@@ -46,7 +54,7 @@ public class AdminReviewController {
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        requireAdmin();
+        requireAdminAccess();
 
         if (rating != null && (rating < 1 || rating > 5)) {
             throw new BadRequestException("Параметр rating должен быть от 1 до 5");
@@ -59,10 +67,35 @@ public class AdminReviewController {
         return ResponseEntity.ok(reviewService.getAdminReviews(userId, rating, from, to, pageable));
     }
 
-    private void requireAdmin() {
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(@PathVariable Long id,
+                                       @RequestParam String reason) {
+        Long adminId = requireAdmin();
+        reviewService.adminDeleteReview(id, adminId, reason);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/bulk")
+    public ResponseEntity<AdminBulkResultDto> bulkDelete(
+            @Valid @RequestBody AdminBulkReviewsRequest request) {
+        Long adminId = requireAdmin();
+        return ResponseEntity.ok(
+                reviewService.bulkDeleteReviews(request.getIds(), adminId, request.getReason()));
+    }
+
+    private void requireAdminAccess() {
         if (!authService.isAdmin()) {
             throw new ForbiddenException("Только администратор может просматривать все отзывы");
         }
+    }
+
+    private Long requireAdmin() {
+        requireAdminAccess();
+        AuthorizationService.UserContext current = authService.getCurrentUser();
+        if (current == null || current.getUserId() == null) {
+            throw new UnauthorizedException("Вы не авторизованы");
+        }
+        return current.getUserId();
     }
 
     private Pageable resolvePageable(int page, int size) {

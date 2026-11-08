@@ -8,6 +8,7 @@ import org.example.helptreeservice.entity.CoinTransaction;
 import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.enums.TransactionDirection;
 import org.example.helptreeservice.enums.TransactionType;
+import org.example.helptreeservice.enums.AdminAuditAction;
 import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.ConflictException;
 import org.example.helptreeservice.repository.AdminCoinAuditRepository;
@@ -42,6 +43,7 @@ class WalletServiceTest {
     @Mock private RatingService ratingService;
     @Mock private PublicProfileCache publicProfileCache;
     @Mock private NotificationService notificationService;
+    @Mock private AdminAuditService adminAuditService;
 
     private EconomyConfig economyConfig;
     private WalletService walletService;
@@ -54,7 +56,7 @@ class WalletServiceTest {
         walletService = new WalletService(
                 userRepository, transactionRepository, adminAuditRepository,
                 ratingService, economyConfig, paginationConfig, publicProfileCache,
-                notificationService);
+                notificationService, adminAuditService);
 
         user = new User();
         user.setId(1L);
@@ -65,6 +67,18 @@ class WalletServiceTest {
 
         lenient().when(userRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(user));
         lenient().when(userRepository.findByIdAndDeletedFalse(1L)).thenReturn(Optional.of(user));
+        lenient().when(adminAuditRepository.save(any(AdminCoinAudit.class))).thenAnswer(invocation -> {
+            AdminCoinAudit audit = invocation.getArgument(0);
+            audit.setId(500L);
+            return audit;
+        });
+        lenient().when(transactionRepository.save(any(CoinTransaction.class))).thenAnswer(invocation -> {
+            CoinTransaction transaction = invocation.getArgument(0);
+            if (transaction.getId() == null) {
+                transaction.setId(900L);
+            }
+            return transaction;
+        });
     }
 
     // ------------------------------------------------------------- accruals
@@ -321,6 +335,9 @@ class WalletServiceTest {
         assertEquals(100L, audit.getBalanceBefore());
         assertEquals(350L, audit.getBalanceAfter());
         assertEquals("Компенсация сбоя", audit.getReason());
+        verify(adminAuditService).record(eq(99L), eq(AdminAuditAction.COINS_ADJUSTED),
+                eq(AdminAuditService.ENTITY_WALLET), eq(1L), anyMap(), anyMap(),
+                eq("Компенсация сбоя"));
     }
 
     @Test

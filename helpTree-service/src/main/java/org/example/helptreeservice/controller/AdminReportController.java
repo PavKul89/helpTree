@@ -76,6 +76,16 @@ public class AdminReportController {
         return ResponseEntity.ok(PageResponse.from(reports));
     }
 
+    @GetMapping("/sla")
+    public ResponseEntity<org.example.helptreeservice.dto.reports.ModerationSlaDto> getSla(
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
+        requireAdmin();
+        return ResponseEntity.ok(reportService.getModerationSla(from, to));
+    }
+
     @GetMapping("/{reportId}")
     public ResponseEntity<AdminReportDetailsResponse> getReport(@PathVariable Long reportId) {
         requireAdmin();

@@ -2,10 +2,13 @@ package org.example.helptreeservice.service;
 
 import org.example.helptreeservice.dto.reviews.CreateReviewRequest;
 import org.example.helptreeservice.dto.reviews.ReviewResponse;
+import org.example.helptreeservice.dto.admin.AdminBulkResultDto;
 import org.example.helptreeservice.entity.Help;
 import org.example.helptreeservice.entity.Review;
 import org.example.helptreeservice.entity.User;
+import org.example.helptreeservice.enums.AdminAuditAction;
 import org.example.helptreeservice.enums.HelpStatus;
+import org.example.helptreeservice.enums.Role;
 import org.example.helptreeservice.enums.UserBlockScope;
 import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.ForbiddenException;
@@ -25,7 +28,11 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -40,6 +47,7 @@ class ReviewServiceTest {
     @Mock private RatingService ratingService;
     @Mock private UserBlockService userBlockService;
     @Mock private NotificationService notificationService;
+    @Mock private AdminAuditService adminAuditService;
 
     private ReviewService reviewService;
 
@@ -48,7 +56,7 @@ class ReviewServiceTest {
         reviewService = new ReviewService(
                 reviewRepository, helpRepository, userRepository,
                 reviewMapper, userService, walletService, ratingService,
-                userBlockService, notificationService);
+                userBlockService, notificationService, adminAuditService);
     }
 
     @Test
@@ -162,6 +170,58 @@ class ReviewServiceTest {
         assertEquals(77L, result.getContent().get(0).getId());
     }
 
+    @Test
+    void adminDeleteReview_shouldRequireReason() {
+        assertThrows(BadRequestException.class,
+                () -> reviewService.adminDeleteReview(77L, 9L, "  "));
+
+        verifyNoInteractions(adminAuditService);
+        verify(reviewRepository, never()).save(any(Review.class));
+    }
+
+    @Test
+    void adminDeleteReview_shouldSoftDeleteAndWriteAudit() {
+        User admin = user(9L);
+        admin.setRole(Role.ADMIN);
+        User helper = user(1L);
+        User receiver = user(2L);
+        Review review = review(77L, help(10L, HelpStatus.CONFIRMED, helper, receiver), receiver, helper);
+        when(userRepository.findById(9L)).thenReturn(Optional.of(admin));
+        when(reviewRepository.findById(77L)).thenReturn(Optional.of(review));
+
+        reviewService.adminDeleteReview(77L, 9L, "  Оскорбление  ");
+
+        assertEquals(true, review.getDeleted());
+        assertNotNull(review.getDeletedAt());
+        verify(reviewRepository).save(review);
+        verify(ratingService).recalculateUsers(List.of(1L));
+        verify(adminAuditService).record(eq(9L), eq(AdminAuditAction.REVIEW_DELETED),
+                eq(AdminAuditService.ENTITY_REVIEW), eq(77L), anyMap(), anyMap(),
+                eq("Оскорбление"));
+    }
+
+    @Test
+    void bulkDeleteReviews_shouldReportPartialSuccess() {
+        User admin = user(9L);
+        admin.setRole(Role.ADMIN);
+        User helper = user(1L);
+        User receiver = user(2L);
+        Review review = review(77L, help(10L, HelpStatus.CONFIRMED, helper, receiver), receiver, helper);
+        when(userRepository.findById(9L)).thenReturn(Optional.of(admin));
+        when(reviewRepository.findById(77L)).thenReturn(Optional.of(review));
+        when(reviewRepository.findById(88L)).thenReturn(Optional.empty());
+
+        AdminBulkResultDto result = reviewService.bulkDeleteReviews(
+                List.of(77L, 88L), 9L, "Массовая очистка");
+
+        assertEquals(2, result.getRequested());
+        assertEquals(1, result.getSucceeded());
+        assertEquals(1, result.getFailed());
+        verify(adminAuditService).record(eq(9L), eq(AdminAuditAction.BULK_OPERATION),
+                eq(AdminAuditService.ENTITY_REVIEW), isNull(), isNull(), anyMap(),
+                eq("Массовая очистка"));
+    }
+
     private CreateReviewRequest request(Long helpId) {
         CreateReviewRequest request = new CreateReviewRequest();
         request.setHelpId(helpId);
@@ -185,5 +245,16 @@ class ReviewServiceTest {
         help.setStatus(status);
         help.setDeleted(false);
         return help;
+    }
+
+    private Review review(Long id, Help help, User from, User to) {
+        Review review = new Review();
+        review.setId(id);
+        review.setHelp(help);
+        review.setFromUser(from);
+        review.setToUser(to);
+        review.setRating(5);
+        review.setDeleted(false);
+        return review;
     }
 }

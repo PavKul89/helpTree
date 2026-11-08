@@ -2,11 +2,13 @@ package org.example.helptreeservice.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.example.helptreeservice.dto.admin.AdminBulkResultDto;
 import org.example.helptreeservice.dto.reviews.CreateReviewRequest;
 import org.example.helptreeservice.dto.reviews.ReviewResponse;
 import org.example.helptreeservice.entity.Help;
 import org.example.helptreeservice.entity.Review;
 import org.example.helptreeservice.entity.User;
+import org.example.helptreeservice.enums.AdminAuditAction;
 import org.example.helptreeservice.enums.HelpStatus;
 import org.example.helptreeservice.enums.NotificationType;
 import org.example.helptreeservice.enums.UserBlockScope;
@@ -43,6 +45,7 @@ public class ReviewService {
     private final RatingService ratingService;
     private final UserBlockService userBlockService;
     private final NotificationService notificationService;
+    private final AdminAuditService adminAuditService;
 
     @Transactional
     public ReviewResponse createReview(CreateReviewRequest request, Long currentUserId) {
@@ -170,6 +173,88 @@ public class ReviewService {
         // counting the review immediately.
         reviewRepository.flush();
         ratingService.recalculateUsers(List.of(review.getToUser().getId()));
+    }
+
+    /**
+     * Administrative review removal. Requires a reason, verifies the actor is a
+     * real administrator and appends the removed review's state to the audit
+     * trail. The row is soft-deleted so the one-review-per-help invariant keeps
+     * holding.
+     */
+    @Transactional
+    public void adminDeleteReview(Long reviewId, Long adminId, String reason) {
+        String auditedReason = requireReason(reason);
+        User admin = userRepository.findById(adminId)
+                .orElseThrow(() -> new NotFoundException("Пользователь не найден"));
+        if (admin.getRole() != org.example.helptreeservice.enums.Role.ADMIN) {
+            throw new ForbiddenException("Только администратор может удалять любые отзывы");
+        }
+
+        Review review = reviewRepository.findById(reviewId)
+                .orElseThrow(() -> new NotFoundException("Отзыв не найден"));
+        if (Boolean.TRUE.equals(review.getDeleted())) {
+            throw new NotFoundException("Отзыв не найден");
+        }
+
+        Map<String, Object> before = new LinkedHashMap<>();
+        before.put("id", review.getId());
+        before.put("rating", review.getRating());
+        before.put("comment", review.getComment());
+        before.put("fromUserId", review.getFromUser() == null ? null : review.getFromUser().getId());
+        before.put("toUserId", review.getToUser() == null ? null : review.getToUser().getId());
+        before.put("deleted", review.getDeleted());
+
+        review.setDeleted(true);
+        review.setDeletedAt(LocalDateTime.now());
+        reviewRepository.save(review);
+        reviewRepository.flush();
+        ratingService.recalculateUsers(List.of(review.getToUser().getId()));
+        log.info("Администратор {} удалил отзыв {}", adminId, reviewId);
+
+        adminAuditService.record(adminId, AdminAuditAction.REVIEW_DELETED,
+                AdminAuditService.ENTITY_REVIEW, reviewId,
+                before, Map.of("deleted", true), auditedReason);
+    }
+
+    @Transactional
+    public AdminBulkResultDto bulkDeleteReviews(List<Long> ids, Long adminId, String reason) {
+        if (ids == null || ids.isEmpty()) {
+            throw new BadRequestException("Список отзывов не может быть пустым");
+        }
+        String auditedReason = requireReason(reason);
+
+        List<AdminBulkResultDto.Item> items = new java.util.ArrayList<>();
+        int succeeded = 0;
+        for (Long id : ids) {
+            try {
+                adminDeleteReview(id, adminId, auditedReason);
+                succeeded++;
+                items.add(AdminBulkResultDto.Item.builder().id(id).success(true).build());
+            } catch (RuntimeException ex) {
+                items.add(AdminBulkResultDto.Item.builder()
+                        .id(id).success(false).error(ex.getMessage()).build());
+            }
+        }
+
+        adminAuditService.record(adminId, AdminAuditAction.BULK_OPERATION,
+                AdminAuditService.ENTITY_REVIEW, null, null,
+                Map.of("operation", "DELETE", "requested", ids.size(), "succeeded", succeeded),
+                auditedReason);
+
+        return AdminBulkResultDto.builder()
+                .action("DELETE")
+                .requested(ids.size())
+                .succeeded(succeeded)
+                .failed(ids.size() - succeeded)
+                .items(items)
+                .build();
+    }
+
+    private String requireReason(String reason) {
+        if (reason == null || reason.isBlank()) {
+            throw new BadRequestException("Причина административного действия обязательна");
+        }
+        return reason.trim();
     }
 
     @Transactional(readOnly = true)

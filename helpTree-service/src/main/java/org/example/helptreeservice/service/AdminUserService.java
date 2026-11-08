@@ -3,8 +3,11 @@ package org.example.helptreeservice.service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.helptreeservice.dto.admin.AdminAuditLogDto;
+import org.example.helptreeservice.dto.admin.AdminBulkResultDto;
+import org.example.helptreeservice.dto.admin.AdminBulkUsersRequest;
 import org.example.helptreeservice.dto.admin.AdminCreateUserRequest;
 import org.example.helptreeservice.dto.admin.AdminInviteUserRequest;
+import org.example.helptreeservice.dto.admin.AdminSessionDto;
 import org.example.helptreeservice.dto.users.CreateUserRequest;
 import org.example.helptreeservice.dto.users.UserDto;
 import org.example.helptreeservice.entity.User;
@@ -22,6 +25,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -42,6 +46,7 @@ public class AdminUserService {
     private final AccountSecurityService accountSecurityService;
     private final AdminAuditService adminAuditService;
     private final UserDataExportService userDataExportService;
+    private final AuthSessionService authSessionService;
 
     @Transactional(readOnly = true)
     public Page<UserDto> search(Pageable pageable,
@@ -201,6 +206,129 @@ public class AdminUserService {
         // Fail with a clear 404 instead of returning an empty page for a typo.
         userService.getUserEntityByIdIncludingDeleted(id);
         return adminAuditService.history(AdminAuditService.ENTITY_USER, id, pageable);
+    }
+
+    @Transactional
+    public void changeRating(Long id, Double rating, String reason, Long adminId) {
+        String auditedReason = requireReason(reason);
+        if (rating == null || rating < 0 || rating > 5) {
+            throw new BadRequestException("Рейтинг должен быть от 0 до 5");
+        }
+
+        User snapshot = userRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Пользователь не найден с id: " + id));
+        if (Boolean.TRUE.equals(snapshot.getDeleted())) {
+            throw new NotFoundException("Пользователь не найден с id: " + id);
+        }
+
+        Double previous = snapshot.getRating();
+        userService.updateUserRating(id, rating);
+
+        adminAuditService.record(adminId, AdminAuditAction.RATING_CHANGED,
+                AdminAuditService.ENTITY_USER, id,
+                Map.of("rating", previous == null ? "" : previous.toString()),
+                Map.of("rating", rating.toString()),
+                auditedReason);
+        log.info("Администратор {} изменил рейтинг пользователя {}: {} -> {}",
+                adminId, id, previous, rating);
+    }
+
+    @Transactional(readOnly = true)
+    public List<AdminSessionDto> sessions(Long id) {
+        userService.getUserEntityByIdIncludingDeleted(id);
+        return authSessionService.listActiveSessions(id, null).stream()
+                .map(session -> AdminSessionDto.builder()
+                        .id(session.id())
+                        .createdAt(session.createdAt())
+                        .lastUsedAt(session.lastUsedAt())
+                        .expiresAt(session.expiresAt())
+                        .ipAddress(session.ipAddress())
+                        .userAgent(session.userAgent())
+                        .deviceName(session.deviceName())
+                        .current(session.current())
+                        .build())
+                .toList();
+    }
+
+    @Transactional
+    public void revokeSession(Long userId, UUID sessionId, String reason, Long adminId) {
+        String auditedReason = requireReason(reason);
+        authSessionService.revokeSession(userId, sessionId, auditedReason);
+
+        adminAuditService.record(adminId, AdminAuditAction.SESSION_REVOKED,
+                AdminAuditService.ENTITY_SESSION, userId,
+                Map.of("sessionId", sessionId.toString(), "active", true),
+                Map.of("sessionId", sessionId.toString(), "active", false),
+                auditedReason);
+        log.info("Администратор {} отозвал сессию {} пользователя {}", adminId, sessionId, userId);
+    }
+
+    @Transactional
+    public void revokeAllSessions(Long userId, String reason, Long adminId) {
+        String auditedReason = requireReason(reason);
+        authSessionService.revokeAllSessionsForUser(userId, auditedReason);
+
+        adminAuditService.record(adminId, AdminAuditAction.SESSION_REVOKED_ALL,
+                AdminAuditService.ENTITY_SESSION, userId,
+                null, Map.of("allSessionsRevoked", true), auditedReason);
+        log.info("Администратор {} отозвал все сессии пользователя {}", adminId, userId);
+    }
+
+    @Transactional
+    public AdminBulkResultDto bulk(AdminBulkUsersRequest request, Long adminId) {
+        if (request.getIds() == null || request.getIds().isEmpty()) {
+            throw new BadRequestException("Список пользователей не может быть пустым");
+        }
+        String operation = request.getAction() == null
+                ? ""
+                : request.getAction().trim().toUpperCase(java.util.Locale.ROOT);
+        if (!List.of("DELETE", "RESTORE", "CHANGE_ROLE").contains(operation)) {
+            throw new BadRequestException("Поддерживаются операции DELETE, RESTORE и CHANGE_ROLE");
+        }
+        String auditedReason = requireReason(request.getReason());
+        Role role = null;
+        if ("CHANGE_ROLE".equals(operation)) {
+            if (request.getRole() == null || request.getRole().isBlank()) {
+                throw new BadRequestException("Для операции CHANGE_ROLE нужна роль");
+            }
+            try {
+                role = Role.valueOf(request.getRole().trim().toUpperCase(java.util.Locale.ROOT));
+            } catch (IllegalArgumentException ex) {
+                throw new BadRequestException("Неизвестная роль: " + request.getRole());
+            }
+        }
+
+        List<AdminBulkResultDto.Item> items = new java.util.ArrayList<>();
+        int succeeded = 0;
+        for (Long id : request.getIds()) {
+            try {
+                switch (operation) {
+                    case "DELETE" -> delete(id, auditedReason, adminId);
+                    case "RESTORE" -> restore(id, auditedReason, adminId);
+                    case "CHANGE_ROLE" -> changeRole(id, role, auditedReason, adminId);
+                    default -> throw new BadRequestException("Неподдерживаемая операция");
+                }
+                succeeded++;
+                items.add(AdminBulkResultDto.Item.builder().id(id).success(true).build());
+            } catch (RuntimeException ex) {
+                items.add(AdminBulkResultDto.Item.builder()
+                        .id(id).success(false).error(ex.getMessage()).build());
+            }
+        }
+
+        adminAuditService.record(adminId, AdminAuditAction.BULK_OPERATION,
+                AdminAuditService.ENTITY_USER, null, null,
+                Map.of("operation", operation, "requested", request.getIds().size(),
+                        "succeeded", succeeded),
+                auditedReason);
+
+        return AdminBulkResultDto.builder()
+                .action(operation)
+                .requested(request.getIds().size())
+                .succeeded(succeeded)
+                .failed(request.getIds().size() - succeeded)
+                .items(items)
+                .build();
     }
 
     private CreateUserRequest toCreateRequest(String name,

@@ -65,8 +65,15 @@ export const AdminReviewsPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const [deleteTarget, setDeleteTarget] = useState<Review | null>(null);
+  const [deleteReason, setDeleteReason] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const [selected, setSelected] = useState<number[]>([]);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkReason, setBulkReason] = useState('');
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkError, setBulkError] = useState<string | null>(null);
 
   // The request is built from the applied filters and the current page, never
   // from the draft inputs. Typing in a filter does not hit the server until
@@ -102,6 +109,10 @@ export const AdminReviewsPage: React.FC = () => {
     };
   }, [query, reloadKey]);
 
+  useEffect(() => {
+    setSelected([]);
+  }, [query, reloadKey]);
+
   const applyFilters = useCallback(() => {
     const parsedUserId = Number(userIdInput);
     setAppliedFilters({
@@ -132,13 +143,14 @@ export const AdminReviewsPage: React.FC = () => {
   );
 
   const handleDelete = async () => {
-    if (!deleteTarget || deleting) return;
+    if (!deleteTarget || deleting || !deleteReason.trim()) return;
     setDeleting(true);
     setDeleteError(null);
     try {
-      await adminApi.deleteReview(deleteTarget.id);
+      await adminApi.deleteReview(deleteTarget.id, deleteReason.trim());
       showToast('Отзыв удалён, рейтинг получателя пересчитан.', 'success');
       setDeleteTarget(null);
+      setDeleteReason('');
       // A removed row can empty the last page; step back one page in that case.
       if (data && data.content.length === 1 && page > 0) {
         setPage((value) => Math.max(0, value - 1));
@@ -152,6 +164,43 @@ export const AdminReviewsPage: React.FC = () => {
     }
   };
 
+  const handleBulkDelete = async () => {
+    if (bulkBusy || !bulkReason.trim() || selected.length === 0) return;
+    setBulkBusy(true);
+    setBulkError(null);
+    try {
+      const result = await adminApi.bulkDeleteReviews(selected, bulkReason.trim());
+      showToast(
+        `Массовое удаление: ${result.succeeded} из ${result.requested} отзывов.` +
+          (result.failed > 0 ? ` Ошибок: ${result.failed}.` : ''),
+        result.failed > 0 ? 'info' : 'success'
+      );
+      setBulkOpen(false);
+      setBulkReason('');
+      setSelected([]);
+      setReloadKey((value) => value + 1);
+    } catch (bulkFailure) {
+      setBulkError(getApiErrorMessage(bulkFailure, 'Не удалось удалить выбранные отзывы.'));
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const toggleSelected = (id: number) => {
+    setSelected((previous) =>
+      previous.includes(id) ? previous.filter((value) => value !== id) : [...previous, id]
+    );
+  };
+
+  const selectableReviews = data?.content ?? [];
+  const allSelected = Boolean(
+    selectableReviews.length > 0 && selected.length === selectableReviews.length
+  );
+
+  const toggleAll = () => {
+    setSelected(allSelected ? [] : selectableReviews.map((review) => review.id));
+  };
+
   const reviews = data?.content ?? [];
   const totalElements = data?.totalElements ?? 0;
   const totalPages = data?.totalPages ?? 0;
@@ -163,8 +212,9 @@ export const AdminReviewsPage: React.FC = () => {
         <p>
           Глобальный список отзывов <code>GET /api/admin/reviews</code> с серверными
           фильтрами по получателю, оценке и периоду. Удаление через{' '}
-          <code>DELETE /api/reviews/{'{id}'}</code> выполняет soft-delete и сразу
-          пересчитывает рейтинг получателя.
+          <code>DELETE /api/admin/reviews/{'{id}'}</code> требует причины, выполняет
+          soft-delete, пересчитывает рейтинг получателя и пишется в{' '}
+          <code>admin_audit_log</code>.
         </p>
       </div>
 
@@ -291,9 +341,53 @@ export const AdminReviewsPage: React.FC = () => {
         />
       ) : (
         <>
+          {selected.length > 0 && (
+            <div className="admin-toolbar-card admin-bulk-bar">
+              <span>
+                Выбрано <strong>{selected.length}</strong>
+              </span>
+              <div className="admin-toolbar-actions">
+                <button
+                  type="button"
+                  className="admin-button admin-button--ghost admin-button--compact"
+                  onClick={() => setSelected([])}
+                >
+                  Снять выбор
+                </button>
+                <button
+                  type="button"
+                  className="admin-button admin-button--danger admin-button--compact"
+                  onClick={() => {
+                    setBulkError(null);
+                    setBulkReason('');
+                    setBulkOpen(true);
+                  }}
+                >
+                  <Trash2 size={15} aria-hidden="true" />
+                  Удалить выбранные
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="admin-bulk-select-all">
+            <label>
+              <input type="checkbox" checked={allSelected} onChange={toggleAll} />
+              Выбрать все на странице
+            </label>
+          </div>
+
           <ul className="admin-review-list">
             {reviews.map((review) => (
               <li key={review.id} className="admin-review">
+                <label className="admin-bulk-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={selected.includes(review.id)}
+                    onChange={() => toggleSelected(review.id)}
+                    aria-label={`Выбрать отзыв от ${review.fromUserName}`}
+                  />
+                </label>
                 <div className="admin-review-main">
                   <div className="admin-review-head">
                     <Stars rating={review.rating} />
@@ -320,6 +414,7 @@ export const AdminReviewsPage: React.FC = () => {
                   className="admin-icon-btn admin-icon-btn--danger"
                   onClick={() => {
                     setDeleteError(null);
+                    setDeleteReason('');
                     setDeleteTarget(review);
                   }}
                   aria-label={`Удалить отзыв от ${review.fromUserName}`}
@@ -356,11 +451,44 @@ export const AdminReviewsPage: React.FC = () => {
         confirmText="Удалить отзыв"
         busy={deleting}
         error={deleteError}
+        reason={deleteReason}
+        onReasonChange={setDeleteReason}
+        reasonRequired
+        reasonPlaceholder="Например: оскорбления или не относящийся к помощи текст"
+        reasonHint="Причина обязательна и сохраняется в admin_audit_log."
         onConfirm={handleDelete}
         onClose={() => {
           if (!deleting) {
             setDeleteTarget(null);
+            setDeleteReason('');
             setDeleteError(null);
+          }
+        }}
+      />
+
+      <AdminConfirmDialog
+        open={bulkOpen}
+        title="Удалить выбранные отзывы?"
+        description={`Будет обработано отзывов: ${selected.length}. Каждый элемент применяется отдельно.`}
+        consequences={[
+          'Отзывы будут мягко удалены, рейтинги получателей пересчитаны.',
+          'Успешные элементы не откатываются, если один из ID вернул ошибку.',
+          'Итог операции и причина сохраняются в admin_audit_log как BULK_OPERATION.',
+        ]}
+        confirmText="Удалить"
+        busy={bulkBusy}
+        error={bulkError}
+        reason={bulkReason}
+        onReasonChange={setBulkReason}
+        reasonRequired
+        reasonPlaceholder="Например: массовая очистка спама"
+        reasonHint="Причина обязательна и сохраняется в admin_audit_log."
+        onConfirm={handleBulkDelete}
+        onClose={() => {
+          if (!bulkBusy) {
+            setBulkOpen(false);
+            setBulkReason('');
+            setBulkError(null);
           }
         }}
       />

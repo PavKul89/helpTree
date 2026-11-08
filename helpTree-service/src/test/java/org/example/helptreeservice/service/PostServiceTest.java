@@ -7,6 +7,7 @@ import org.example.helptreeservice.dto.posts.PublicPostDto;
 import org.example.helptreeservice.dto.wallet.WalletOperationResult;
 import org.example.helptreeservice.entity.Post;
 import org.example.helptreeservice.entity.User;
+import org.example.helptreeservice.enums.AdminAuditAction;
 import org.example.helptreeservice.enums.PostStatus;
 import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.ForbiddenException;
@@ -26,6 +27,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -50,6 +52,8 @@ class PostServiceTest {
     private WalletService walletService;
     @Mock
     private PrivacyPolicy privacyPolicy;
+    @Mock
+    private AdminAuditService adminAuditService;
 
     private EconomyConfig economyConfig;
 
@@ -69,7 +73,8 @@ class PostServiceTest {
                 imageService,
                 walletService,
                 economyConfig,
-                privacyPolicy
+                privacyPolicy,
+                adminAuditService
         );
         owner = user(1L, "Owner");
 
@@ -255,5 +260,40 @@ class PostServiceTest {
         postService.boostPost(5L, 99L, true, "key-admin");
 
         verify(walletService).chargeForPostBoost(99L, 5L, "key-admin");
+    }
+
+    @Test
+    void deletePost_adminOverload_shouldRequireReason() {
+        assertThrows(BadRequestException.class, () -> postService.deletePost(5L, 9L, "  "));
+
+        verifyNoInteractions(adminAuditService);
+        verify(postRepository, never()).save(any(Post.class));
+    }
+
+    @Test
+    void deletePost_adminOverload_shouldSoftDeleteAndWriteAudit() {
+        Post post = post(5L, PostStatus.OPEN, owner);
+        when(postRepository.findById(5L)).thenReturn(Optional.of(post));
+
+        postService.deletePost(5L, 9L, "Нарушение правил");
+
+        assertEquals(true, post.getDeleted());
+        verify(adminAuditService).record(eq(9L), eq(AdminAuditAction.POST_DELETED),
+                eq(AdminAuditService.ENTITY_POST), eq(5L), anyMap(), anyMap(),
+                eq("Нарушение правил"));
+    }
+
+    @Test
+    void changeStatus_shouldPersistAndAuditTransition() {
+        Post post = post(5L, PostStatus.OPEN, owner);
+        when(postRepository.findById(5L)).thenReturn(Optional.of(post));
+        when(postRepository.saveAndFlush(post)).thenReturn(post);
+
+        PostDto result = postService.changeStatus(5L, PostStatus.COMPLETED, 9L, "Ручное завершение");
+
+        assertEquals(PostStatus.COMPLETED, result.getStatus());
+        verify(adminAuditService).record(eq(9L), eq(AdminAuditAction.POST_STATUS_CHANGED),
+                eq(AdminAuditService.ENTITY_POST), eq(5L), anyMap(), anyMap(),
+                eq("Ручное завершение"));
     }
 }

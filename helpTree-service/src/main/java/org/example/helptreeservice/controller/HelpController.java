@@ -52,15 +52,25 @@ public class HelpController {
     }
 
     @PostMapping("/{helpId}/complete")
-    public ResponseEntity<HelpResponse> completeHelp(@PathVariable Long helpId) {
+    public ResponseEntity<HelpResponse> completeHelp(@PathVariable Long helpId,
+                                                     @RequestParam(required = false) String reason) {
         Long actorId = requireCurrentUserId("Для завершения помощи необходимо войти в систему");
-        return ResponseEntity.ok(helpService.completeHelp(helpId, actorId, authService.isAdmin()));
+        boolean admin = authService.isAdmin();
+        HelpResponse response = admin
+                ? helpService.completeHelp(helpId, actorId, true, reason)
+                : helpService.completeHelp(helpId, actorId, false);
+        return ResponseEntity.ok(response);
     }
 
     @PostMapping("/{helpId}/confirm")
-    public ResponseEntity<HelpResponse> confirmHelp(@PathVariable Long helpId) {
+    public ResponseEntity<HelpResponse> confirmHelp(@PathVariable Long helpId,
+                                                    @RequestParam(required = false) String reason) {
         Long actorId = requireCurrentUserId("Для подтверждения помощи необходимо войти в систему");
-        return ResponseEntity.ok(helpService.confirmHelp(helpId, actorId, authService.isAdmin()));
+        boolean admin = authService.isAdmin();
+        HelpResponse response = admin
+                ? helpService.confirmHelp(helpId, actorId, true, reason)
+                : helpService.confirmHelp(helpId, actorId, false);
+        return ResponseEntity.ok(response);
     }
 
     @PostMapping("/{helpId}/cancel")

@@ -51,7 +51,7 @@ class HelpControllerTest {
         when(helpService.completeHelp(3L, 7L, false))
                 .thenReturn(HelpResponse.builder().id(3L).build());
 
-        ResponseEntity<HelpResponse> response = controller.completeHelp(3L);
+        ResponseEntity<HelpResponse> response = controller.completeHelp(3L, null);
 
         verify(helpService).completeHelp(3L, 7L, false);
         verify(helpService, never()).confirmHelp(anyLong(), anyLong(), anyBoolean());
@@ -63,12 +63,12 @@ class HelpControllerTest {
         when(authService.getCurrentUser())
                 .thenReturn(new AuthorizationService.UserContext(7L, "ADMIN", "a@test.local"));
         when(authService.isAdmin()).thenReturn(true);
-        when(helpService.confirmHelp(3L, 7L, true))
+        when(helpService.confirmHelp(3L, 7L, true, null))
                 .thenReturn(HelpResponse.builder().id(3L).build());
 
-        controller.confirmHelp(3L);
+        controller.confirmHelp(3L, null);
 
-        verify(helpService).confirmHelp(3L, 7L, true);
+        verify(helpService).confirmHelp(3L, 7L, true, null);
     }
 
     @Test

@@ -9,6 +9,8 @@ import org.example.helptreeservice.dto.posts.UpdatePostRequest;
 import org.example.helptreeservice.dto.wallet.WalletOperationResult;
 import org.example.helptreeservice.entity.Post;
 import org.example.helptreeservice.entity.User;
+import org.example.helptreeservice.dto.admin.AdminBulkResultDto;
+import org.example.helptreeservice.enums.AdminAuditAction;
 import org.example.helptreeservice.enums.ImagePurpose;
 import org.example.helptreeservice.enums.ModerationStatus;
 import org.example.helptreeservice.enums.PostStatus;
@@ -21,6 +23,7 @@ import org.example.helptreeservice.metrics.annotation.BusinessMetric;
 import org.example.helptreeservice.repository.PostRepository;
 import org.example.helptreeservice.repository.PostSpecification;
 import org.example.helptreeservice.repository.UserRepository;
+import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -28,8 +31,13 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -47,6 +55,7 @@ public class PostService {
     private final WalletService walletService;
     private final EconomyConfig economyConfig;
     private final PrivacyPolicy privacyPolicy;
+    private final AdminAuditService adminAuditService;
 
     private PostDto toDto(Post post) {
         PostDto dto = postMapper.toDto(post);
@@ -403,6 +412,170 @@ public class PostService {
             log.error("Ошибка при восстановлении поста с ID: {}", id, e);
             throw e;
         }
+    }
+
+    // ------------------------------------------------------- administrative
+
+    /**
+     * Administrative soft delete with a mandatory reason. The owner-facing
+     * overload above keeps its historical behaviour; this one additionally
+     * records who deleted the request and why.
+     */
+    @Transactional
+    public void deletePost(Long id, Long adminId, String reason) {
+        String auditedReason = requireReason(reason);
+        Post snapshot = postRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Пост не найден с id: " + id));
+        Map<String, Object> before = postState(snapshot);
+
+        deletePost(id);
+
+        adminAuditService.record(adminId, AdminAuditAction.POST_DELETED,
+                AdminAuditService.ENTITY_POST, id,
+                before, Map.of("deleted", true), auditedReason);
+    }
+
+    @Transactional
+    public void restorePost(Long id, Long adminId, String reason) {
+        String auditedReason = requireReason(reason);
+        Post snapshot = postRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Пост не найден с id: " + id));
+        Map<String, Object> before = postState(snapshot);
+
+        restorePost(id);
+
+        Post restored = postRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Пост не найден с id: " + id));
+        adminAuditService.record(adminId, AdminAuditAction.POST_RESTORED,
+                AdminAuditService.ENTITY_POST, id,
+                before, postState(restored), auditedReason);
+    }
+
+    /** Administrative status transition with a mandatory reason. */
+    @Transactional
+    public PostDto changeStatus(Long id, PostStatus newStatus, Long adminId, String reason) {
+        String auditedReason = requireReason(reason);
+        if (newStatus == null) {
+            throw new BadRequestException("Статус обязателен");
+        }
+
+        Post post = postRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Пост не найден с id: " + id));
+        if (Boolean.TRUE.equals(post.getDeleted())) {
+            throw new NotFoundException("Пост не найден с id: " + id);
+        }
+
+        PostStatus previous = post.getStatus();
+        if (previous == newStatus) {
+            return toDto(post);
+        }
+
+        post.setStatus(newStatus);
+        post.setUpdatedAt(LocalDateTime.now());
+        Post saved = postRepository.saveAndFlush(post);
+
+        adminAuditService.record(adminId, AdminAuditAction.POST_STATUS_CHANGED,
+                AdminAuditService.ENTITY_POST, id,
+                Map.of("status", previous.name()),
+                Map.of("status", newStatus.name()),
+                auditedReason);
+        return toDto(saved);
+    }
+
+    /** Server-side list of soft-deleted requests, including anonymized rows. */
+    @Transactional(readOnly = true)
+    public Page<PostDto> getDeletedPosts(String q, String category, Pageable pageable) {
+        String pattern = StringUtils.hasText(q)
+                ? "%" + q.trim().toLowerCase(Locale.ROOT) + "%"
+                : null;
+        Specification<Post> spec = (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            predicates.add(cb.isTrue(root.get("deleted")));
+            if (pattern != null) {
+                predicates.add(cb.or(
+                        cb.like(cb.lower(root.get("title")), pattern),
+                        cb.like(cb.lower(root.get("description")), pattern),
+                        cb.like(cb.lower(root.get("authorName")), pattern)));
+            }
+            if (StringUtils.hasText(category)) {
+                predicates.add(cb.equal(root.get("category"), category.trim()));
+            }
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
+        return postRepository.findAll(spec, pageable).map(this::toDto);
+    }
+
+    /**
+     * Applies a bulk action item by item. A failing row is reported without
+     * rolling back the successful ones; every successful item is already
+     * audited by the corresponding single-item method.
+     */
+    @Transactional
+    public AdminBulkResultDto bulk(String action,
+                                   List<Long> ids,
+                                   PostStatus status,
+                                   Long adminId,
+                                   String reason) {
+        if (ids == null || ids.isEmpty()) {
+            throw new BadRequestException("Список заявок не может быть пустым");
+        }
+        String operation = action == null ? "" : action.trim().toUpperCase(Locale.ROOT);
+        if (!List.of("DELETE", "RESTORE", "STATUS").contains(operation)) {
+            throw new BadRequestException("Поддерживаются операции DELETE, RESTORE и STATUS");
+        }
+        if ("STATUS".equals(operation) && status == null) {
+            throw new BadRequestException("Для операции STATUS нужен статус");
+        }
+        String auditedReason = requireReason(reason);
+
+        List<AdminBulkResultDto.Item> items = new ArrayList<>();
+        int succeeded = 0;
+        for (Long id : ids) {
+            try {
+                switch (operation) {
+                    case "DELETE" -> deletePost(id, adminId, auditedReason);
+                    case "RESTORE" -> restorePost(id, adminId, auditedReason);
+                    case "STATUS" -> changeStatus(id, status, adminId, auditedReason);
+                    default -> throw new BadRequestException("Неподдерживаемая операция");
+                }
+                succeeded++;
+                items.add(AdminBulkResultDto.Item.builder().id(id).success(true).build());
+            } catch (RuntimeException ex) {
+                items.add(AdminBulkResultDto.Item.builder()
+                        .id(id).success(false).error(ex.getMessage()).build());
+            }
+        }
+
+        adminAuditService.record(adminId, AdminAuditAction.BULK_OPERATION,
+                AdminAuditService.ENTITY_POST, null,
+                null,
+                Map.of("operation", operation, "requested", ids.size(), "succeeded", succeeded),
+                auditedReason);
+
+        return AdminBulkResultDto.builder()
+                .action(operation)
+                .requested(ids.size())
+                .succeeded(succeeded)
+                .failed(ids.size() - succeeded)
+                .items(items)
+                .build();
+    }
+
+    private String requireReason(String reason) {
+        if (reason == null || reason.isBlank()) {
+            throw new BadRequestException("Причина административного действия обязательна");
+        }
+        return reason.trim();
+    }
+
+    private Map<String, Object> postState(Post post) {
+        Map<String, Object> state = new LinkedHashMap<>();
+        state.put("id", post.getId());
+        state.put("title", post.getTitle());
+        state.put("status", post.getStatus() != null ? post.getStatus().name() : null);
+        state.put("deleted", post.getDeleted());
+        state.put("deletedAt", post.getDeletedAt() != null ? post.getDeletedAt().toString() : null);
+        return state;
     }
 
     private Post getPostEntityById(Long id) {

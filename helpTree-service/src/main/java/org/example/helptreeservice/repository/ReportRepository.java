@@ -132,4 +132,40 @@ public interface ReportRepository extends JpaRepository<Report, Long> {
                               @Param("to") LocalDateTime to,
                               @Param("q") String q,
                               Pageable pageable);
+
+    @Query("SELECT r.status, COUNT(r) FROM Report r GROUP BY r.status")
+    List<Object[]> countByStatus();
+
+    @Query("SELECT r.priority, COUNT(r) FROM Report r "
+            + "WHERE r.status IN :statuses GROUP BY r.priority")
+    List<Object[]> countByPriority(@Param("statuses") Collection<ReportStatus> statuses);
+
+    @Query(value = """
+            SELECT AVG(EXTRACT(EPOCH FROM (resolved_at - created_at)) / 3600.0)
+            FROM reports
+            WHERE resolved_at IS NOT NULL
+              AND resolved_at >= :from AND resolved_at < :to
+            """, nativeQuery = true)
+    Double averageResolutionHours(@Param("from") LocalDateTime from,
+                                  @Param("to") LocalDateTime to);
+
+    @Query(value = """
+            SELECT AVG(EXTRACT(EPOCH FROM (event.first_at - report.created_at)) / 3600.0)
+            FROM reports report
+            JOIN (
+                SELECT report_id, MIN(created_at) AS first_at
+                FROM report_events
+                WHERE created_at >= :from AND created_at < :to
+                GROUP BY report_id
+            ) event ON event.report_id = report.id
+            """, nativeQuery = true)
+    Double averageFirstResponseHours(@Param("from") LocalDateTime from,
+                                     @Param("to") LocalDateTime to);
+
+    @Query(value = """
+            SELECT MIN(created_at)
+            FROM reports
+            WHERE status IN ('OPEN', 'IN_REVIEW')
+            """, nativeQuery = true)
+    LocalDateTime oldestOpenCreatedAt();
 }

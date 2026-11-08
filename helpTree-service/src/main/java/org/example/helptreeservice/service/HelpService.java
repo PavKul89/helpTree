@@ -11,6 +11,7 @@ import org.example.helptreeservice.entity.Post;
 import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.enums.HelpActorRole;
 import org.example.helptreeservice.enums.HelpStatus;
+import org.example.helptreeservice.enums.AdminAuditAction;
 import org.example.helptreeservice.enums.NotificationType;
 import org.example.helptreeservice.enums.PostStatus;
 import org.example.helptreeservice.enums.UserBlockScope;
@@ -61,6 +62,7 @@ public class HelpService {
     private final HelpGraphMetrics helpGraphMetrics;
     private final UserBlockService userBlockService;
     private final NotificationService notificationService;
+    private final AdminAuditService adminAuditService;
 
     @Value("${app.graph.default-max-edges:500}")
     private int defaultMaxEdges;
@@ -183,9 +185,17 @@ public class HelpService {
      * помощи обновляется сразу, потому что запись остаётся активной.
      */
     public HelpResponse completeHelp(Long helpId, Long actorId, boolean admin) {
+        return completeHelp(helpId, actorId, admin, null);
+    }
+
+    public HelpResponse completeHelp(Long helpId, Long actorId, boolean admin, String reason) {
+        if (admin) {
+            requireAdminReason(reason);
+        }
         log.info("Завершение помощи: helpId={}, actorId={}, admin={}", helpId, actorId, admin);
 
         Help help = getHelpByIdForUpdate(helpId);
+        HelpStatus beforeStatus = help.getStatus();
         Long helperId = help.getHelper().getId();
 
         if (!admin && !helperId.equals(actorId)) {
@@ -230,6 +240,7 @@ public class HelpService {
         ratingService.recalculateUsers(List.of(helperId));
 
         log.info("Помощь отмечена как выполненная: helpId={}", helpId);
+        auditOverride(admin, actorId, helpId, "COMPLETE", beforeStatus, HelpStatus.COMPLETED, reason);
         return helpMapper.toResponse(updatedHelp);
     }
 
@@ -242,10 +253,18 @@ public class HelpService {
      * Повторный вызов возвращает текущее состояние и ничего не начисляет.
      */
     public HelpResponse confirmHelp(Long helpId, Long actorId, boolean admin) {
+        return confirmHelp(helpId, actorId, admin, null);
+    }
+
+    public HelpResponse confirmHelp(Long helpId, Long actorId, boolean admin, String reason) {
+        if (admin) {
+            requireAdminReason(reason);
+        }
         log.info("Подтверждение получения помощи: helpId={}, actorId={}, admin={}",
                 helpId, actorId, admin);
 
         Help help = getHelpByIdForUpdate(helpId);
+        HelpStatus beforeStatus = help.getStatus();
         Long helperId = help.getHelper().getId();
         Long receiverId = help.getReceiver().getId();
 
@@ -315,6 +334,7 @@ public class HelpService {
                 "help:" + help.getId() + ":confirmed:helper"));
 
         log.info("Помощь успешно подтверждена: helpId={}", helpId);
+        auditOverride(admin, actorId, helpId, "CONFIRM", beforeStatus, HelpStatus.CONFIRMED, reason);
         return helpMapper.toResponse(help);
     }
 
@@ -367,7 +387,15 @@ public class HelpService {
             throw new BadRequestException("Администратор должен указать причину отмены");
         }
 
+        HelpStatus beforeStatus = help.getStatus();
         applyCancellation(help, initiator, actorId, normalizedReason);
+        if (initiator == HelpActorRole.ADMIN) {
+            adminAuditService.record(actorId, AdminAuditAction.HELP_OVERRIDE,
+                    AdminAuditService.ENTITY_HELP, helpId,
+                    Map.of("status", beforeStatus.name()),
+                    Map.of("status", HelpStatus.CANCELLED.name(), "operation", "CANCEL"),
+                    normalizedReason);
+        }
         log.info("Помощь отменена: helpId={}, initiator={}", helpId, initiator);
         return helpMapper.toResponse(help);
     }
@@ -456,6 +484,37 @@ public class HelpService {
         ratingService.recalculateUsers(List.of(helperId));
 
         notifyHelpCancelled(help, fromStatus, initiator, actorId, help.getCancelReason());
+    }
+
+    private void requireAdminReason(String reason) {
+        if (reason == null || reason.isBlank()) {
+            throw new BadRequestException("Причина административного действия обязательна");
+        }
+    }
+
+    /**
+     * Administrative override is a sensitive action even when the resulting
+     * help transition is idempotent elsewhere: the actor and the reason are
+     * always captured.
+     */
+    private void auditOverride(boolean admin,
+                               Long actorId,
+                               Long helpId,
+                               String operation,
+                               HelpStatus before,
+                               HelpStatus after,
+                               String reason) {
+        if (!admin) {
+            return;
+        }
+        Map<String, Object> beforeState = before == null
+                ? null
+                : Map.of("status", before.name());
+        Map<String, Object> afterState = Map.of("status", after.name(),
+                "operation", operation);
+        adminAuditService.record(actorId, AdminAuditAction.HELP_OVERRIDE,
+                AdminAuditService.ENTITY_HELP, helpId,
+                beforeState, afterState, reason);
     }
 
     private void notifyHelpAccepted(Help help, User helper) {

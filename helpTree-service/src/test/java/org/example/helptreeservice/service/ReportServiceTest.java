@@ -15,6 +15,7 @@ import org.example.helptreeservice.entity.Report;
 import org.example.helptreeservice.entity.ReportEvent;
 import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.enums.ModerationActionType;
+import org.example.helptreeservice.enums.AdminAuditAction;
 import org.example.helptreeservice.enums.ReportAction;
 import org.example.helptreeservice.enums.ReportEventType;
 import org.example.helptreeservice.enums.ReportPriority;
@@ -51,7 +52,9 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -76,6 +79,8 @@ class ReportServiceTest {
     private ModerationService moderationService;
     @Mock
     private NotificationService notificationService;
+    @Mock
+    private AdminAuditService adminAuditService;
 
     private ReportService reportService;
     private User reporter;
@@ -92,7 +97,8 @@ class ReportServiceTest {
                 userRepository,
                 moderationService,
                 new CommentContentSanitizer(new CommentProperties()),
-                notificationService);
+                notificationService,
+                adminAuditService);
 
         reporter = user(1L, "Alice", Role.USER);
         admin = user(3L, "Admin", Role.ADMIN);
@@ -234,6 +240,9 @@ class ReportServiceTest {
         verify(reportEventRepository).save(captor.capture());
         assertEquals(ReportEventType.ASSIGNED, captor.getValue().getEventType());
         assertEquals(ReportStatus.IN_REVIEW, captor.getValue().getToStatus());
+        verify(adminAuditService).record(eq(3L), eq(AdminAuditAction.REPORT_ASSIGNED),
+                eq(AdminAuditService.ENTITY_REPORT), eq(7L), anyMap(), anyMap(),
+                eq("Назначение модератора: Admin"));
     }
 
     @Test
@@ -287,6 +296,10 @@ class ReportServiceTest {
         verify(moderationService).applyContentAction(
                 ModerationActionType.REMOVE_CONTENT, ReportTargetType.COMMENT, 9L, null);
         verify(reportEventRepository).save(any(ReportEvent.class));
+        verify(adminAuditService).record(eq(3L), eq(AdminAuditAction.MODERATION_ACTION),
+                eq(AdminAuditService.ENTITY_REPORT), eq(7L), anyMap(), anyMap(), eq("Abuse"));
+        verify(adminAuditService).record(eq(3L), eq(AdminAuditAction.REPORT_STATUS_CHANGED),
+                eq(AdminAuditService.ENTITY_REPORT), eq(7L), anyMap(), anyMap(), eq("Abuse"));
     }
 
     @Test
@@ -371,5 +384,59 @@ class ReportServiceTest {
         verify(moderationService).applyContentAction(
                 ModerationActionType.REMOVE_CONTENT, ReportTargetType.COMMENT, 9L, null);
         assertTrue(response.getResolution().contains("Abuse"));
+    }
+
+    @Test
+    void getModerationSla_shouldAggregateQueueAndAverages() {
+        LocalDateTime from = LocalDateTime.of(2026, 1, 1, 0, 0);
+        LocalDateTime to = LocalDateTime.of(2026, 2, 1, 0, 0);
+        when(reportRepository.countByStatus()).thenReturn(List.of(
+                new Object[]{ReportStatus.OPEN.name(), 2L},
+                new Object[]{ReportStatus.IN_REVIEW.name(), 1L},
+                new Object[]{ReportStatus.RESOLVED.name(), 4L},
+                new Object[]{ReportStatus.REJECTED.name(), 3L}));
+        when(reportRepository.countByPriority(any())).thenReturn(List.<Object[]>of(
+                new Object[]{ReportPriority.HIGH.name(), 2L}));
+        LocalDateTime oldest = LocalDateTime.now().minusHours(5);
+        when(reportRepository.oldestOpenCreatedAt()).thenReturn(oldest);
+        when(reportRepository.averageResolutionHours(from, to)).thenReturn(8.5);
+        when(reportRepository.averageFirstResponseHours(from, to)).thenReturn(1.5);
+
+        var sla = reportService.getModerationSla(from, to);
+
+        assertEquals(from, sla.getFrom());
+        assertEquals(to, sla.getTo());
+        assertEquals(2L, sla.getOpenReports());
+        assertEquals(1L, sla.getInReviewReports());
+        assertEquals(4L, sla.getResolvedReports());
+        assertEquals(3L, sla.getRejectedReports());
+        assertEquals(10L, sla.getTotalReports());
+        assertEquals(2L, sla.getOpenByPriority().get(ReportPriority.HIGH.name()));
+        assertEquals(8.5, sla.getAverageResolutionHours());
+        assertEquals(1.5, sla.getAverageFirstResponseHours());
+        assertEquals(oldest, sla.getOldestOpenCreatedAt());
+        assertTrue(sla.getOldestOpenAgeHours() >= 5.0);
+    }
+
+    @Test
+    void getModerationSla_shouldRejectInvertedPeriod() {
+        LocalDateTime from = LocalDateTime.of(2026, 2, 1, 0, 0);
+        LocalDateTime to = LocalDateTime.of(2026, 1, 1, 0, 0);
+
+        assertThrows(BadRequestException.class,
+                () -> reportService.getModerationSla(from, to));
+    }
+
+    @Test
+    void assignReport_shouldNotAuditWhenAssigneeIsUnchanged() {
+        Report report = report(7L, ReportTargetType.POST, 5L, ReportStatus.IN_REVIEW);
+        User moderator = user(3L, "Admin", Role.ADMIN);
+        report.setAssignedModerator(moderator);
+        stubAdminLookup();
+        when(reportRepository.findByIdForUpdate(7L)).thenReturn(Optional.of(report));
+
+        reportService.assignReport(7L, new AssignReportRequest(), 3L);
+
+        verify(adminAuditService, never()).record(any(), any(), any(), any(), any(), any(), any());
     }
 }

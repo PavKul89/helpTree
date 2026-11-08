@@ -20,6 +20,7 @@ import org.example.helptreeservice.entity.ModerationAction;
 import org.example.helptreeservice.entity.Report;
 import org.example.helptreeservice.entity.ReportEvent;
 import org.example.helptreeservice.entity.User;
+import org.example.helptreeservice.enums.AdminAuditAction;
 import org.example.helptreeservice.enums.ModerationActionType;
 import org.example.helptreeservice.enums.NotificationType;
 import org.example.helptreeservice.enums.ReportAction;
@@ -121,6 +122,7 @@ public class ReportService {
     private final ModerationService moderationService;
     private final CommentContentSanitizer contentSanitizer;
     private final NotificationService notificationService;
+    private final AdminAuditService adminAuditService;
 
     // ============================================================
     // User-facing lifecycle
@@ -335,6 +337,14 @@ public class ReportService {
         saveEvent(report, admin, ReportEventType.NOTE, report.getStatus(), report.getStatus(),
                 internalNote, metadata);
 
+        adminAuditService.record(adminId, AdminAuditAction.REPORT_UPDATED,
+                AdminAuditService.ENTITY_REPORT, reportId,
+                Map.of("priority", metadata.getOrDefault("previousPriority",
+                                report.getPriority().name()).toString()),
+                Map.of("priority", report.getPriority().name(),
+                        "internalNoteChanged", metadata.getOrDefault("internalNoteChanged", false)),
+                "Изменение метаданных жалобы #" + reportId);
+
         log.info("Жалоба ID={} обновлена администратором ID={}: priority={}, noteChanged={}",
                 reportId, adminId, report.getPriority(), internalNote != null);
         return toAdminResponse(report);
@@ -367,6 +377,8 @@ public class ReportService {
         }
 
         ReportStatus from = report.getStatus();
+        Long previousModeratorId = report.getAssignedModerator() == null
+                ? null : report.getAssignedModerator().getId();
         LocalDateTime now = LocalDateTime.now();
         report.setAssignedModerator(moderator);
         report.setStatus(ReportStatus.IN_REVIEW);
@@ -377,6 +389,15 @@ public class ReportService {
         metadata.put("assignedModeratorId", moderator.getId());
         metadata.put("assignedModeratorName", moderator.getName());
         saveEvent(report, admin, ReportEventType.ASSIGNED, from, ReportStatus.IN_REVIEW, null, metadata);
+
+        adminAuditService.record(adminId, AdminAuditAction.REPORT_ASSIGNED,
+                AdminAuditService.ENTITY_REPORT, reportId,
+                Map.of("status", from.name(),
+                        "assignedModeratorId", previousModeratorId == null
+                                ? "" : String.valueOf(previousModeratorId)),
+                Map.of("status", ReportStatus.IN_REVIEW.name(),
+                        "assignedModeratorId", String.valueOf(moderator.getId())),
+                "Назначение модератора: " + moderator.getName());
 
         log.info("Жалоба ID={} назначена администратору ID={} (было {})",
                 reportId, moderator.getId(), from);
@@ -507,6 +528,22 @@ public class ReportService {
         metadata.put("newReportStatus", newStatus.name());
         saveEvent(report, admin, eventType, fromStatus, newStatus, eventNote, metadata);
 
+        adminAuditService.record(adminId, AdminAuditAction.MODERATION_ACTION,
+                AdminAuditService.ENTITY_REPORT, reportId,
+                Map.of("status", fromStatus.name()),
+                Map.of("status", newStatus.name(),
+                        "actionType", actionType.name(),
+                        "targetType", actionTargetType.name(),
+                        "targetId", String.valueOf(actionTargetId),
+                        "moderationActionId", String.valueOf(savedAction.getId())),
+                reason);
+
+        adminAuditService.record(adminId, AdminAuditAction.REPORT_STATUS_CHANGED,
+                AdminAuditService.ENTITY_REPORT, reportId,
+                Map.of("status", fromStatus.name()),
+                Map.of("status", newStatus.name()),
+                reason);
+
         notifyReportDecision(report, actionType, metadata, resolution);
 
         log.info("Жалоба ID={} рассмотрена администратором ID={}: {} -> {}, действие={}",
@@ -537,6 +574,53 @@ public class ReportService {
         Report report = reportRepository.findByIdWithDetails(reportId)
                 .orElseThrow(() -> new NotFoundException("Жалоба не найдена"));
         return toResponse(report);
+    }
+
+    // ============================================================
+    // SLA dashboard
+    // ============================================================
+
+    @Transactional(readOnly = true)
+    public org.example.helptreeservice.dto.reports.ModerationSlaDto getModerationSla(
+            LocalDateTime from, LocalDateTime to) {
+        LocalDateTime resolvedTo = to != null ? to : LocalDateTime.now();
+        LocalDateTime resolvedFrom = from != null ? from : resolvedTo.minusDays(30);
+        validatePeriod(resolvedFrom, resolvedTo);
+
+        Map<String, Long> byStatus = new LinkedHashMap<>();
+        for (Object[] row : reportRepository.countByStatus()) {
+            byStatus.put(String.valueOf(row[0]),
+                    row[1] instanceof Number number ? number.longValue() : 0L);
+        }
+
+        Map<String, Long> openByPriority = new LinkedHashMap<>();
+        for (Object[] row : reportRepository.countByPriority(OPEN_STATUSES)) {
+            openByPriority.put(String.valueOf(row[0]),
+                    row[1] instanceof Number number ? number.longValue() : 0L);
+        }
+
+        LocalDateTime oldestOpen = reportRepository.oldestOpenCreatedAt();
+        Double oldestAge = oldestOpen == null
+                ? null
+                : java.time.Duration.between(oldestOpen, LocalDateTime.now()).toMinutes() / 60.0;
+
+        LocalDateTime finalFrom = resolvedFrom;
+        LocalDateTime finalTo = resolvedTo;
+        return org.example.helptreeservice.dto.reports.ModerationSlaDto.builder()
+                .from(finalFrom)
+                .to(finalTo)
+                .openReports(byStatus.getOrDefault(ReportStatus.OPEN.name(), 0L))
+                .inReviewReports(byStatus.getOrDefault(ReportStatus.IN_REVIEW.name(), 0L))
+                .resolvedReports(byStatus.getOrDefault(ReportStatus.RESOLVED.name(), 0L))
+                .rejectedReports(byStatus.getOrDefault(ReportStatus.REJECTED.name(), 0L))
+                .totalReports(byStatus.values().stream().mapToLong(Long::longValue).sum())
+                .openByPriority(openByPriority)
+                .averageResolutionHours(reportRepository.averageResolutionHours(finalFrom, finalTo))
+                .averageFirstResponseHours(
+                        reportRepository.averageFirstResponseHours(finalFrom, finalTo))
+                .oldestOpenCreatedAt(oldestOpen)
+                .oldestOpenAgeHours(oldestAge)
+                .build();
     }
 
     // ============================================================

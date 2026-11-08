@@ -6,10 +6,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.example.helptreeservice.config.PaginationConfig;
 import org.example.helptreeservice.dto.admin.AdminAnonymizeRequest;
 import org.example.helptreeservice.dto.admin.AdminAuditLogDto;
+import org.example.helptreeservice.dto.admin.AdminBulkResultDto;
+import org.example.helptreeservice.dto.admin.AdminBulkUsersRequest;
 import org.example.helptreeservice.dto.admin.AdminCreateUserRequest;
 import org.example.helptreeservice.dto.admin.AdminInviteUserRequest;
+import org.example.helptreeservice.dto.admin.AdminRatingRequest;
 import org.example.helptreeservice.dto.admin.AdminReasonRequest;
 import org.example.helptreeservice.dto.admin.AdminRoleChangeRequest;
+import org.example.helptreeservice.dto.admin.AdminSessionDto;
 import org.example.helptreeservice.dto.common.PageResponse;
 import org.example.helptreeservice.dto.users.UserDto;
 import org.example.helptreeservice.enums.Role;
@@ -25,8 +29,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * Server-side entry point for administrative user management.
@@ -139,6 +145,44 @@ public class AdminUserController {
         Long adminId = requireAdmin();
         adminUserService.anonymize(id, request.getReason(), request.getConfirmEmail(), adminId);
         return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping("/{id}/rating")
+    public ResponseEntity<Void> changeRating(@PathVariable Long id,
+                                             @Valid @RequestBody AdminRatingRequest request) {
+        Long adminId = requireAdmin();
+        adminUserService.changeRating(id, request.getRating(), request.getReason(), adminId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{id}/sessions")
+    public ResponseEntity<List<AdminSessionDto>> sessions(@PathVariable Long id) {
+        requireAdmin();
+        return ResponseEntity.ok(adminUserService.sessions(id));
+    }
+
+    @DeleteMapping("/{id}/sessions/{sessionId}")
+    public ResponseEntity<Void> revokeSession(@PathVariable Long id,
+                                              @PathVariable UUID sessionId,
+                                              @RequestParam String reason) {
+        Long adminId = requireAdmin();
+        adminUserService.revokeSession(id, sessionId, reason, adminId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/{id}/sessions")
+    public ResponseEntity<Void> revokeAllSessions(@PathVariable Long id,
+                                                  @RequestParam String reason) {
+        Long adminId = requireAdmin();
+        adminUserService.revokeAllSessions(id, reason, adminId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/bulk")
+    public ResponseEntity<AdminBulkResultDto> bulk(
+            @Valid @RequestBody AdminBulkUsersRequest request) {
+        Long adminId = requireAdmin();
+        return ResponseEntity.ok(adminUserService.bulk(request, adminId));
     }
 
     @GetMapping("/{id}/export")

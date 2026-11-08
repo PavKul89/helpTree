@@ -339,6 +339,128 @@ export interface AdminUsersQuery {
 /** Query accepted by the dedicated deleted-accounts view. */
 export type AdminDeletedUsersQuery = Omit<AdminUsersQuery, 'blocked' | 'deleted'>;
 
+/** Global administrative audit filters. All fields are optional. */
+export interface AdminAuditQuery {
+  page?: number;
+  size?: number;
+  adminId?: number;
+  action?: string;
+  entityType?: string;
+  entityId?: number;
+  /** ISO local date-time, inclusive lower bound on the audit timestamp. */
+  from?: string;
+  /** ISO local date-time, inclusive upper bound on the audit timestamp. */
+  to?: string;
+  /** Free text over the reason, action and entity type. */
+  q?: string;
+  sort?: 'id' | 'createdAt' | 'adminId' | 'action' | 'entityType' | 'entityId';
+  direction?: 'asc' | 'desc';
+}
+
+export interface AdminAuditStats {
+  total: number;
+  from: string;
+  to: string;
+  byAction: Record<string, number>;
+  byEntityType: Record<string, number>;
+  byAdmin: Record<string, number>;
+}
+
+/** One bulk administrative operation, with a per-item outcome. */
+export interface AdminBulkResultItem {
+  id: number;
+  success: boolean;
+  error?: string;
+}
+
+export interface AdminBulkResult {
+  action: string;
+  requested: number;
+  succeeded: number;
+  failed: number;
+  items: AdminBulkResultItem[];
+}
+
+export interface AdminBulkUsersPayload {
+  action: 'DELETE' | 'RESTORE' | 'CHANGE_ROLE';
+  ids: number[];
+  role?: AdminUserRole;
+  reason: string;
+}
+
+export interface AdminBulkPostsPayload {
+  action: 'DELETE' | 'RESTORE' | 'STATUS';
+  ids: number[];
+  status?: AdminPostStatus;
+  reason: string;
+}
+
+/** Administrative projection of a login session. */
+export interface AdminSession {
+  id: string;
+  createdAt: string;
+  lastUsedAt?: string;
+  expiresAt: string;
+  ipAddress?: string;
+  userAgent?: string;
+  deviceName?: string;
+  current: boolean;
+}
+
+/** Administrative wallet overview row. */
+export interface AdminWalletAccount {
+  userId: number;
+  name: string;
+  email: string;
+  balance: number;
+  debtCount: number;
+  vipUntil?: string;
+  vipActive: boolean;
+  blockedUntil?: string;
+  blocked: boolean;
+  nicknameColor?: string;
+  createdAt: string;
+}
+
+export interface AdminWalletAccountsQuery {
+  page?: number;
+  size?: number;
+  q?: string;
+  minBalance?: number;
+  maxBalance?: number;
+  vip?: boolean;
+  blocked?: boolean;
+  debtor?: boolean;
+  sort?: 'id' | 'name' | 'helpCoins' | 'debtCount' | 'createdAt' | 'rating';
+  direction?: 'asc' | 'desc';
+}
+
+/** Moderation SLA dashboard projection. */
+export interface ModerationSla {
+  from: string;
+  to: string;
+  openReports: number;
+  inReviewReports: number;
+  resolvedReports: number;
+  rejectedReports: number;
+  totalReports: number;
+  openByPriority: Record<string, number>;
+  averageResolutionHours?: number;
+  averageFirstResponseHours?: number;
+  oldestOpenCreatedAt?: string;
+  oldestOpenAgeHours?: number;
+}
+
+/** Deleted-request list filters; deletions always sort by deletedAt. */
+export interface AdminDeletedPostsQuery {
+  page?: number;
+  size?: number;
+  q?: string;
+  category?: string;
+  sort?: 'id' | 'title' | 'status' | 'createdAt' | 'updatedAt' | 'deletedAt';
+  direction?: 'asc' | 'desc';
+}
+
 /**
  * Server-side aggregates for the dashboard. No endpoint returns the whole
  * user table any more, so counts come from `totalElements` of filtered pages.
@@ -376,6 +498,34 @@ export const adminApi = {
       (acc, status, index) => ({ ...acc, [status]: counts[index] }),
       {} as Record<AdminPostStatus, number>
     );
+  },
+
+  // ------------------------------------------------------------------ audit
+  getAudit: async (
+    query: AdminAuditQuery = {},
+    signal?: AbortSignal
+  ): Promise<PageResponse<AdminAuditLog>> => {
+    const response = await api.get<PageResponse<AdminAuditLog>>('/api/admin/audit', {
+      params: query,
+      signal,
+    });
+    return response.data;
+  },
+
+  getAuditStats: async (from?: string, to?: string): Promise<AdminAuditStats> => {
+    const response = await api.get<AdminAuditStats>('/api/admin/audit/stats', {
+      params: { from, to },
+    });
+    return response.data;
+  },
+
+  /** Downloads the filtered trail as a UTF-8 CSV file. */
+  downloadAuditCsv: async (query: Omit<AdminAuditQuery, 'page' | 'size' | 'sort' | 'direction'> = {}) => {
+    const response = await api.get<Blob>('/api/admin/audit/export', {
+      params: query,
+      responseType: 'blob',
+    });
+    return response.data;
   },
 
   // ------------------------------------------------------------------- users
@@ -477,8 +627,28 @@ export const adminApi = {
     return response.data;
   },
 
-  updateUserRating: async (id: number, rating: number): Promise<void> => {
-    await api.put(`/api/users/${id}/rating`, null, { params: { rating } });
+  updateUserRating: async (id: number, rating: number, reason: string): Promise<void> => {
+    await api.put(`/api/admin/users/${id}/rating`, { rating, reason });
+  },
+
+  bulkUsers: async (payload: AdminBulkUsersPayload): Promise<AdminBulkResult> => {
+    const response = await api.post<AdminBulkResult>('/api/admin/users/bulk', payload);
+    return response.data;
+  },
+
+  getUserSessions: async (id: number): Promise<AdminSession[]> => {
+    const response = await api.get<AdminSession[]>(`/api/admin/users/${id}/sessions`);
+    return response.data;
+  },
+
+  revokeUserSession: async (id: number, sessionId: string, reason: string): Promise<void> => {
+    await api.delete(`/api/admin/users/${id}/sessions/${sessionId}`, {
+      params: { reason },
+    });
+  },
+
+  revokeAllUserSessions: async (id: number, reason: string): Promise<void> => {
+    await api.delete(`/api/admin/users/${id}/sessions`, { params: { reason } });
   },
 
   recalculateRating: async (id: number): Promise<RatingResponse> => {
@@ -505,6 +675,18 @@ export const adminApi = {
 
   getWallet: async (id: number): Promise<WalletDto> => {
     const response = await api.get<WalletDto>(`/api/users/${id}/wallet`);
+    return response.data;
+  },
+
+  /** Server-side wallet overview with balance, VIP, block and debt filters. */
+  getWalletAccounts: async (
+    query: AdminWalletAccountsQuery = {},
+    signal?: AbortSignal
+  ): Promise<PageResponse<AdminWalletAccount>> => {
+    const response = await api.get<PageResponse<AdminWalletAccount>>(
+      '/api/admin/wallet/accounts',
+      { params: query, signal }
+    );
     return response.data;
   },
 
@@ -565,8 +747,40 @@ export const adminApi = {
     return response.data;
   },
 
-  deletePost: async (id: number): Promise<void> => {
-    await api.delete(`/api/posts/${id}`);
+  deletePost: async (id: number, reason: string): Promise<void> => {
+    await api.delete(`/api/admin/posts/${id}`, { params: { reason } });
+  },
+
+  getDeletedPosts: async (
+    query: AdminDeletedPostsQuery = {},
+    signal?: AbortSignal
+  ): Promise<PageResponse<Post>> => {
+    const response = await api.get<PageResponse<Post>>('/api/admin/posts/deleted', {
+      params: query,
+      signal,
+    });
+    return response.data;
+  },
+
+  restorePost: async (id: number, reason: string): Promise<void> => {
+    await api.post(`/api/admin/posts/${id}/restore`, { reason });
+  },
+
+  changePostStatus: async (
+    id: number,
+    status: AdminPostStatus,
+    reason: string
+  ): Promise<Post> => {
+    const response = await api.patch<Post>(`/api/admin/posts/${id}/status`, {
+      status,
+      reason,
+    });
+    return response.data;
+  },
+
+  bulkPosts: async (payload: AdminBulkPostsPayload): Promise<AdminBulkResult> => {
+    const response = await api.post<AdminBulkResult>('/api/admin/posts/bulk', payload);
+    return response.data;
   },
 
   // ----------------------------------------------------------------- reviews
@@ -581,8 +795,16 @@ export const adminApi = {
     return response.data;
   },
 
-  deleteReview: async (id: number): Promise<void> => {
-    await api.delete(`/api/reviews/${id}`);
+  deleteReview: async (id: number, reason: string): Promise<void> => {
+    await api.delete(`/api/admin/reviews/${id}`, { params: { reason } });
+  },
+
+  bulkDeleteReviews: async (ids: number[], reason: string): Promise<AdminBulkResult> => {
+    const response = await api.post<AdminBulkResult>('/api/admin/reviews/bulk', {
+      ids,
+      reason,
+    });
+    return response.data;
   },
 
   // ----------------------------------------------------------------- reports
@@ -593,6 +815,13 @@ export const adminApi = {
     const response = await api.get<PageResponse<AdminReport>>('/api/admin/reports', {
       params: query,
       signal,
+    });
+    return response.data;
+  },
+
+  getModerationSla: async (from?: string, to?: string): Promise<ModerationSla> => {
+    const response = await api.get<ModerationSla>('/api/admin/reports/sla', {
+      params: { from, to },
     });
     return response.data;
   },
