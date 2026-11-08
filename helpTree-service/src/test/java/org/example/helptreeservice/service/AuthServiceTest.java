@@ -14,6 +14,7 @@ import org.example.helptreeservice.exception.UnauthorizedException;
 import org.example.helptreeservice.repository.UserRepository;
 import org.example.helptreeservice.service.AuthSessionService.IssuedTokens;
 import org.example.helptreeservice.service.ratelimit.LoginProtectionService;
+import org.example.helptreeservice.metrics.HelpTreeMetrics;
 import org.example.helptreeservice.service.AuthSessionService.SessionInfo;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -55,13 +56,16 @@ class AuthServiceTest {
     private AccountSecurityService accountSecurityService;
     @Mock
     private LoginProtectionService loginProtectionService;
+    @Mock
+    private HelpTreeMetrics metrics;
 
     private AuthService service;
 
     @BeforeEach
     void setUp() {
         service = new AuthService(userRepository, userService, passwordService,
-                jwtService, authSessionService, accountSecurityService, loginProtectionService);
+                jwtService, authSessionService, accountSecurityService, loginProtectionService,
+                metrics);
         lenient().when(jwtService.getExpirationTime()).thenReturn(86_400_000L);
         lenient().when(loginProtectionService.retryAfterSeconds(any(), any()))
                 .thenReturn(Optional.empty());
@@ -139,6 +143,7 @@ class AuthServiceTest {
         assertEquals(previousLogin, response.getPreviousLastLogin());
         verify(userService).updateLastLogin(1L);
         verify(authSessionService).createSession(user, "203.0.113.9", "JUnit");
+        verify(metrics).loginSuccess();
     }
 
     @Test
@@ -154,6 +159,7 @@ class AuthServiceTest {
         assertEquals("Неверный email или пароль", ex.getMessage());
         verify(passwordService).matches(eq("Current1"), anyString());
         verify(authSessionService, never()).createSession(any(), any(), any());
+        verify(metrics).loginFailure("unknown_account");
     }
 
     @Test

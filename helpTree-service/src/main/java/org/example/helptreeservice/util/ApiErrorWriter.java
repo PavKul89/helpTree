@@ -46,19 +46,24 @@ public final class ApiErrorWriter {
             return;
         }
 
-        response.setStatus(status.value());
-        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+        LogContext.setErrorType(type.getCode());
+        try {
+            response.setStatus(status.value());
+            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+            response.setCharacterEncoding(StandardCharsets.UTF_8.name());
 
-        ErrorResponse body = ErrorResponse.builder()
-                .status(status.value())
-                .code(type.getCode())
-                .message(message)
-                .traceId(TraceIds.current(request))
-                .fieldErrors(fieldErrors != null ? fieldErrors : List.of())
-                .path(request != null ? request.getRequestURI() : null)
-                .build();
+            ErrorResponse body = ErrorResponse.builder()
+                    .status(status.value())
+                    .code(type.getCode())
+                    .message(message)
+                    .traceId(TraceIds.current(request))
+                    .fieldErrors(fieldErrors != null ? fieldErrors : List.of())
+                    .path(request != null ? request.getRequestURI() : null)
+                    .build();
 
-        MAPPER.writeValue(response.getWriter(), body);
+            MAPPER.writeValue(response.getWriter(), body);
+        } finally {
+            LogContext.setErrorType(null);
+        }
     }
 }

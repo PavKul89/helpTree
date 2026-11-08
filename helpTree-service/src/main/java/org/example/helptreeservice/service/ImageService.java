@@ -13,6 +13,7 @@ import org.example.helptreeservice.dto.images.ProcessedImage;
 import org.example.helptreeservice.entity.ImageObject;
 import org.example.helptreeservice.enums.ImagePurpose;
 import org.example.helptreeservice.exception.BadRequestException;
+import org.example.helptreeservice.metrics.HelpTreeMetrics;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -40,6 +41,7 @@ public class ImageService {
     private final ImageProcessor imageProcessor;
     private final ImageObjectService imageObjectService;
     private final ImageUploadProperties properties;
+    private final HelpTreeMetrics metrics;
 
     @Value("${silo.public-endpoint}")
     private String publicEndpoint;
@@ -63,6 +65,17 @@ public class ImageService {
      * removed again and no ownership row is committed.
      */
     public List<String> uploadMultiple(List<MultipartFile> files, Long ownerId, ImagePurpose purpose) {
+        try {
+            List<String> urls = doUploadMultiple(files, ownerId, purpose);
+            metrics.imageUpload(purposeName(purpose), "success");
+            return urls;
+        } catch (RuntimeException e) {
+            metrics.imageUpload(purposeName(purpose), "failure");
+            throw e;
+        }
+    }
+
+    private List<String> doUploadMultiple(List<MultipartFile> files, Long ownerId, ImagePurpose purpose) {
         if (files == null) {
             throw new BadRequestException("Файлы не выбраны");
         }
@@ -317,5 +330,9 @@ public class ImageService {
 
     private String humanMegabytes(long bytes) {
         return (bytes / (1024 * 1024)) + " МБ";
+    }
+
+    private String purposeName(ImagePurpose purpose) {
+        return purpose == null ? "unknown" : purpose.name();
     }
 }

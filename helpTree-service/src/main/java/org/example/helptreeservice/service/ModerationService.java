@@ -2,6 +2,7 @@ package org.example.helptreeservice.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.example.helptreeservice.config.FeatureFlags;
 import org.example.helptreeservice.dto.reports.ReportTargetPreview;
 import org.example.helptreeservice.entity.Comment;
 import org.example.helptreeservice.entity.Message;
@@ -9,6 +10,7 @@ import org.example.helptreeservice.entity.Post;
 import org.example.helptreeservice.entity.Review;
 import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.entity.UserBlock;
+import org.example.helptreeservice.enums.FeatureFlag;
 import org.example.helptreeservice.enums.ModerationActionType;
 import org.example.helptreeservice.enums.ModerationStatus;
 import org.example.helptreeservice.enums.ReportTargetType;
@@ -82,6 +84,7 @@ public class ModerationService {
     private final UserBlockRepository userBlockRepository;
     private final ModerationActionRepository moderationActionRepository;
     private final RatingService ratingService;
+    private final FeatureFlags featureFlags;
 
     /** Owner of the reported object, resolved from the object itself. */
     public record TargetOwner(Long userId, User user) {
@@ -434,6 +437,11 @@ public class ModerationService {
      */
     @Transactional
     public int restoreExpiredHiddenContent() {
+        // A disabled moderation feature is a deliberate freeze: expiry must not
+        // silently re-publish content while operators are holding the area.
+        if (featureFlags.isDisabled(FeatureFlag.MODERATION)) {
+            return 0;
+        }
         List<org.example.helptreeservice.entity.ModerationAction> expired =
                 moderationActionRepository.findExpiredHideActions(
                         ModerationActionType.HIDE_CONTENT, LocalDateTime.now());

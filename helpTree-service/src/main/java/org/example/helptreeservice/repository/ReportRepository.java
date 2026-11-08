@@ -140,6 +140,13 @@ public interface ReportRepository extends JpaRepository<Report, Long> {
             + "WHERE r.status IN :statuses GROUP BY r.priority")
     List<Object[]> countByPriority(@Param("statuses") Collection<ReportStatus> statuses);
 
+    /** Number of still-open reports older than the SLA threshold. */
+    @Query("SELECT COUNT(r) FROM Report r "
+            + "WHERE r.status IN :statuses AND r.createdAt < :threshold")
+    long countByStatusInAndCreatedAtBefore(
+            @Param("statuses") Collection<ReportStatus> statuses,
+            @Param("threshold") LocalDateTime threshold);
+
     @Query(value = """
             SELECT AVG(EXTRACT(EPOCH FROM (resolved_at - created_at)) / 3600.0)
             FROM reports

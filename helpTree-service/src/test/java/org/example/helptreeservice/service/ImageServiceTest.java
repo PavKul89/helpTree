@@ -10,6 +10,7 @@ import org.example.helptreeservice.config.ImageUploadProperties;
 import org.example.helptreeservice.dto.images.ProcessedImage;
 import org.example.helptreeservice.entity.ImageObject;
 import org.example.helptreeservice.enums.ImagePurpose;
+import org.example.helptreeservice.metrics.HelpTreeMetrics;
 import org.example.helptreeservice.enums.ImageStatus;
 import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.ForbiddenException;
@@ -56,6 +57,9 @@ class ImageServiceTest {
     @Mock
     private ImageObjectService imageObjectService;
 
+    @Mock
+    private HelpTreeMetrics metrics;
+
     private ImageUploadProperties properties;
     private ImageService imageService;
 
@@ -63,7 +67,7 @@ class ImageServiceTest {
     void setUp() {
         properties = new ImageUploadProperties();
         imageService = new ImageService(
-                siloClient, Runnable::run, imageProcessor, imageObjectService, properties);
+                siloClient, Runnable::run, imageProcessor, imageObjectService, properties, metrics);
         ReflectionTestUtils.setField(imageService, "bucket", "helptree-images");
         ReflectionTestUtils.setField(imageService, "publicEndpoint", "https://images.example.com/");
     }
@@ -182,7 +186,7 @@ class ImageServiceTest {
         ImageUploadProperties realProperties = new ImageUploadProperties();
         ImageService realService = new ImageService(
                 siloClient, Runnable::run, new ImageProcessor(realProperties),
-                imageObjectService, realProperties);
+                imageObjectService, realProperties, metrics);
         ReflectionTestUtils.setField(realService, "bucket", "helptree-images");
         ReflectionTestUtils.setField(realService, "publicEndpoint", "https://images.example.com/");
 

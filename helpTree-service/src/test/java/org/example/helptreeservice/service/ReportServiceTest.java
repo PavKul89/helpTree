@@ -1,6 +1,9 @@
 package org.example.helptreeservice.service;
 
 import org.example.helptreeservice.config.CommentProperties;
+import org.example.helptreeservice.config.FeatureFlags;
+import org.example.helptreeservice.config.FeatureFlagsProperties;
+import org.example.helptreeservice.config.NotificationProperties;
 import org.example.helptreeservice.dto.reports.AssignReportRequest;
 import org.example.helptreeservice.dto.reports.AdminReportResponse;
 import org.example.helptreeservice.dto.reports.CreateReportRequest;
@@ -26,6 +29,7 @@ import org.example.helptreeservice.enums.Role;
 import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.ConflictException;
 import org.example.helptreeservice.exception.ForbiddenException;
+import org.example.helptreeservice.metrics.HelpTreeMetrics;
 import org.example.helptreeservice.repository.CommentRepository;
 import org.example.helptreeservice.repository.ModerationActionRepository;
 import org.example.helptreeservice.repository.PostRepository;
@@ -81,13 +85,17 @@ class ReportServiceTest {
     private NotificationService notificationService;
     @Mock
     private AdminAuditService adminAuditService;
+    @Mock
+    private HelpTreeMetrics metrics;
 
     private ReportService reportService;
+    private FeatureFlags featureFlags;
     private User reporter;
     private User admin;
 
     @BeforeEach
     void setUp() {
+        featureFlags = new FeatureFlags(new FeatureFlagsProperties(), new NotificationProperties());
         reportService = new ReportService(
                 reportRepository,
                 reportEventRepository,
@@ -98,7 +106,9 @@ class ReportServiceTest {
                 moderationService,
                 new CommentContentSanitizer(new CommentProperties()),
                 notificationService,
-                adminAuditService);
+                adminAuditService,
+                featureFlags,
+                metrics);
 
         reporter = user(1L, "Alice", Role.USER);
         admin = user(3L, "Admin", Role.ADMIN);

@@ -20,6 +20,7 @@ import org.example.helptreeservice.repository.UserRepository;
 import org.example.helptreeservice.repository.UserSpecification;
 import org.example.helptreeservice.service.notification.NotificationCommand;
 import org.example.helptreeservice.service.notification.NotificationService;
+import org.example.helptreeservice.util.SensitiveDataMasker;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
@@ -62,11 +63,12 @@ public class UserService {
     }
 
     public UserDto createUserWithRole(CreateUserRequest request, Role role) {
-        log.info("Создание пользователя {} с ролью {}", request.getEmail(), role);
+        log.info("Создание пользователя {} с ролью {}", SensitiveDataMasker.maskEmail(request.getEmail()), role);
 
         String email = request.getEmail().trim().toLowerCase(java.util.Locale.ROOT);
         if (userRepository.existsByEmailIgnoreCase(email)) {
-            log.warn("Попытка создания пользователя с уже существующим email: {}", email);
+            log.warn("Попытка создания пользователя с уже существующим email: {}",
+                    SensitiveDataMasker.maskEmail(email));
             throw new ConflictException("Пользователь с таким email уже существует");
         }
 
@@ -96,7 +98,8 @@ public class UserService {
 
         User savedUser = userRepository.save(user);
         achievementService.awardAchievementOnRegistration(savedUser);
-        log.info("Пользователь успешно создан с ID: {}, email: {}", savedUser.getId(), savedUser.getEmail());
+        log.info("Пользователь успешно создан с ID: {}, email: {}", savedUser.getId(),
+                SensitiveDataMasker.maskEmail(savedUser.getEmail()));
         return userMapper.toDto(savedUser);
     }
 
@@ -111,7 +114,8 @@ public class UserService {
         log.info("Запрос пользователя по ID: {}", id);
         try {
             UserDto userDto = userMapper.toDto(getUserEntityById(id));
-            log.info("Пользователь с ID {} найден: {}", id, userDto.getEmail());
+            log.info("Пользователь с ID {} найден: {}", id,
+                    SensitiveDataMasker.maskEmail(userDto.getEmail()));
             return userDto;
         } catch (NotFoundException e) {
             log.warn("Пользователь с ID {} не найден", id);
@@ -124,17 +128,18 @@ public class UserService {
 
     @Transactional(readOnly = true)
     public UserDto getUserByEmail(String email) {
-        log.info("Поиск пользователя по email: {}", email);
+        String maskedEmail = SensitiveDataMasker.maskEmail(email);
+        log.info("Поиск пользователя по email: {}", maskedEmail);
         try {
             User user = userRepository.findByEmail(email)
                     .orElseThrow(() -> new NotFoundException("Пользователь не найден с email: " + email));
-            log.info("Пользователь с email {} найден, ID: {}", email, user.getId());
+            log.info("Пользователь с email {} найден, ID: {}", maskedEmail, user.getId());
             return userMapper.toDto(user);
         } catch (NotFoundException e) {
-            log.warn("Пользователь с email {} не найден", email);
+            log.warn("Пользователь с email {} не найден", maskedEmail);
             throw e;
         } catch (Exception e) {
-            log.error("Ошибка при поиске пользователя с email: {}", email, e);
+            log.error("Ошибка при поиске пользователя с email: {}", maskedEmail, e);
             throw e;
         }
     }
@@ -192,18 +197,22 @@ public class UserService {
     public UserDto updateUser(Long id, UpdateUserRequest request) {
         log.info("Обновление данных пользователя с ID: {}", id);
         log.debug("Данные для обновления: name={}, email={}, phone={}, city={}",
-                request.getName(), request.getEmail(), request.getPhone(), request.getCity());
+                request.getName() != null,
+                SensitiveDataMasker.maskEmail(request.getEmail()),
+                SensitiveDataMasker.maskPhone(request.getPhone()),
+                request.getCity());
 
         try {
             User user = getUserEntityById(id);
-            log.debug("Найден пользователь для обновления: текущий email={}", user.getEmail());
+            log.debug("Найден пользователь для обновления: текущий email={}",
+                    SensitiveDataMasker.maskEmail(user.getEmail()));
 
             boolean changed = false;
 
             if (request.getName() != null && !request.getName().equals(user.getName())) {
                 user.setName(request.getName());
                 changed = true;
-                log.debug("Изменено имя пользователя на: {}", request.getName());
+                log.debug("Изменено имя пользователя");
             }
 
             if (request.getEmail() != null && !request.getEmail().equalsIgnoreCase(user.getEmail())) {
@@ -217,7 +226,8 @@ public class UserService {
             if (request.getPhone() != null && !request.getPhone().equals(user.getPhone())) {
                 user.setPhone(request.getPhone());
                 changed = true;
-                log.debug("Изменен телефон пользователя на: {}", request.getPhone());
+                log.debug("Изменен телефон пользователя на: {}",
+                        SensitiveDataMasker.maskPhone(request.getPhone()));
             }
 
             if (request.getCity() != null && !request.getCity().equals(user.getCity())) {
@@ -311,7 +321,7 @@ public class UserService {
 
             log.info("Пользователь с ID: {} успешно помечен как удаленный", id);
             log.debug("Детали удаленного пользователя: email={}, время удаления={}",
-                    user.getEmail(), user.getDeletedAt());
+                    SensitiveDataMasker.maskEmail(user.getEmail()), user.getDeletedAt());
 
         } catch (NotFoundException e) {
             log.warn("Не удалось удалить пользователя: ID {} не найден", id);
@@ -392,7 +402,8 @@ public class UserService {
             publicProfileCache.evictAfterCommit(id);
 
             log.info("Пользователь с ID: {} успешно восстановлен", id);
-            log.debug("Детали восстановленного пользователя: email={}", user.getEmail());
+            log.debug("Детали восстановленного пользователя: email={}",
+                    SensitiveDataMasker.maskEmail(user.getEmail()));
 
         } catch (NotFoundException e) {
             log.warn("Не удалось восстановить пользователя: ID {} не найден", id);

@@ -26,6 +26,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./helpTree-service/src/main/resources/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
       - prometheus_data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
@@ -37,14 +38,32 @@ services:
       - helpTree-network
     depends_on:
       - postgres
+      - alertmanager
+
+  alertmanager:
+    image: prom/alertmanager:v0.25.0
+    container_name: alertmanager_helpTree
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+    ports:
+      - '9093:9093'
+    networks:
+      - helpTree-network
 
   grafana:
     image: grafana/grafana:10.2.2
     container_name: grafana_helpTree
     restart: unless-stopped
     environment:
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      # No default administrator password: a shared "admin/admin" login is a
+      # critical finding, even in a development dashboard.
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in .env}
       GF_INSTALL_PLUGINS: ""
       GF_UPDATE_CHECKER_ENABLED: false
     ports:
@@ -85,8 +104,10 @@ services:
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${SILO_ACCESS_KEY:-helptree}
-      MINIO_ROOT_PASSWORD: ${SILO_SECRET_KEY:-helptree-dev-password-change-me}
+      # No fallback credentials. Export both values in .env so the storage
+      # account is never a well-known default.
+      MINIO_ROOT_USER: ${SILO_ACCESS_KEY:?Set SILO_ACCESS_KEY in .env}
+      MINIO_ROOT_PASSWORD: ${SILO_SECRET_KEY:?Set SILO_SECRET_KEY in .env}
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -100,6 +121,8 @@ volumes:
     name: helpTree_postgres_data
   prometheus_data:
     name: helpTree_prometheus_data
+  alertmanager_data:
+    name: helpTree_alertmanager_data
   grafana_data:
     name: helpTree_grafana_data
   jaeger_data:

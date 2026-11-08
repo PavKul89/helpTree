@@ -13,6 +13,7 @@ import org.example.helptreeservice.exception.ForbiddenException;
 import org.example.helptreeservice.exception.NotFoundException;
 import org.example.helptreeservice.exception.RateLimitExceededException;
 import org.example.helptreeservice.exception.UnauthorizedException;
+import org.example.helptreeservice.metrics.HelpTreeMetrics;
 import org.example.helptreeservice.repository.UserRepository;
 import org.example.helptreeservice.service.ratelimit.LoginProtectionService;
 import org.springframework.stereotype.Service;
@@ -53,6 +54,7 @@ public class AuthService {
     private final AuthSessionService authSessionService;
     private final AccountSecurityService accountSecurityService;
     private final LoginProtectionService loginProtectionService;
+    private final HelpTreeMetrics metrics;
 
     @Transactional
     public AuthResponse register(CreateUserRequest request) {
@@ -75,6 +77,7 @@ public class AuthService {
         // expires by itself.
         loginProtectionService.retryAfterSeconds(ipAddress, email).ifPresent(secondsLeft -> {
             log.warn("Попытка входа с временно заблокированного адреса: осталось {}с", secondsLeft);
+            metrics.loginFailure("locked");
             throw new RateLimitExceededException(LOGIN_LOCKED, secondsLeft);
         });
 
@@ -82,16 +85,17 @@ public class AuthService {
         if (user == null) {
             // Spend comparable time to avoid leaking whether the account exists.
             passwordService.matches(request.getPassword(), DUMMY_PASSWORD_HASH);
-            registerFailure(ipAddress, email);
+            registerFailure(ipAddress, email, "unknown_account");
             throw new UnauthorizedException(INVALID_CREDENTIALS);
         }
 
         if (!passwordService.matches(request.getPassword(), user.getPassword())) {
-            registerFailure(ipAddress, email);
+            registerFailure(ipAddress, email, "bad_password");
             throw new UnauthorizedException(INVALID_CREDENTIALS);
         }
 
         if (Boolean.TRUE.equals(user.getDeleted())) {
+            metrics.loginFailure("deleted");
             throw new UnauthorizedException("Аккаунт удалён");
         }
 
@@ -109,6 +113,7 @@ public class AuthService {
         userService.updateLastLogin(user.getId());
 
         AuthSessionService.IssuedTokens tokens = authSessionService.createSession(user, ipAddress, userAgent);
+        metrics.loginSuccess();
         log.info("Пользователь {} вошёл в систему", user.getId());
         return toAuthResponse(tokens, previousLastLogin);
     }
@@ -242,11 +247,13 @@ public class AuthService {
         return response;
     }
 
-    private void registerFailure(String ipAddress, String email) {
+    private void registerFailure(String ipAddress, String email, String reason) {
         loginProtectionService.recordFailure(ipAddress, email).ifPresent(secondsLeft -> {
             log.warn("Вход временно заблокирован после серии неудачных попыток");
+            metrics.loginFailure("locked");
             throw new RateLimitExceededException(LOGIN_LOCKED, secondsLeft);
         });
+        metrics.loginFailure(reason);
         log.warn("Неудачная попытка входа");
         throw new UnauthorizedException(INVALID_CREDENTIALS);
     }

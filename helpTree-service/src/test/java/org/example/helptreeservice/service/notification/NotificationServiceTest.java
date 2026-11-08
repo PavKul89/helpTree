@@ -1,5 +1,7 @@
 package org.example.helptreeservice.service.notification;
 
+import org.example.helptreeservice.config.FeatureFlags;
+import org.example.helptreeservice.config.FeatureFlagsProperties;
 import org.example.helptreeservice.config.NotificationProperties;
 import org.example.helptreeservice.dto.notifications.MarkAllReadResponse;
 import org.example.helptreeservice.dto.notifications.NotificationDto;
@@ -74,7 +76,8 @@ class NotificationServiceTest {
                 senderRegistry,
                 outboxService,
                 outboxDispatcher,
-                properties);
+                properties,
+                new FeatureFlags(new FeatureFlagsProperties(), properties));
     }
 
     @AfterEach

@@ -3,6 +3,8 @@ package org.example.helptreeservice.service.notification;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.helptreeservice.config.NotificationProperties;
+import org.example.helptreeservice.config.FeatureFlags;
+import org.example.helptreeservice.enums.FeatureFlag;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -23,12 +25,13 @@ public class OutboxDispatcher {
     private final OutboxService outboxService;
     private final OutboxDeliveryService deliveryService;
     private final NotificationProperties properties;
+    private final FeatureFlags featureFlags;
 
     private final String workerId = "notif-" + UUID.randomUUID().toString().substring(0, 8);
 
     /** Claim and deliver up to {@code maxBatchesPerRun} bounded batches. */
     public void dispatchDue() {
-        if (!properties.isEnabled()) {
+        if (featureFlags.isDisabled(FeatureFlag.NOTIFICATIONS)) {
             return;
         }
 
@@ -68,7 +71,7 @@ public class OutboxDispatcher {
 
     /** Best-effort immediate attempt after the creating transaction commits. */
     public void dispatchImmediately(Long eventId) {
-        if (!properties.isEnabled() || eventId == null) {
+        if (featureFlags.isDisabled(FeatureFlag.NOTIFICATIONS) || eventId == null) {
             return;
         }
         try {

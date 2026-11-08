@@ -2,12 +2,14 @@ package org.example.helptreeservice.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.example.helptreeservice.config.FeatureFlags;
 import org.example.helptreeservice.dto.users.BlockUserRequest;
 import org.example.helptreeservice.dto.users.BlockedUserResponse;
 import org.example.helptreeservice.dto.users.UserBlockResponse;
 import org.example.helptreeservice.dto.users.UserBlockStatusResponse;
 import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.entity.UserBlockRelation;
+import org.example.helptreeservice.enums.FeatureFlag;
 import org.example.helptreeservice.enums.UserBlockScope;
 import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.ForbiddenException;
@@ -41,6 +43,7 @@ public class UserBlockService {
     private final UserBlockRelationRepository blockRepository;
     private final UserRepository userRepository;
     private final ImageService imageService;
+    private final FeatureFlags featureFlags;
 
     /**
      * Creates a block or updates the scope/expiry of the existing one. The
@@ -49,6 +52,7 @@ public class UserBlockService {
      */
     @Transactional
     public UserBlockResponse blockUser(Long blockerId, Long blockedId, BlockUserRequest request) {
+        featureFlags.requireEnabled(FeatureFlag.USER_BLOCKS);
         if (blockerId == null) {
             throw new ForbiddenException("Вы не авторизованы");
         }
@@ -84,6 +88,7 @@ public class UserBlockService {
      */
     @Transactional
     public void unblockUser(Long blockerId, Long blockedId) {
+        featureFlags.requireEnabled(FeatureFlag.USER_BLOCKS);
         if (blockerId == null) {
             throw new ForbiddenException("Вы не авторизованы");
         }
@@ -102,6 +107,7 @@ public class UserBlockService {
 
     @Transactional(readOnly = true)
     public List<BlockedUserResponse> getBlockedUsers(Long blockerId) {
+        featureFlags.requireEnabled(FeatureFlag.USER_BLOCKS);
         requireActiveUser(blockerId);
         return blockRepository.findActiveByBlockerId(blockerId, LocalDateTime.now()).stream()
                 .map(relation -> BlockedUserResponse.builder()
@@ -123,6 +129,7 @@ public class UserBlockService {
      */
     @Transactional(readOnly = true)
     public UserBlockStatusResponse getBlockStatus(Long viewerId, Long targetId) {
+        featureFlags.requireEnabled(FeatureFlag.USER_BLOCKS);
         if (viewerId == null) {
             throw new ForbiddenException("Вы не авторизованы");
         }

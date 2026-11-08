@@ -1,5 +1,7 @@
 package org.example.helptreeservice.service.notification;
 
+import org.example.helptreeservice.config.FeatureFlags;
+import org.example.helptreeservice.config.FeatureFlagsProperties;
 import org.example.helptreeservice.config.NotificationProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -34,7 +36,8 @@ class OutboxDispatcherTest {
         properties = new NotificationProperties();
         properties.setBatchSize(2);
         properties.setMaxBatchesPerRun(3);
-        dispatcher = new OutboxDispatcher(outboxService, deliveryService, properties);
+        dispatcher = new OutboxDispatcher(outboxService, deliveryService, properties,
+                new FeatureFlags(new FeatureFlagsProperties(), properties));
     }
 
     @Test

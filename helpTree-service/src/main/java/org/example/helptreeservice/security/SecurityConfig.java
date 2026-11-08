@@ -92,6 +92,9 @@ public class SecurityConfig {
             .addFilterAfter(rateLimiterFilter, JwtAuthFilter.class)
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info", "/actuator/prometheus").permitAll()
+                // Everything else is administrative: metrics, loggers and any
+                // endpoint exposed later must never be readable anonymously.
+                .requestMatchers("/actuator/**").hasRole("ADMIN")
                 .requestMatchers("/swagger-ui/**", "/v3/api-docs", "/v3/api-docs.yaml", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
                 .requestMatchers("/ws/**").permitAll()
                 .requestMatchers(HttpMethod.POST,

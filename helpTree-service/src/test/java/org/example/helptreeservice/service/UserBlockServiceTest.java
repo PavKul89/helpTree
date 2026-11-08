@@ -1,5 +1,8 @@
 package org.example.helptreeservice.service;
 
+import org.example.helptreeservice.config.FeatureFlags;
+import org.example.helptreeservice.config.FeatureFlagsProperties;
+import org.example.helptreeservice.config.NotificationProperties;
 import org.example.helptreeservice.dto.users.BlockUserRequest;
 import org.example.helptreeservice.dto.users.BlockedUserResponse;
 import org.example.helptreeservice.dto.users.UserBlockResponse;
@@ -53,7 +56,8 @@ class UserBlockServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new UserBlockService(blockRepository, userRepository, imageService);
+        service = new UserBlockService(blockRepository, userRepository, imageService,
+                new FeatureFlags(new FeatureFlagsProperties(), new NotificationProperties()));
         alice = user(1L, "Alice");
         bob = user(2L, "Bob");
     }

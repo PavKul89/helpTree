@@ -21,9 +21,11 @@ spring:
       max-request-size: 50MB
 
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/helpTree_db}
-    username: ${DB_USER:helpTree}
-    password: ${DB_PASS:helpTree}
+    # No fallback credentials. A local run uses the `dev` profile, which
+    # supplies development-only values; production must provide these variables.
+    url: ${DB_URL}
+    username: ${DB_USER}
+    password: ${DB_PASS}
     driver-class-name: org.postgresql.Driver
     hikari:
       # One pool per instance. Keep it well below PostgreSQL's max_connections
@@ -108,15 +110,43 @@ management:
       percentiles-histogram:
         http.server.requests: true
         http.client.requests: true
+        # Custom API timer so the latency alert can use a p95 quantile instead
+        # of an average that hides a slow tail.
+        helptree.api.duration: true
+  endpoint:
+    health:
+      # Public health returns only the aggregate status. Component details are
+      # visible to an authenticated administrator.
+      show-details: when_authorized
+      show-components: never
+      roles: ADMIN
+      probes:
+        enabled: true
+    info:
+      enabled: true
+  info:
+    env:
+      enabled: true
+    app:
+      name: ${spring.application.name}
+      version: ${info.app.version:unknown}
   endpoints:
     web:
       exposure:
+        # Exposure only makes an endpoint reachable; access is decided by
+        # SecurityConfig. Keep this allow-list explicit, never "*".
         include:
           - health
           - metrics
           - info
           - prometheus
           - loggers
+        exclude:
+          - env
+          - configprops
+          - heapdump
+          - threaddump
+          - shutdown
 
 logging:
   level:
@@ -140,8 +170,10 @@ app:
     # moves to /api/v2 while the previous version stays available; see
     # docs/API_CONTRACT.md.
     version: ${API_VERSION:1}
-  jwtSecret: ${JWT_SECRET:dev-only-secret-not-for-production-64chars-minimum-length!!}
-  jwtExpirationMs: 86400000
+  # No fallback. ProductionConfigValidator additionally rejects known
+  # development values and secrets shorter than 64 characters in prod.
+  jwtSecret: ${JWT_SECRET}
+  jwtExpirationMs: ${JWT_EXPIRATION_MS:86400000}
   auth:
     password-reset-token-minutes: ${PASSWORD_RESET_TOKEN_MINUTES:30}
     email-verification-token-hours: ${EMAIL_VERIFICATION_TOKEN_HOURS:24}
@@ -179,6 +211,9 @@ app:
     # Telegram stays disabled while the token is blank.
     telegram-bot-token: ${TELEGRAM_BOT_TOKEN:}
     telegram-api-url: ${TELEGRAM_API_URL:https://api.telegram.org}
+  moderation:
+    # Restores content hidden by a temporary HIDE_CONTENT action.
+    expiry-cron: "${MODERATION_EXPIRY_CRON:0 5 * * * *}"
   help:
     # Stale ACCEPTED helps are cancelled after this many hours (default 7 days).
     sla-enabled: ${HELP_SLA_ENABLED:true}
@@ -190,10 +225,12 @@ app:
     relay-enabled: ${WS_RELAY_ENABLED:false}
     relay-host: ${WS_RELAY_HOST:localhost}
     relay-port: ${WS_RELAY_PORT:61613}
-    client-login: ${WS_RELAY_CLIENT_LOGIN:guest}
-    client-passcode: ${WS_RELAY_CLIENT_PASSCODE:guest}
-    system-login: ${WS_RELAY_SYSTEM_LOGIN:guest}
-    system-passcode: ${WS_RELAY_SYSTEM_PASSCODE:guest}
+    # Relay credentials have no default. They are required only when the relay
+    # is enabled (see ProductionConfigValidator).
+    client-login: ${WS_RELAY_CLIENT_LOGIN:}
+    client-passcode: ${WS_RELAY_CLIENT_PASSCODE:}
+    system-login: ${WS_RELAY_SYSTEM_LOGIN:}
+    system-passcode: ${WS_RELAY_SYSTEM_PASSCODE:}
     heartbeat-seconds: ${WS_HEARTBEAT_SECONDS:10}
   mail:
     # Email flows stay disabled until SMTP is configured. Never log or return tokens.
@@ -202,8 +239,28 @@ app:
   cors:
     allowed-origins: ${CORS_ORIGINS:http://localhost:3000,http://localhost:3001,http://localhost:5173}
   admin:
-    email: ${ADMIN_EMAIL:admin@helptree.dev}
-    password: ${ADMIN_PASSWORD:dev-admin-password-change-in-prod}
+    # The first administrator is created only by the explicit one-time
+    # bootstrap below. When disabled (the default) the application starts
+    # without an administrator and warns if none exists.
+    bootstrap-enabled: ${ADMIN_BOOTSTRAP_ENABLED:false}
+    email: ${ADMIN_EMAIL:}
+    password: ${ADMIN_PASSWORD:}
+  features:
+    # Cross-cutting toggles. A disabled feature fails closed: its endpoints
+    # answer 503 FEATURE_DISABLED instead of silently behaving differently.
+    # NOTIFICATIONS_ENABLED is shared with app.notifications.enabled.
+    reports: ${FEATURE_REPORTS_ENABLED:true}
+    notifications: ${NOTIFICATIONS_ENABLED:true}
+    user-blocks: ${FEATURE_USER_BLOCKS_ENABLED:true}
+    moderation: ${FEATURE_MODERATION_ENABLED:true}
+  metrics:
+    # Queue/SLA/balance gauges are refreshed by one bounded scheduler query
+    # set, not by every scrape.
+    refresh-ms: ${METRICS_REFRESH_MS:60000}
+    initial-delay-ms: ${METRICS_INITIAL_DELAY_MS:15000}
+  reports:
+    # A report older than this marks an SLA breach in the moderation metric.
+    sla-hours: ${REPORTS_SLA_HOURS:24}
   pagination:
     default-page-size: 20
     max-page-size: 100
@@ -314,10 +371,11 @@ upload:
     bucket-scan-max-objects: ${IMAGE_CLEANUP_BUCKET_SCAN_MAX_OBJECTS:1000}
 
 silo:
-  endpoint: ${SILO_ENDPOINT:http://localhost:9000}
-  public-endpoint: ${SILO_PUBLIC_ENDPOINT:http://localhost:9000}
-  access-key: ${SILO_ACCESS_KEY:helptree}
-  secret-key: ${SILO_SECRET_KEY:helptree-dev-password-change-me}
+  # No fallback credentials. The dev profile supplies local-only values.
+  endpoint: ${SILO_ENDPOINT}
+  public-endpoint: ${SILO_PUBLIC_ENDPOINT}
+  access-key: ${SILO_ACCESS_KEY}
+  secret-key: ${SILO_SECRET_KEY}
   bucket: ${SILO_BUCKET:helptree-images}
 
 resilience4j:

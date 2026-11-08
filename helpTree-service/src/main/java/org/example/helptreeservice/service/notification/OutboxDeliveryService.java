@@ -8,6 +8,7 @@ import org.example.helptreeservice.entity.OutboxEvent;
 import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.enums.NotificationChannel;
 import org.example.helptreeservice.enums.OutboxStatus;
+import org.example.helptreeservice.metrics.HelpTreeMetrics;
 import org.example.helptreeservice.repository.NotificationPreferenceRepository;
 import org.example.helptreeservice.repository.NotificationRepository;
 import org.example.helptreeservice.repository.OutboxEventRepository;
@@ -40,6 +41,7 @@ public class OutboxDeliveryService {
     private final UserRepository userRepository;
     private final NotificationSenderRegistry senderRegistry;
     private final NotificationProperties properties;
+    private final HelpTreeMetrics metrics;
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void deliver(Long eventId) {
@@ -136,6 +138,7 @@ public class OutboxDeliveryService {
         event.setLockedBy(null);
         event.setLastError(note);
         outboxEventRepository.save(event);
+        metrics.outboxDelivered();
         log.debug("Outbox-событие {} опубликовано", event.getId());
     }
 
@@ -145,6 +148,7 @@ public class OutboxDeliveryService {
         event.setLockedBy(null);
         event.setLastError(truncate(error));
         outboxEventRepository.save(event);
+        metrics.outboxFailed();
         log.warn("Outbox-событие {} переведено в DEAD: {}", event.getId(), error);
     }
 
@@ -164,6 +168,7 @@ public class OutboxDeliveryService {
         event.setLockedBy(null);
         event.setLastError(truncate(error));
         outboxEventRepository.save(event);
+        metrics.outboxFailed();
         log.warn("Outbox-событие {} не доставлено (попытка {}/{}), повтор позже: {}",
                 event.getId(), attempts, maxAttempts, error);
     }

@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.example.helptreeservice.config.EconomyConfig;
 import org.example.helptreeservice.dto.wallet.BalanceAnomalyDto;
 import org.example.helptreeservice.event.BalanceAnomalyEvent;
+import org.example.helptreeservice.metrics.HelpTreeMetrics;
 import org.example.helptreeservice.repository.CoinTransactionRepository;
 import org.example.helptreeservice.repository.projection.BalanceMismatchProjection;
 import org.springframework.context.ApplicationEventPublisher;
@@ -33,6 +34,7 @@ public class WalletReconciliationService {
     private final CoinTransactionRepository transactionRepository;
     private final EconomyConfig economyConfig;
     private final ApplicationEventPublisher eventPublisher;
+    private final HelpTreeMetrics metrics;
 
     @Transactional(readOnly = true)
     public List<BalanceAnomalyDto> findAnomalies() {
@@ -56,6 +58,7 @@ public class WalletReconciliationService {
         }
 
         List<BalanceAnomalyDto> anomalies = findAnomalies();
+        metrics.setWalletBalanceMismatches(anomalies.size());
         if (anomalies.isEmpty()) {
             log.debug("Сверка кошельков: расхождений нет");
             return;

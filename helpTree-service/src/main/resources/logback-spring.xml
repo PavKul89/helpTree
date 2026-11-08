@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <!--
+      Two console modes:
+
+      * prod  - one JSON object per line. Every record is masked and carries
+                time, level, component, traceId/spanId, requestId, userId and
+                errorType. This is what an aggregator (Loki/ELK) consumes.
+      * other - the human-readable pattern, also masked. Development keeps the
+                same fields so a local reproduction matches production.
+
+      Put the correlation ids in MDC, never in the message text: operators can
+      then filter without parsing the message.
+    -->
+    <property name="CONSOLE_PATTERN"
+              value="%d{yyyy-MM-dd HH:mm:ss.SSS} %highlight(%-5level) [%thread] %green([HELPTREE]) trace=%X{traceId:-} span=%X{spanId:-} request=%X{requestId:-} user=%X{userId:-} error=%X{errorType:-} %cyan(%logger{36}) - %msg%n"/>
+
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <layout class="org.example.helptreeservice.logging.MaskingPatternLayout">
+            <pattern>${CONSOLE_PATTERN}</pattern>
+        </layout>
+    </appender>
+
+    <appender name="JSON" class="ch.qos.logback.core.ConsoleAppender">
+        <layout class="org.example.helptreeservice.logging.StructuredLogLayout"/>
+    </appender>
+
+    <springProfile name="prod">
+        <root level="INFO">
+            <appender-ref ref="JSON"/>
+        </root>
+    </springProfile>
+
+    <springProfile name="!prod">
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
+
+</configuration>

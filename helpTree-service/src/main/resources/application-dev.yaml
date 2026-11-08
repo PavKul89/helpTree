@@ -1,5 +1,5 @@
 server:
-  port: 8080
+  port: ${SERVER_PORT:8080}
 
 spring:
   application:
@@ -13,12 +13,9 @@ spring:
       max-file-size: 10MB
       max-request-size: 50MB
 
-  datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/helpTree_db}
-    username: ${DB_USER:helpTree}
-    password: ${DB_PASS:helpTree}
-    driver-class-name: org.postgresql.Driver
-
+  # Database, JWT, administrator and Silo credentials are not defaulted here.
+  # Export them (see .env.example / scripts/run-dev.ps1) so a local run uses the
+  # same explicit configuration path as production.
   jpa:
     hibernate:
       ddl-auto: none
@@ -55,7 +52,7 @@ management:
     tracing:
       export:
         otlp:
-          endpoint: http://localhost:4318/v1/traces
+          endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
           protocol: http/protobuf
   metrics:
     export:
@@ -65,6 +62,7 @@ management:
       percentiles-histogram:
         http.server.requests: true
         http.client.requests: true
+        helptree.api.duration: true
   endpoints:
     web:
       exposure:
@@ -85,6 +83,3 @@ logging:
     io.micrometer.tracing: DEBUG
     io.opentelemetry: DEBUG
     io.opentelemetry.exporter.otlp: DEBUG
-
-  pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %highlight(%-5level) [%thread] %green([HELPTREE]) %X{traceId} %X{spanId} %X{requestId} %X{userId} %cyan(%logger{36}) - %msg%n"

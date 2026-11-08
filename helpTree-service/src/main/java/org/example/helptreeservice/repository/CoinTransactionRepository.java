@@ -76,4 +76,18 @@ public interface CoinTransactionRepository extends JpaRepository<CoinTransaction
             ) mismatches
             """, nativeQuery = true)
     Page<BalanceMismatchProjection> findBalanceMismatches(Pageable pageable);
+
+    /** Count-only variant used by the operational gauge; it does not load rows. */
+    @Query(value = """
+            SELECT COUNT(*)
+            FROM (
+                SELECT u.id
+                FROM users u
+                LEFT JOIN coin_transactions ct ON ct.user_id = u.id
+                WHERE COALESCE(u.deleted, FALSE) = FALSE
+                GROUP BY u.id, u.help_coins
+                HAVING u.help_coins <> COALESCE(SUM(ct.amount), 0)
+            ) mismatches
+            """, nativeQuery = true)
+    long countBalanceMismatches();
 }

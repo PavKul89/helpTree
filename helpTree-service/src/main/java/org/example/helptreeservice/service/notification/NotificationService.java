@@ -7,6 +7,8 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.helptreeservice.config.NotificationProperties;
+import org.example.helptreeservice.config.FeatureFlags;
+import org.example.helptreeservice.enums.FeatureFlag;
 import org.example.helptreeservice.dto.notifications.MarkAllReadResponse;
 import org.example.helptreeservice.dto.notifications.NotificationDto;
 import org.example.helptreeservice.dto.notifications.NotificationPreferenceDto;
@@ -79,6 +81,7 @@ public class NotificationService {
     private final OutboxService outboxService;
     private final OutboxDispatcher outboxDispatcher;
     private final NotificationProperties properties;
+    private final FeatureFlags featureFlags;
 
     // ============================================================
     // Creation
@@ -94,7 +97,7 @@ public class NotificationService {
     @Transactional
     public NotificationDto notify(NotificationCommand command) {
         validate(command);
-        if (!properties.isEnabled()) {
+        if (featureFlags.isDisabled(FeatureFlag.NOTIFICATIONS)) {
             log.debug("Уведомления отключены, событие {} для пользователя {} пропущено",
                     command.type(), command.userId());
             return null;
@@ -251,6 +254,7 @@ public class NotificationService {
     public Page<NotificationDto> getNotifications(Long userId,
                                                   Pageable pageable,
                                                   boolean unreadOnly) {
+        featureFlags.requireEnabled(FeatureFlag.NOTIFICATIONS);
         Page<Notification> page = unreadOnly
                 ? notificationRepository.findByUserIdAndReadAtIsNullOrderByCreatedAtDescIdDesc(
                         userId, pageable)
@@ -260,12 +264,14 @@ public class NotificationService {
 
     @Transactional(readOnly = true)
     public UnreadCountResponse getUnreadCount(Long userId) {
+        featureFlags.requireEnabled(FeatureFlag.NOTIFICATIONS);
         return new UnreadCountResponse(
                 notificationRepository.countByUserIdAndReadAtIsNull(userId));
     }
 
     @Transactional
     public UnreadCountResponse markRead(Long userId, Long notificationId) {
+        featureFlags.requireEnabled(FeatureFlag.NOTIFICATIONS);
         Notification notification = notificationRepository.findById(notificationId)
                 .filter(item -> item.getUserId().equals(userId))
                 .orElseThrow(() -> new NotFoundException("Уведомление не найдено"));
@@ -279,6 +285,7 @@ public class NotificationService {
 
     @Transactional
     public MarkAllReadResponse markAllRead(Long userId) {
+        featureFlags.requireEnabled(FeatureFlag.NOTIFICATIONS);
         int updated = notificationRepository.markAllRead(userId, LocalDateTime.now());
         return new MarkAllReadResponse(
                 updated, notificationRepository.countByUserIdAndReadAtIsNull(userId));
@@ -290,6 +297,7 @@ public class NotificationService {
 
     @Transactional(readOnly = true)
     public NotificationPreferencesResponse getPreferences(Long userId) {
+        featureFlags.requireEnabled(FeatureFlag.NOTIFICATIONS);
         Map<String, Boolean> stored = new LinkedHashMap<>();
         for (NotificationPreference preference : preferenceRepository.findByUserId(userId)) {
             stored.put(key(preference.getType(), preference.getChannel()),
@@ -318,6 +326,7 @@ public class NotificationService {
     @Transactional
     public NotificationPreferencesResponse updatePreferences(
             Long userId, UpdateNotificationPreferencesRequest request) {
+        featureFlags.requireEnabled(FeatureFlag.NOTIFICATIONS);
         if (request == null || request.getPreferences() == null
                 || request.getPreferences().isEmpty()) {
             throw new BadRequestException("Список настроек не может быть пустым");

@@ -1,0 +1,211 @@
+# Operational alert rules for helpTree.
+#
+# The application owns the metrics; Prometheus owns the thresholds and
+# Alertmanager owns routing. Keeping alerts outside the JVM means the rules can
+# be tuned without a redeploy and stay active even when the application is down.
+#
+# Metric names follow Micrometer's Prometheus naming: dots become underscores
+# and counters get a _total suffix. Every rule links to docs/OPERATIONS.md.
+
+groups:
+  - name: helpTree-availability
+    interval: 30s
+    rules:
+      - alert: HelpTreeServiceDown
+        expr: up{job="helpTree-app"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: application
+        annotations:
+          summary: "helpTree application is not scrapeable"
+          description: "Prometheus has failed to scrape {{ $labels.instance }} for 2 minutes. The process may be down or /actuator/prometheus may be unreachable."
+          runbook: "docs/OPERATIONS.md#service-down"
+
+      - alert: HelpTreeDatabaseUnavailable
+        expr: helptree_database_up == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: database
+        annotations:
+          summary: "helpTree cannot reach PostgreSQL"
+          description: "The scheduled database probe has failed for 2 minutes. Requests, Flyway, outbox delivery and login are likely failing."
+          runbook: "docs/OPERATIONS.md#database-unavailable"
+
+  - name: helpTree-api
+    interval: 30s
+    rules:
+      - alert: HelpTreeServerErrorRateHigh
+        expr: |
+          sum(rate(helptree_api_server_errors_total[5m]))
+            /
+          clamp_min(sum(rate(helptree_api_duration_seconds_count[5m])), 0.001)
+            > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          component: api
+        annotations:
+          summary: "5xx responses exceed 5% of traffic"
+          description: "More than 5% of requests have returned 5xx for 5 minutes. Check the application log for errorType=INTERNAL_SERVER_ERROR and the most affected uri tag."
+          runbook: "docs/OPERATIONS.md#server-errors"
+
+      - alert: HelpTreeApiLatencyP95High
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(helptree_api_duration_seconds_bucket[5m]))
+          ) > 1.5
+        for: 10m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: "API p95 latency is above 1.5s"
+          description: "The 95th percentile of request latency has exceeded 1.5s for 10 minutes. Inspect slow endpoints in the duration metric and database query time."
+          runbook: "docs/OPERATIONS.md#high-latency"
+
+      - alert: HelpTreeAuthorizationErrorSpike
+        expr: sum(rate(helptree_api_authorization_errors_total[5m])) > 1
+        for: 10m
+        labels:
+          severity: warning
+          component: security
+        annotations:
+          summary: "Spike in 401/403 responses"
+          description: "Authorization errors exceed 1 per second for 10 minutes. This can indicate a broken client, expired tokens or a credential-stuffing attempt."
+          runbook: "docs/OPERATIONS.md#authorization-errors"
+
+      - alert: HelpTreeLoginFailureSpike
+        expr: sum(rate(helptree_auth_login_failures_total[5m])) > 0.5
+        for: 10m
+        labels:
+          severity: warning
+          component: security
+        annotations:
+          summary: "Elevated login failure rate"
+          description: "Login failures exceed 0.5 per second for 10 minutes. Check the reason tag (bad_password, unknown_account, locked) for brute-force or a broken client."
+          runbook: "docs/OPERATIONS.md#login-failures"
+
+  - name: helpTree-moderation
+    interval: 30s
+    rules:
+      - alert: HelpTreeReportSpike
+        expr: sum(increase(helptree_reports_created_total[10m])) > 20
+        for: 0m
+        labels:
+          severity: warning
+          component: moderation
+        annotations:
+          summary: "Unusual report volume"
+          description: "More than 20 reports were created in 10 minutes. Confirm whether this is a coordinated report burst or an abuse wave."
+          runbook: "docs/OPERATIONS.md#report-spike"
+
+      - alert: HelpTreeModerationQueueBacklog
+        expr: helptree_moderation_queue > 100
+        for: 15m
+        labels:
+          severity: warning
+          component: moderation
+        annotations:
+          summary: "Moderation queue is backing up"
+          description: "More than 100 reports have waited in OPEN/IN_REVIEW for 15 minutes. Add moderator capacity or triage the oldest reports."
+          runbook: "docs/OPERATIONS.md#moderation-backlog"
+
+      - alert: HelpTreeReportSlaBreach
+        expr: helptree_reports_sla_breaches > 0
+        for: 30m
+        labels:
+          severity: warning
+          component: moderation
+        annotations:
+          summary: "Reports have breached the moderation SLA"
+          description: "At least one open report is older than REPORTS_SLA_HOURS for 30 minutes. Review the oldest open reports."
+          runbook: "docs/OPERATIONS.md#moderation-sla"
+
+  - name: helpTree-delivery
+    interval: 30s
+    rules:
+      - alert: HelpTreeOutboxBacklog
+        expr: helptree_outbox_backlog > 100
+        for: 15m
+        labels:
+          severity: warning
+          component: notifications
+        annotations:
+          summary: "Outbox backlog is growing"
+          description: "More than 100 outbox events are PENDING/PROCESSING/FAILED for 15 minutes. Check the dispatcher schedule and the delivery failure metric."
+          runbook: "docs/OPERATIONS.md#outbox-backlog"
+
+      - alert: HelpTreeOutboxOldestEventStale
+        expr: helptree_outbox_oldest_age_seconds > 900
+        for: 10m
+        labels:
+          severity: critical
+          component: notifications
+        annotations:
+          summary: "Oldest outbox event is older than 15 minutes"
+          description: "Notifications are not draining. Users are missing in-app, email or Telegram delivery."
+          runbook: "docs/OPERATIONS.md#outbox-backlog"
+
+      - alert: HelpTreeOutboxDeliveryFailures
+        expr: sum(rate(helptree_outbox_failed_total[10m])) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+          component: notifications
+        annotations:
+          summary: "Outbox delivery failures are elevated"
+          description: "Events are exhausting their retry budget. Inspect the sender logs; a failing provider should be disabled rather than retried forever."
+          runbook: "docs/OPERATIONS.md#outbox-failures"
+
+      - alert: HelpTreeImageUploadFailureRate
+        expr: |
+          sum(rate(helptree_images_uploads_total{outcome="failure"}[10m]))
+            /
+          clamp_min(sum(rate(helptree_images_uploads_total[10m])), 0.001)
+            > 0.2
+        for: 10m
+        labels:
+          severity: warning
+          component: storage
+        annotations:
+          summary: "More than 20% of image uploads are failing"
+          description: "Silo may be unavailable, full or rejecting credentials. Check SILO_ENDPOINT and the storage service health."
+          runbook: "docs/OPERATIONS.md#image-uploads"
+
+  - name: helpTree-realtime-economy
+    interval: 30s
+    rules:
+      - alert: HelpTreeWebSocketChurn
+        expr: sum(rate(helptree_websocket_disconnections_total[5m])) > 5
+        for: 10m
+        labels:
+          severity: warning
+          component: websocket
+        annotations:
+          summary: "WebSocket sessions are dropping repeatedly"
+          description: "More than 5 disconnections per second for 10 minutes. This usually means a proxy idle timeout, a relay problem or clients reconnecting in a loop."
+          runbook: "docs/OPERATIONS.md#websocket-churn"
+
+      - alert: HelpTreeWebSocketConnectionsHigh
+        expr: helptree_websocket_sessions > 5000
+        for: 5m
+        labels:
+          severity: warning
+          component: websocket
+        annotations:
+          summary: "WebSocket connection count is near capacity"
+          description: "More than 5000 sessions are open. Review instance memory, the relay and the load balancer limits."
+          runbook: "docs/OPERATIONS.md#websocket-churn"
+
+      - alert: HelpTreeWalletBalanceMismatch
+        expr: helptree_wallet_balance_mismatches > 0
+        for: 5m
+        labels:
+          severity: critical
+          component: economy
+        annotations:
+          summary: "Wallet ledger does not match user balances"
+          description: "At least one user's help_coins differs from the ledger sum for 5 minutes. This is a data-integrity incident; do not run an automatic repair."
+          runbook: "docs/OPERATIONS.md#balance-mismatch"

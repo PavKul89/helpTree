@@ -4,6 +4,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.example.helptreeservice.util.LogContext;
 import org.example.helptreeservice.util.TraceIds;
 import org.slf4j.MDC;
 import org.springframework.core.Ordered;
@@ -36,6 +37,8 @@ public class TraceIdFilter extends OncePerRequestFilter {
             filterChain.doFilter(request, response);
         } finally {
             MDC.remove(TraceIds.MDC_KEY);
+            // Never leak a previous request's actor/error into a pooled thread.
+            LogContext.clear();
         }
     }
 }

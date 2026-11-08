@@ -2,6 +2,7 @@ package org.example.helptreeservice.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.example.helptreeservice.config.FeatureFlags;
 import org.example.helptreeservice.dto.reports.AdminReportDetailsResponse;
 import org.example.helptreeservice.dto.reports.AdminReportResponse;
 import org.example.helptreeservice.dto.reports.AssignReportRequest;
@@ -21,6 +22,7 @@ import org.example.helptreeservice.entity.Report;
 import org.example.helptreeservice.entity.ReportEvent;
 import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.enums.AdminAuditAction;
+import org.example.helptreeservice.enums.FeatureFlag;
 import org.example.helptreeservice.enums.ModerationActionType;
 import org.example.helptreeservice.enums.NotificationType;
 import org.example.helptreeservice.enums.ReportAction;
@@ -35,6 +37,7 @@ import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.ConflictException;
 import org.example.helptreeservice.exception.ForbiddenException;
 import org.example.helptreeservice.exception.NotFoundException;
+import org.example.helptreeservice.metrics.HelpTreeMetrics;
 import org.example.helptreeservice.repository.CommentRepository;
 import org.example.helptreeservice.repository.ModerationActionRepository;
 import org.example.helptreeservice.repository.PostRepository;
@@ -123,6 +126,8 @@ public class ReportService {
     private final CommentContentSanitizer contentSanitizer;
     private final NotificationService notificationService;
     private final AdminAuditService adminAuditService;
+    private final FeatureFlags featureFlags;
+    private final HelpTreeMetrics metrics;
 
     // ============================================================
     // User-facing lifecycle
@@ -134,6 +139,7 @@ public class ReportService {
      */
     @Transactional
     public ReportResponse createReport(CreateReportRequest request, Long userId, String idempotencyKey) {
+        featureFlags.requireEnabled(FeatureFlag.REPORTS);
         User reporter = requireActiveUser(userId);
         String key = normalizeIdempotencyKey(idempotencyKey);
 
@@ -170,6 +176,7 @@ public class ReportService {
                 .build();
 
         Report saved = reportRepository.save(report);
+        metrics.reportCreated();
 
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("targetType", saved.getTargetType().name());
@@ -217,12 +224,14 @@ public class ReportService {
                                              ReportTargetType targetType,
                                              ReportReason reason,
                                              Pageable pageable) {
+        featureFlags.requireEnabled(FeatureFlag.REPORTS);
         return reportRepository.findMine(userId, status, targetType, reason, pageable)
                 .map(this::toResponse);
     }
 
     @Transactional(readOnly = true)
     public ReportDetailsResponse getMyReport(Long reportId, Long userId) {
+        featureFlags.requireEnabled(FeatureFlag.REPORTS);
         Report report = reportRepository.findByIdAndReporterId(reportId, userId)
                 .orElseThrow(() -> new NotFoundException("Жалоба не найдена"));
 
@@ -241,6 +250,7 @@ public class ReportService {
 
     @Transactional(readOnly = true)
     public ReportMetaResponse getMeta() {
+        featureFlags.requireEnabled(FeatureFlag.REPORTS);
         return ReportMetaResponse.builder()
                 .targetTypes(REPORTABLE_TARGETS)
                 .reasons(List.of(ReportReason.values()))
@@ -265,6 +275,7 @@ public class ReportService {
                                                 LocalDateTime to,
                                                 String q,
                                                 Pageable pageable) {
+        featureFlags.requireEnabled(FeatureFlag.MODERATION);
         validatePeriod(from, to);
         String query = normalizeQuery(q);
         return reportRepository.findForAdmin(
@@ -275,6 +286,7 @@ public class ReportService {
 
     @Transactional(readOnly = true)
     public AdminReportDetailsResponse getAdminReport(Long reportId) {
+        featureFlags.requireEnabled(FeatureFlag.MODERATION);
         Report report = reportRepository.findByIdWithDetails(reportId)
                 .orElseThrow(() -> new NotFoundException("Жалоба не найдена"));
 
@@ -299,6 +311,7 @@ public class ReportService {
      */
     @Transactional
     public AdminReportResponse updateReport(Long reportId, UpdateReportRequest request, Long adminId) {
+        featureFlags.requireEnabled(FeatureFlag.MODERATION);
         User admin = requireAdmin(adminId);
         Report report = requireReportForUpdate(reportId);
 
@@ -357,6 +370,7 @@ public class ReportService {
      */
     @Transactional
     public AdminReportResponse assignReport(Long reportId, AssignReportRequest request, Long adminId) {
+        featureFlags.requireEnabled(FeatureFlag.MODERATION);
         User admin = requireAdmin(adminId);
         Report report = requireReportForUpdate(reportId);
 
@@ -412,6 +426,7 @@ public class ReportService {
     public ModerationActionResponse applyAction(Long reportId,
                                                 ModerationActionRequest request,
                                                 Long adminId) {
+        featureFlags.requireEnabled(FeatureFlag.MODERATION);
         User admin = requireAdmin(adminId);
         Report report = requireReportForUpdate(reportId);
 
@@ -548,6 +563,7 @@ public class ReportService {
 
         log.info("Жалоба ID={} рассмотрена администратором ID={}: {} -> {}, действие={}",
                 reportId, adminId, fromStatus, newStatus, actionType);
+        metrics.moderationAction(actionType.name());
         return toActionResponse(savedAction);
     }
 
@@ -583,10 +599,10 @@ public class ReportService {
     @Transactional(readOnly = true)
     public org.example.helptreeservice.dto.reports.ModerationSlaDto getModerationSla(
             LocalDateTime from, LocalDateTime to) {
+        featureFlags.requireEnabled(FeatureFlag.MODERATION);
         LocalDateTime resolvedTo = to != null ? to : LocalDateTime.now();
         LocalDateTime resolvedFrom = from != null ? from : resolvedTo.minusDays(30);
         validatePeriod(resolvedFrom, resolvedTo);
-
         Map<String, Long> byStatus = new LinkedHashMap<>();
         for (Object[] row : reportRepository.countByStatus()) {
             byStatus.put(String.valueOf(row[0]),

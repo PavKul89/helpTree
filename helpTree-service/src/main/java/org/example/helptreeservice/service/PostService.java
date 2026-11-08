@@ -23,6 +23,7 @@ import org.example.helptreeservice.metrics.annotation.BusinessMetric;
 import org.example.helptreeservice.repository.PostRepository;
 import org.example.helptreeservice.repository.PostSpecification;
 import org.example.helptreeservice.repository.UserRepository;
+import org.example.helptreeservice.util.SensitiveDataMasker;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -123,7 +124,8 @@ public class PostService {
                 throw new BadRequestException("Ваш аккаунт заблокирован. Невозможно создать пост.");
             }
 
-            log.debug("Найден пользователь для создания поста: email={}", user.getEmail());
+            log.debug("Найден пользователь для создания поста: email={}",
+                    SensitiveDataMasker.maskEmail(user.getEmail()));
 
             Post post = new Post();
             post.setUser(user);
@@ -293,7 +295,9 @@ public class PostService {
     public PostDto updatePost(Long id, UpdatePostRequest request) {
         log.info("Обновление поста с ID: {}", id);
         log.debug("Данные для обновления: title={}, description={}, authorName={}",
-                request.getTitle(), request.getDescription(), request.getAuthorName());
+                request.getTitle(),
+                SensitiveDataMasker.maskComplaintData(request.getDescription()),
+                request.getAuthorName());
 
         try {
             Post post = getPostEntityById(id);

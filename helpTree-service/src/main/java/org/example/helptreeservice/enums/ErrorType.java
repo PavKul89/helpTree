@@ -20,6 +20,7 @@ public enum ErrorType {
     UNSUPPORTED_MEDIA_TYPE("UNSUPPORTED_MEDIA_TYPE", "Unsupported Media Type"),
     METHOD_NOT_ALLOWED("METHOD_NOT_ALLOWED", "Method Not Allowed"),
     TOO_MANY_REQUESTS("TOO_MANY_REQUESTS", "Too Many Requests"),
+    FEATURE_DISABLED("FEATURE_DISABLED", "Feature Disabled"),
     INTERNAL_SERVER_ERROR("INTERNAL_SERVER_ERROR", "Internal Server Error");
 
     private final String code;

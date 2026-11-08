@@ -24,7 +24,7 @@ public class AuthorizationService {
         String role = (String) request.getAttribute("X-User-Role");
         String email = (String) request.getAttribute("X-User-Email");
 
-        log.debug("AuthorizationService: X-User-Id={}, X-User-Role={}, X-User-Email={}", userIdStr, role, email);
+        log.debug("AuthorizationService: X-User-Id={}, X-User-Role={}", userIdStr, role);
 
         if (userIdStr == null) {
             log.warn("AuthorizationService: userId is null");

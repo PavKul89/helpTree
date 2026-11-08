@@ -1,5 +1,8 @@
 package org.example.helptreeservice.service;
 
+import org.example.helptreeservice.config.FeatureFlags;
+import org.example.helptreeservice.config.FeatureFlagsProperties;
+import org.example.helptreeservice.config.NotificationProperties;
 import org.example.helptreeservice.dto.reports.ReportTargetPreview;
 import org.example.helptreeservice.entity.Chat;
 import org.example.helptreeservice.entity.Comment;
@@ -79,7 +82,8 @@ class ModerationServiceTest {
                 userRepository,
                 userBlockRepository,
                 moderationActionRepository,
-                ratingService);
+                ratingService,
+                new FeatureFlags(new FeatureFlagsProperties(), new NotificationProperties()));
 
         author = user(2L, "Bob", Role.USER);
         reporter = user(1L, "Alice", Role.USER);

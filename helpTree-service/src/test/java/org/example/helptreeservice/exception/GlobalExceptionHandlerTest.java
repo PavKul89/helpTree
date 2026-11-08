@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.example.helptreeservice.dto.error.ErrorResponse;
 import org.example.helptreeservice.dto.error.FieldErrorDto;
 import org.example.helptreeservice.enums.ErrorType;
+import org.example.helptreeservice.enums.FeatureFlag;
 import org.example.helptreeservice.util.ApiErrorWriter;
 import org.example.helptreeservice.util.TraceIds;
 import org.junit.jupiter.api.Test;
@@ -236,6 +237,19 @@ class GlobalExceptionHandlerTest {
         assertFalse(response.getBody().getMessage().contains("PSQLException"));
         assertFalse(response.getBody().getMessage().contains("users"));
         assertTrue(response.getBody().getFieldErrors().isEmpty());
+    }
+
+    @Test
+    void disabledFeature_shouldReturn503WithDedicatedCode() {
+        ResponseEntity<ErrorResponse> response = handler.handleFeatureDisabled(
+                new FeatureDisabledException(FeatureFlag.REPORTS),
+                request("/api/reports"));
+
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, response.getStatusCode());
+        assertEquals(503, response.getBody().getStatus());
+        assertEquals(ErrorType.FEATURE_DISABLED.getCode(), response.getBody().getCode());
+        assertEquals("Функция временно отключена: Жалобы", response.getBody().getMessage());
+        assertEquals("/api/reports", response.getBody().getPath());
     }
 
     @Test

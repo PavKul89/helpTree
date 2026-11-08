@@ -13,6 +13,7 @@ import org.example.helptreeservice.exception.UnauthorizedException;
 import org.example.helptreeservice.service.AuthSessionService;
 import org.example.helptreeservice.service.JwtService;
 import org.example.helptreeservice.util.ApiErrorWriter;
+import org.example.helptreeservice.util.LogContext;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -112,6 +113,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             request.setAttribute("X-User-Role", authenticatedUser.role());
             request.setAttribute("X-User-Email", authenticatedUser.email() != null ? authenticatedUser.email() : "");
             request.setAttribute("X-Session-Id", authenticatedUser.sessionId().toString());
+            LogContext.setUserId(authenticatedUser.userId());
 
             var authorities = List.of(new SimpleGrantedAuthority("ROLE_" + authenticatedUser.role()));
             var authentication = new UsernamePasswordAuthenticationToken(

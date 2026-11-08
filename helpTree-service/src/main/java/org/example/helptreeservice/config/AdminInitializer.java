@@ -2,52 +2,34 @@ package org.example.helptreeservice.config;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.enums.Role;
-import org.example.helptreeservice.enums.UserStatus;
 import org.example.helptreeservice.repository.UserRepository;
-import org.example.helptreeservice.service.PasswordService;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
 
-import java.time.LocalDateTime;
-
+/**
+ * Startup hook for the opt-in {@link AdminBootstrapService}.
+ *
+ * <p>It never creates an account on its own: the service must be enabled
+ * explicitly and validates both the address and the password. When no active
+ * administrator exists and the bootstrap is off, the application still starts
+ * and emits a warning instead of silently using a well-known default.</p>
+ */
 @Component
 @RequiredArgsConstructor
 @Slf4j
 public class AdminInitializer implements CommandLineRunner {
 
+    private final AdminBootstrapService adminBootstrapService;
     private final UserRepository userRepository;
-    private final PasswordService passwordService;
-
-    @Value("${app.admin.email:admin@helptree.dev}")
-    private String adminEmail;
-
-    @Value("${app.admin.password:dev-admin-password-change-in-prod}")
-    private String adminPassword;
 
     @Override
     public void run(String... args) {
-        if (!userRepository.existsByEmail(adminEmail)) {
-            User admin = new User();
-            admin.setEmail(adminEmail);
-            admin.setPassword(passwordService.encode(adminPassword));
-            admin.setName("Admin");
-            admin.setRole(Role.ADMIN);
-            admin.setStatus(UserStatus.ACTIVE);
-            admin.setEmailVerified(true);
-            admin.setTokenVersion(0L);
-            admin.setHelpedCount(0);
-            admin.setDebtCount(0);
-            admin.setRating(3.0);
-            admin.setCreatedAt(LocalDateTime.now());
-            admin.setUpdatedAt(LocalDateTime.now());
-
-            userRepository.save(admin);
-            log.info("Создан администратор: {}", adminEmail);
-        } else {
-            log.debug("Администратор уже существует: {}", adminEmail);
+        boolean created = adminBootstrapService.bootstrapIfEnabled();
+        if (!created && userRepository.countActiveByRole(Role.ADMIN) == 0) {
+            log.warn("No active administrator exists. Set ADMIN_BOOTSTRAP_ENABLED=true with "
+                    + "ADMIN_EMAIL and a strong ADMIN_PASSWORD for the first start, then "
+                    + "disable the bootstrap.");
         }
     }
 }

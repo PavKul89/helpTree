@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.example.helptreeservice.dto.error.ErrorResponse;
 import org.example.helptreeservice.dto.error.FieldErrorDto;
 import org.example.helptreeservice.enums.ErrorType;
+import org.example.helptreeservice.util.LogContext;
 import org.example.helptreeservice.util.TraceIds;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -51,24 +52,28 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(NotFoundException.class)
     public ResponseEntity<ErrorResponse> handleNotFoundException(NotFoundException ex, HttpServletRequest request) {
+        LogContext.setErrorType(ErrorType.NOT_FOUND.getCode());
         log.info("Resource not found: {}", ex.getMessage());
         return error(HttpStatus.NOT_FOUND, ErrorType.NOT_FOUND, ex.getMessage(), request);
     }
 
     @ExceptionHandler(ConflictException.class)
     public ResponseEntity<ErrorResponse> handleConflictException(ConflictException ex, HttpServletRequest request) {
+        LogContext.setErrorType(ErrorType.CONFLICT.getCode());
         log.info("Conflict: {}", ex.getMessage());
         return error(HttpStatus.CONFLICT, ErrorType.CONFLICT, ex.getMessage(), request);
     }
 
     @ExceptionHandler(BadRequestException.class)
     public ResponseEntity<ErrorResponse> handleBadRequestException(BadRequestException ex, HttpServletRequest request) {
+        LogContext.setErrorType(ErrorType.BAD_REQUEST.getCode());
         log.info("Bad request: {}", ex.getMessage());
         return error(HttpStatus.BAD_REQUEST, ErrorType.BAD_REQUEST, ex.getMessage(), request);
     }
 
     @ExceptionHandler(ForbiddenException.class)
     public ResponseEntity<ErrorResponse> handleForbiddenException(ForbiddenException ex, HttpServletRequest request) {
+        LogContext.setErrorType(ErrorType.FORBIDDEN.getCode());
         log.warn("Access denied: {}", ex.getMessage());
         return error(HttpStatus.FORBIDDEN, ErrorType.FORBIDDEN, ex.getMessage(), request);
     }
@@ -76,18 +81,21 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AccountBlockedException.class)
     public ResponseEntity<ErrorResponse> handleAccountBlockedException(
             AccountBlockedException ex, HttpServletRequest request) {
+        LogContext.setErrorType(ErrorType.ACCOUNT_BLOCKED.getCode());
         log.warn("Blocked account for {}: {}", request.getRequestURI(), ex.getMessage());
         return error(HttpStatus.FORBIDDEN, ErrorType.ACCOUNT_BLOCKED, ex.getMessage(), request);
     }
 
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ErrorResponse> handleAccessDeniedException(AccessDeniedException ex, HttpServletRequest request) {
+        LogContext.setErrorType(ErrorType.FORBIDDEN.getCode());
         log.warn("Spring Security access denied for {}: {}", request.getRequestURI(), ex.getMessage());
         return error(HttpStatus.FORBIDDEN, ErrorType.FORBIDDEN, "Доступ запрещен", request);
     }
 
     @ExceptionHandler(UnauthorizedException.class)
     public ResponseEntity<ErrorResponse> handleUnauthorizedException(UnauthorizedException ex, HttpServletRequest request) {
+        LogContext.setErrorType(ErrorType.UNAUTHORIZED.getCode());
         log.warn("Unauthorized: {}", ex.getMessage());
         return error(HttpStatus.UNAUTHORIZED, ErrorType.UNAUTHORIZED, ex.getMessage(), request);
     }
@@ -95,6 +103,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(RateLimitExceededException.class)
     public ResponseEntity<ErrorResponse> handleRateLimitExceeded(
             RateLimitExceededException ex, HttpServletRequest request) {
+        LogContext.setErrorType(ErrorType.TOO_MANY_REQUESTS.getCode());
         log.warn("Rate limit exceeded for {}: {}", request.getRequestURI(), ex.getMessage());
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
                 .header("Retry-After", Long.toString(ex.getRetryAfterSeconds()))
@@ -105,6 +114,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleValidationExceptions(
             MethodArgumentNotValidException ex, HttpServletRequest request) {
+        LogContext.setErrorType(ErrorType.VALIDATION_FAILED.getCode());
         List<FieldErrorDto> fieldErrors = toFieldErrors(ex.getBindingResult());
         log.warn("Validation failed for request {}: {}", request.getRequestURI(), fieldErrors);
         return error(HttpStatus.BAD_REQUEST, ErrorType.VALIDATION_FAILED,
@@ -113,6 +123,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(BindException.class)
     public ResponseEntity<ErrorResponse> handleBindException(BindException ex, HttpServletRequest request) {
+        LogContext.setErrorType(ErrorType.VALIDATION_FAILED.getCode());
         List<FieldErrorDto> fieldErrors = toFieldErrors(ex.getBindingResult());
         log.warn("Binding failed for request {}: {}", request.getRequestURI(), fieldErrors);
         return error(HttpStatus.BAD_REQUEST, ErrorType.VALIDATION_FAILED,
@@ -121,6 +132,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ConstraintViolationException.class)
     public ResponseEntity<ErrorResponse> handleConstraintViolation(ConstraintViolationException ex, HttpServletRequest request) {
+        LogContext.setErrorType(ErrorType.VALIDATION_FAILED.getCode());
         List<FieldErrorDto> fieldErrors = new ArrayList<>();
         for (ConstraintViolation<?> violation : ex.getConstraintViolations()) {
             fieldErrors.add(new FieldErrorDto(
@@ -136,6 +148,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(WebExchangeBindException.class)
     public ResponseEntity<ErrorResponse> handleWebExchangeBindException(WebExchangeBindException ex, HttpServletRequest request) {
+        LogContext.setErrorType(ErrorType.VALIDATION_FAILED.getCode());
         List<FieldErrorDto> fieldErrors = toFieldErrors(ex.getBindingResult());
         log.warn("WebExchange binding failed for request {}: {}", request.getRequestURI(), fieldErrors);
         return error(HttpStatus.BAD_REQUEST, ErrorType.VALIDATION_FAILED,
@@ -144,12 +157,14 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ErrorResponse> handleHttpMessageNotReadable(HttpMessageNotReadableException ex, HttpServletRequest request) {
+        LogContext.setErrorType(ErrorType.BAD_REQUEST.getCode());
         log.warn("Malformed request for {}: {}", request.getRequestURI(), ex.getMostSpecificCause().getMessage());
         return error(HttpStatus.BAD_REQUEST, ErrorType.BAD_REQUEST, "Неверный формат запроса", request);
     }
 
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ErrorResponse> handleMethodArgumentTypeMismatch(MethodArgumentTypeMismatchException ex, HttpServletRequest request) {
+        LogContext.setErrorType(ErrorType.BAD_REQUEST.getCode());
         String message = String.format("Параметр '%s' должен иметь тип %s", ex.getName(),
                 ex.getRequiredType() != null ? ex.getRequiredType().getSimpleName() : "unknown");
         log.warn("Type mismatch for request {}: {}", request.getRequestURI(), message);
@@ -158,6 +173,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MissingServletRequestParameterException.class)
     public ResponseEntity<ErrorResponse> handleMissingServletRequestParameter(MissingServletRequestParameterException ex, HttpServletRequest request) {
+        LogContext.setErrorType(ErrorType.BAD_REQUEST.getCode());
         String message = String.format("Обязательный параметр '%s' отсутствует", ex.getParameterName());
         log.warn("Missing parameter for request {}: {}", request.getRequestURI(), message);
         return error(HttpStatus.BAD_REQUEST, ErrorType.BAD_REQUEST, message, request);
@@ -166,6 +182,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MissingRequestHeaderException.class)
     public ResponseEntity<ErrorResponse> handleMissingRequestHeader(
             MissingRequestHeaderException ex, HttpServletRequest request) {
+        LogContext.setErrorType(ErrorType.BAD_REQUEST.getCode());
         String message = String.format("Обязательный заголовок '%s' отсутствует", ex.getHeaderName());
         log.warn("Missing header for request {}: {}", request.getRequestURI(), message);
         return error(HttpStatus.BAD_REQUEST, ErrorType.BAD_REQUEST, message, request);
@@ -173,6 +190,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ErrorResponse> handleDataIntegrityViolation(DataIntegrityViolationException ex, HttpServletRequest request) {
+        LogContext.setErrorType(ErrorType.CONFLICT.getCode());
         log.error("Data integrity violation for {}: {}", request.getRequestURI(),
                 ex.getMostSpecificCause().getMessage());
         return error(HttpStatus.CONFLICT, ErrorType.CONFLICT,
@@ -181,12 +199,14 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ErrorResponse> handleIllegalArgument(IllegalArgumentException ex, HttpServletRequest request) {
+        LogContext.setErrorType(ErrorType.BAD_REQUEST.getCode());
         log.warn("Illegal argument for {}: {}", request.getRequestURI(), ex.getMessage());
         return error(HttpStatus.BAD_REQUEST, ErrorType.BAD_REQUEST, "Некорректный запрос", request);
     }
 
     @ExceptionHandler(MissingServletRequestPartException.class)
     public ResponseEntity<ErrorResponse> handleMissingServletRequestPart(MissingServletRequestPartException ex, HttpServletRequest request) {
+        LogContext.setErrorType(ErrorType.BAD_REQUEST.getCode());
         String message = String.format("Обязательная часть запроса '%s' отсутствует", ex.getRequestPartName());
         log.warn("Missing request part for {}: {}", request.getRequestURI(), message);
         return error(HttpStatus.BAD_REQUEST, ErrorType.BAD_REQUEST, message, request);
@@ -194,6 +214,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<ErrorResponse> handleMaxUploadSizeExceeded(MaxUploadSizeExceededException ex, HttpServletRequest request) {
+        LogContext.setErrorType(ErrorType.PAYLOAD_TOO_LARGE.getCode());
         log.warn("File size exceeded for {}: {}", request.getRequestURI(), ex.getMessage());
         return error(HttpStatus.PAYLOAD_TOO_LARGE, ErrorType.PAYLOAD_TOO_LARGE,
                 "Размер загружаемого файла превышает максимально допустимый", request);
@@ -201,6 +222,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<ErrorResponse> handleNoResourceFound(NoResourceFoundException ex, HttpServletRequest request) {
+        LogContext.setErrorType(ErrorType.NOT_FOUND.getCode());
         log.info("No static resource for {}: {}", request.getRequestURI(), ex.getMessage());
         return error(HttpStatus.NOT_FOUND, ErrorType.NOT_FOUND, "Ресурс не найден", request);
     }
@@ -208,6 +230,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
     public ResponseEntity<ErrorResponse> handleMethodNotSupported(
             HttpRequestMethodNotSupportedException ex, HttpServletRequest request) {
+        LogContext.setErrorType(ErrorType.METHOD_NOT_ALLOWED.getCode());
         log.warn("Method {} not supported for {}", ex.getMethod(), request.getRequestURI());
         return error(HttpStatus.METHOD_NOT_ALLOWED, ErrorType.METHOD_NOT_ALLOWED,
                 "Метод запроса не поддерживается для этого ресурса", request);
@@ -216,6 +239,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
     public ResponseEntity<ErrorResponse> handleMediaTypeNotSupported(
             HttpMediaTypeNotSupportedException ex, HttpServletRequest request) {
+        LogContext.setErrorType(ErrorType.UNSUPPORTED_MEDIA_TYPE.getCode());
         log.warn("Unsupported media type {} for {}", ex.getContentType(), request.getRequestURI());
         return error(HttpStatus.UNSUPPORTED_MEDIA_TYPE, ErrorType.UNSUPPORTED_MEDIA_TYPE,
                 "Неподдерживаемый тип содержимого запроса", request);
@@ -249,14 +273,28 @@ public class GlobalExceptionHandler {
         if (cause instanceof MaxUploadSizeExceededException e) {
             return handleMaxUploadSizeExceeded(e, request);
         }
+        if (cause instanceof FeatureDisabledException e) {
+            return handleFeatureDisabled(e, request);
+        }
         // Unwrap the original exception so the generic handler logs the real
         // cause instead of "CompletionException: ...".
         return handleGenericException(
                 cause instanceof Exception exception ? exception : new RuntimeException(cause), request);
     }
 
+    @ExceptionHandler(FeatureDisabledException.class)
+    public ResponseEntity<ErrorResponse> handleFeatureDisabled(
+            FeatureDisabledException ex, HttpServletRequest request) {
+        LogContext.setErrorType(ErrorType.FEATURE_DISABLED.getCode());
+        log.warn("Feature {} is disabled for {}", ex.getFeature().getCode(),
+                request.getRequestURI());
+        return error(HttpStatus.SERVICE_UNAVAILABLE, ErrorType.FEATURE_DISABLED,
+                ex.getMessage(), request);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGenericException(Exception ex, HttpServletRequest request) {
+        LogContext.setErrorType(ErrorType.INTERNAL_SERVER_ERROR.getCode());
         log.error("Unexpected error for {}: {}", request.getRequestURI(), ex.getMessage(), ex);
         return error(HttpStatus.INTERNAL_SERVER_ERROR, ErrorType.INTERNAL_SERVER_ERROR,
                 "Произошла непредвиденная ошибка", request);

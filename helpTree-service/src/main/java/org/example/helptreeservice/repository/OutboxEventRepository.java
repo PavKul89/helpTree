@@ -11,6 +11,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -64,4 +65,10 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, Long> 
                            @Param("reason") String reason);
 
     long countByStatus(OutboxStatus status);
+
+    long countByStatusIn(Collection<OutboxStatus> statuses);
+
+    /** Age reference for the backlog metric: the oldest event that is not published. */
+    @Query("SELECT MIN(e.createdAt) FROM OutboxEvent e WHERE e.status IN :statuses")
+    LocalDateTime findOldestCreatedAtByStatusIn(@Param("statuses") Collection<OutboxStatus> statuses);
 }

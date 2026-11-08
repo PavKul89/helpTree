@@ -8,6 +8,7 @@ import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.enums.NotificationChannel;
 import org.example.helptreeservice.enums.NotificationType;
 import org.example.helptreeservice.enums.OutboxStatus;
+import org.example.helptreeservice.metrics.HelpTreeMetrics;
 import org.example.helptreeservice.repository.NotificationPreferenceRepository;
 import org.example.helptreeservice.repository.NotificationRepository;
 import org.example.helptreeservice.repository.OutboxEventRepository;
@@ -41,6 +42,7 @@ class OutboxDeliveryServiceTest {
     @Mock private UserRepository userRepository;
     @Mock private NotificationSenderRegistry senderRegistry;
     @Mock private NotificationSender sender;
+    @Mock private HelpTreeMetrics metrics;
 
     private NotificationProperties properties;
     private OutboxDeliveryService service;
@@ -57,7 +59,8 @@ class OutboxDeliveryServiceTest {
                 preferenceRepository,
                 userRepository,
                 senderRegistry,
-                properties);
+                properties,
+                metrics);
     }
 
     @Test
