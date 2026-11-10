@@ -41,7 +41,8 @@ public class ChatWebSocketController {
 
         log.info("WebSocket message send to chat {} by user {}", chatId, principal.getUserId());
 
-        CreateMessageRequest restRequest = new CreateMessageRequest(request.getContent());
+        CreateMessageRequest restRequest = new CreateMessageRequest(
+                request.getContent(), request.getAttachmentUrls());
         chatService.sendMessage(chatId, restRequest, principal.getUserId());
     }
 

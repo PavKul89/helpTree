@@ -65,6 +65,14 @@ public class Help {
     @Column(name = "cancel_initiator", length = 20)
     private HelpActorRole cancelInitiator; // HELPER / RECEIVER / ADMIN / SYSTEM
 
+    /** When the 50% SLA reminder was delivered; null until then. */
+    @Column(name = "reminder_50_sent_at")
+    private LocalDateTime reminder50SentAt;
+
+    /** When the 80% SLA reminder was delivered; null until then. */
+    @Column(name = "reminder_80_sent_at")
+    private LocalDateTime reminder80SentAt;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 

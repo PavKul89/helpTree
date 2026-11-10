@@ -21,6 +21,7 @@ public enum ErrorType {
     METHOD_NOT_ALLOWED("METHOD_NOT_ALLOWED", "Method Not Allowed"),
     TOO_MANY_REQUESTS("TOO_MANY_REQUESTS", "Too Many Requests"),
     FEATURE_DISABLED("FEATURE_DISABLED", "Feature Disabled"),
+    SERVICE_UNAVAILABLE("SERVICE_UNAVAILABLE", "Service Unavailable"),
     INTERNAL_SERVER_ERROR("INTERNAL_SERVER_ERROR", "Internal Server Error");
 
     private final String code;

@@ -104,6 +104,7 @@ class JwtAuthFilterTest {
         assertTrue(isPublic("/api/ratings/top", "GET"));
         assertTrue(isPublic("/api/ratings/user/7", "GET"));
         assertTrue(isPublic("/api/helps/graph", "GET"));
+        assertTrue(isPublic("/api/posts/7/views", "POST"));
         assertFalse(isPublic("/api/actuator", "GET"));
 
         // The owner view and internal rating history are never public.

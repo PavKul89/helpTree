@@ -292,6 +292,15 @@ public class GlobalExceptionHandler {
                 ex.getMessage(), request);
     }
 
+    @ExceptionHandler(ServiceUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleServiceUnavailable(
+            ServiceUnavailableException ex, HttpServletRequest request) {
+        LogContext.setErrorType(ErrorType.SERVICE_UNAVAILABLE.getCode());
+        log.error("Dependency unavailable for {}: {}", request.getRequestURI(), ex.getMessage());
+        return error(HttpStatus.SERVICE_UNAVAILABLE, ErrorType.SERVICE_UNAVAILABLE,
+                ex.getMessage(), request);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGenericException(Exception ex, HttpServletRequest request) {
         LogContext.setErrorType(ErrorType.INTERNAL_SERVER_ERROR.getCode());

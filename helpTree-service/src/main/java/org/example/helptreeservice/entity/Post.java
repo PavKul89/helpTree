@@ -80,6 +80,24 @@ public class Post {
     @Column(name = "comments_count", nullable = false)
     private Integer commentsCount = 0;
 
+    /** Unique views per viewer per day; maintained by post_views. */
+    @Column(name = "views_count", nullable = false)
+    private Integer viewsCount = 0;
+
+    /**
+     * Number of live help responses for this post; recomputed from helps after
+     * every accept/cancel transition.
+     */
+    @Column(name = "responses_count", nullable = false)
+    private Integer responsesCount = 0;
+
+    /**
+     * SHA-256 of the normalised title + description. Together with the author
+     * and created_at it backs the 24-hour duplicate guard.
+     */
+    @Column(name = "content_fingerprint", length = 64)
+    private String contentFingerprint;
+
     public boolean isBoosted() {
         return boostedUntil != null && boostedUntil.isAfter(LocalDateTime.now());
     }

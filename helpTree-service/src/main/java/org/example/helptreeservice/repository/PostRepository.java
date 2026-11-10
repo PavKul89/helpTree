@@ -60,6 +60,11 @@ public interface PostRepository extends JpaRepository<Post, Long>, JpaSpecificat
             + "AND p.moderationStatus = org.example.helptreeservice.enums.ModerationStatus.ACTIVE")
     List<Post> findByIdsWithUser(@Param("ids") List<Long> ids);
 
+    /** Complete authored-post list for the portable account export. */
+    @EntityGraph(attributePaths = {"user", "helper"})
+    @Query("SELECT p FROM Post p WHERE p.user.id = :userId ORDER BY p.createdAt DESC, p.id DESC")
+    List<Post> findAllForExport(@Param("userId") Long userId);
+
     @Query("SELECT COUNT(p) FROM Post p WHERE p.status = :status "
             + "AND (p.deleted = false OR p.deleted IS NULL) "
             + "AND p.moderationStatus = org.example.helptreeservice.enums.ModerationStatus.ACTIVE")
@@ -120,6 +125,48 @@ public interface PostRepository extends JpaRepository<Post, Long>, JpaSpecificat
 
     @Query("SELECT p.commentsCount FROM Post p WHERE p.id = :postId")
     Integer findCommentsCountById(@Param("postId") Long postId);
+
+    @Query("SELECT p.viewsCount FROM Post p WHERE p.id = :postId")
+    Integer findViewsCountById(@Param("postId") Long postId);
+
+    @Modifying(flushAutomatically = true)
+    @Query("UPDATE Post p SET p.viewsCount = COALESCE(p.viewsCount, 0) + 1 WHERE p.id = :postId")
+    int incrementViewsCount(@Param("postId") Long postId);
+
+    /**
+     * Recomputes the response counter from the help rows. The definition is the
+     * same one used by the V59 backfill: live ACCEPTED/COMPLETED/CONFIRMED help.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = """
+            UPDATE posts p
+            SET responses_count = (
+                SELECT COUNT(*)
+                FROM helps h
+                WHERE h.post_id = p.id
+                  AND h.status IN ('ACCEPTED', 'COMPLETED', 'CONFIRMED')
+                  AND h.deleted = FALSE
+            )
+            WHERE p.id = :postId
+            """, nativeQuery = true)
+    int refreshResponsesCount(@Param("postId") Long postId);
+
+    @Query("SELECT COUNT(p) > 0 FROM Post p WHERE p.user.id = :authorId "
+            + "AND p.contentFingerprint = :fingerprint "
+            + "AND p.createdAt >= :since "
+            + "AND (p.deleted = false OR p.deleted IS NULL)")
+    boolean existsRecentDuplicate(@Param("authorId") Long authorId,
+                                  @Param("fingerprint") String fingerprint,
+                                  @Param("since") LocalDateTime since);
+
+    /**
+     * Transaction-scoped advisory lock serialises the duplicate check for one
+     * author + content fingerprint, so two concurrent submissions cannot both
+     * pass the existence check before either row is inserted.
+     */
+    @Query(value = "SELECT 1 FROM (SELECT pg_advisory_xact_lock(hashtext(:key)::bigint)) AS acquired",
+           nativeQuery = true)
+    Integer acquireContentLock(@Param("key") String key);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query(value = "DELETE FROM post_images WHERE image_url = :url", nativeQuery = true)

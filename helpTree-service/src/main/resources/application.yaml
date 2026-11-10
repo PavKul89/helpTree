@@ -179,6 +179,10 @@ app:
     email-verification-token-hours: ${EMAIL_VERIFICATION_TOKEN_HOURS:24}
     email-change-token-hours: ${EMAIL_CHANGE_TOKEN_HOURS:24}
     session-touch-minutes: ${SESSION_TOUCH_MINUTES:1}
+    # Activity timestamp is written at most once per this many minutes.
+    last-seen-touch-minutes: ${LAST_SEEN_TOUCH_MINUTES:1}
+    # "Online" means last activity within this window.
+    online-window-minutes: ${ONLINE_WINDOW_MINUTES:5}
     trust-forwarded-headers: ${TRUST_FORWARDED_HEADERS:false}
     frontend-base-url: ${FRONTEND_BASE_URL:http://localhost:3000}
     ws-ticket-seconds: ${WS_TICKET_SECONDS:60}
@@ -188,6 +192,15 @@ app:
     messages-per-minute: ${CHAT_MESSAGES_PER_MINUTE:30}
     cursor-default-limit: ${CHAT_CURSOR_DEFAULT_LIMIT:20}
     cursor-max-limit: ${CHAT_CURSOR_MAX_LIMIT:100}
+    # Sender edit window and attachment limit.
+    edit-window-minutes: ${CHAT_EDIT_WINDOW_MINUTES:15}
+    max-attachments: ${CHAT_MAX_ATTACHMENTS:3}
+    # 0 disables physical retention. Messages older than this many days are
+    # deleted in batches; see docs/OPERATIONS.md.
+    retention-days: ${CHAT_RETENTION_DAYS:90}
+    retention-cron: "${CHAT_RETENTION_CRON:0 30 3 * * *}"
+    retention-batch-size: ${CHAT_RETENTION_BATCH_SIZE:500}
+    retention-max-batches-per-run: ${CHAT_RETENTION_MAX_BATCHES_PER_RUN:20}
     # Legacy /topic destinations remain authorized for older frontend builds.
     # Disable after the frontend has fully moved to /user/queue destinations.
     legacy-topics-enabled: ${CHAT_LEGACY_TOPICS_ENABLED:true}
@@ -220,6 +233,44 @@ app:
     accepted-timeout-hours: ${HELP_ACCEPTED_TIMEOUT_HOURS:168}
     sla-cron: "${HELP_SLA_CRON:0 0 * * * *}"
     sla-batch-size: ${HELP_SLA_BATCH_SIZE:100}
+    # Reminders are sent at 50% and 80% of the same timeout.
+    reminders-enabled: ${HELP_REMINDERS_ENABLED:true}
+    reminder-first-percent: ${HELP_REMINDER_FIRST_PERCENT:50}
+    reminder-second-percent: ${HELP_REMINDER_SECOND_PERCENT:80}
+    reminder-cron: "${HELP_REMINDER_CRON:0 0 * * * *}"
+    reminder-batch-size: ${HELP_REMINDER_BATCH_SIZE:200}
+  posts:
+    # Server-side link policy for titles and descriptions.
+    max-links: ${POST_MAX_LINKS:5}
+    # Identical title+description by the same author inside this window is 409.
+    # 0 disables the duplicate guard.
+    duplicate-window-hours: ${POST_DUPLICATE_WINDOW_HOURS:24}
+  partitions:
+    # Rolling monthly partitions for messages/outbox_events. The window is
+    # created ahead of time; a write must never depend on the default partition.
+    enabled: ${PARTITIONS_ENABLED:true}
+    cron: "${PARTITIONS_CRON:0 15 3 * * *}"
+    future-months: ${PARTITIONS_FUTURE_MONTHS:3}
+    # Drops whole months past retention. Messages additionally honour
+    # CHAT_RETENTION_DAYS, so a longer chat policy always wins.
+    drop-old-partitions: ${PARTITIONS_DROP_OLD:true}
+    retention-months: ${PARTITIONS_RETENTION_MONTHS:24}
+  antivirus:
+    # ClamAV INSTREAM. Disabled by default; when enabled the upload path is
+    # fail-closed (scanner unreachable -> 503, infected file -> 400).
+    enabled: ${ANTIVIRUS_ENABLED:false}
+    host: ${ANTIVIRUS_HOST:localhost}
+    port: ${ANTIVIRUS_PORT:3310}
+    connect-timeout-millis: ${ANTIVIRUS_CONNECT_TIMEOUT_MILLIS:2000}
+    read-timeout-millis: ${ANTIVIRUS_READ_TIMEOUT_MILLIS:10000}
+    chunk-size: ${ANTIVIRUS_CHUNK_SIZE:65536}
+  wallet:
+    # The export is one response; a larger history must be narrowed by filters.
+    export-max-rows: ${WALLET_EXPORT_MAX_ROWS:50000}
+    # VIP reminder days before expiry and the daily sweep.
+    vip-reminder-days: ${WALLET_VIP_REMINDER_DAYS:7,3,1}
+    vip-reminder-cron: "${WALLET_VIP_REMINDER_CRON:0 0 10 * * *}"
+    vip-reminder-batch-size: ${WALLET_VIP_REMINDER_BATCH_SIZE:500}
   websocket:
     allowed-origins: ${WS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:3001,http://localhost:5173}
     relay-enabled: ${WS_RELAY_ENABLED:false}

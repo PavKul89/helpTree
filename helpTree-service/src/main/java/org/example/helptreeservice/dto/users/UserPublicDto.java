@@ -17,5 +17,9 @@ public class UserPublicDto {
     private Integer debtCount;
     private String avatarUrl;
     private String city;
+    /** Present only when the owner enabled {@code showPhone}. */
+    private String phone;
+    /** Derived from last activity; null when the owner hides online status. */
+    private Boolean online;
     private String nicknameColor;
 }

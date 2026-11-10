@@ -19,6 +19,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 public class PublicProfileCache {
 
     public static final String CACHE_NAME = "publicUserProfile";
+    public static final String PRIVACY_CACHE_NAME = "publicPrivacySettings";
 
     private final CacheManager cacheManager;
 
@@ -28,6 +29,10 @@ public class PublicProfileCache {
             if (cache != null) {
                 cache.evict(userId);
             }
+            Cache privacy = cacheManager.getCache(PRIVACY_CACHE_NAME);
+            if (privacy != null) {
+                privacy.evict(userId);
+            }
         });
     }
 
@@ -36,6 +41,10 @@ public class PublicProfileCache {
             Cache cache = cacheManager.getCache(CACHE_NAME);
             if (cache != null) {
                 cache.clear();
+            }
+            Cache privacy = cacheManager.getCache(PRIVACY_CACHE_NAME);
+            if (privacy != null) {
+                privacy.clear();
             }
         });
     }

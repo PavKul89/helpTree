@@ -60,6 +60,9 @@ class ImageServiceTest {
     @Mock
     private HelpTreeMetrics metrics;
 
+    @Mock
+    private AntivirusScanner antivirusScanner;
+
     private ImageUploadProperties properties;
     private ImageService imageService;
 
@@ -67,7 +70,8 @@ class ImageServiceTest {
     void setUp() {
         properties = new ImageUploadProperties();
         imageService = new ImageService(
-                siloClient, Runnable::run, imageProcessor, imageObjectService, properties, metrics);
+                siloClient, Runnable::run, imageProcessor, imageObjectService, properties, metrics,
+                antivirusScanner);
         ReflectionTestUtils.setField(imageService, "bucket", "helptree-images");
         ReflectionTestUtils.setField(imageService, "publicEndpoint", "https://images.example.com/");
     }
@@ -186,7 +190,7 @@ class ImageServiceTest {
         ImageUploadProperties realProperties = new ImageUploadProperties();
         ImageService realService = new ImageService(
                 siloClient, Runnable::run, new ImageProcessor(realProperties),
-                imageObjectService, realProperties, metrics);
+                imageObjectService, realProperties, metrics, antivirusScanner);
         ReflectionTestUtils.setField(realService, "bucket", "helptree-images");
         ReflectionTestUtils.setField(realService, "publicEndpoint", "https://images.example.com/");
 

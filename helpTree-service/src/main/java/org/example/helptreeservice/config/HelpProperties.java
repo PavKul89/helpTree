@@ -15,9 +15,24 @@ public class HelpProperties {
     /** Allows operators to disable automatic cancellation without a code change. */
     private boolean slaEnabled = true;
 
+    /** Enables the 50%/80% reminder sweep independently from cancellation. */
+    private boolean remindersEnabled = true;
+
+    /** Percentage of acceptedTimeoutHours at which the first reminder is sent. */
+    private int reminderFirstPercent = 50;
+
+    /** Percentage of acceptedTimeoutHours at which the second reminder is sent. */
+    private int reminderSecondPercent = 80;
+
     /** Cron for the stale-help sweep. */
     private String slaCron = "0 0 * * * *";
 
+    /** Cron for the SLA reminder sweep. */
+    private String reminderCron = "0 0 * * * *";
+
     /** Maximum number of stale helps processed per sweep. */
     private int slaBatchSize = 100;
+
+    /** Maximum number of helps processed by one reminder sweep. */
+    private int reminderBatchSize = 200;
 }

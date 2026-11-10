@@ -7,5 +7,7 @@ package org.example.helptreeservice.enums;
 public enum ImagePurpose {
     AVATAR,
     POST,
-    GENERAL
+    GENERAL,
+    /** Chat attachment; deleted together with the message retention sweep. */
+    CHAT
 }

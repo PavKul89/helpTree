@@ -13,11 +13,13 @@ import org.example.helptreeservice.dto.posts.UpdatePostRequest;
 import org.example.helptreeservice.enums.PostStatus;
 import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.ForbiddenException;
+import org.example.helptreeservice.security.ClientInfoResolver;
 import org.example.helptreeservice.service.AuthorizationService;
 import org.example.helptreeservice.service.PostService;
 import org.example.helptreeservice.service.PrivacyPolicy;
 import org.example.helptreeservice.service.UserService;
 import org.example.helptreeservice.util.PageRequests;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -30,6 +32,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 
@@ -46,6 +52,7 @@ public class PostController {
     private final PrivacyPolicy privacyPolicy;
     private final EconomyConfig economyConfig;
     private final PaginationConfig paginationConfig;
+    private final ClientInfoResolver clientInfoResolver;
 
     @PostMapping
     @Operation(summary = "Создать заявку о помощи")
@@ -102,6 +109,38 @@ public class PostController {
             return ResponseEntity.ok(post);
         }
         return ResponseEntity.ok(postService.toPublicPost(post));
+    }
+
+    /**
+     * Records one view of a post. Signed-in viewers are keyed by their user id;
+     * anonymous viewers by a server-side hash of IP + User-Agent. Repeats from
+     * the same viewer on the same day are ignored.
+     */
+    @PostMapping("/{id}/views")
+    @Operation(summary = "Зафиксировать просмотр заявки",
+            description = "Учитывается один просмотр на пользователя (или IP+User-Agent) в сутки.")
+    @SecurityRequirements
+    public ResponseEntity<Map<String, Object>> recordView(@PathVariable Long id,
+                                                          HttpServletRequest request) {
+        var currentUser = authService.getCurrentUser();
+        String viewerKey = currentUser != null
+                ? "u:" + currentUser.getUserId()
+                : anonymousViewerKey(request);
+        int views = postService.recordView(id, viewerKey);
+        return ResponseEntity.ok(Map.of("viewsCount", views));
+    }
+
+    private String anonymousViewerKey(HttpServletRequest request) {
+        String ip = clientInfoResolver.resolveIp(request);
+        String userAgent = clientInfoResolver.resolveUserAgent(request);
+        String source = (ip == null ? "" : ip) + "|" + (userAgent == null ? "" : userAgent);
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(source.getBytes(StandardCharsets.UTF_8));
+            return "h:" + HexFormat.of().formatHex(hash);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 недоступен", e);
+        }
     }
 
     /** Authenticated owner view with every status and the full projection. */

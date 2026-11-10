@@ -76,7 +76,7 @@ public class AuthSessionService {
         // Debt-blocked accounts may sign in so they can reach the wallet
         // self-service endpoints; the request filter still denies everything
         // else until the block is paid off or expires.
-        assertUserNotDeleted(user);;
+        assertUserNotDeleted(user);
 
         AuthSession session = AuthSession.builder()
                 .id(UUID.randomUUID())
@@ -220,6 +220,7 @@ public class AuthSessionService {
         }
 
         touchSession(session, now);
+        touchLastSeen(user, now);
 
         return new AuthenticatedUser(user.getId(), user.getEmail(), user.getRole().name(),
                 session.getId(), safeTokenVersion(user));
@@ -392,6 +393,18 @@ public class AuthSessionService {
         LocalDateTime threshold = now.minusMinutes(Math.max(1, authConfig.getSessionTouchMinutes()));
         if (session.getLastUsedAt() == null || session.getLastUsedAt().isBefore(threshold)) {
             session.setLastUsedAt(now);
+        }
+    }
+
+    /**
+     * Persists the online indicator timestamp, throttled independently from the
+     * session touch. A bulk update keeps the users row's {@code updated_at}
+     * stable, so activity does not look like a profile change.
+     */
+    private void touchLastSeen(User user, LocalDateTime now) {
+        LocalDateTime threshold = now.minusMinutes(Math.max(1, authConfig.getLastSeenTouchMinutes()));
+        if (user.getLastSeenAt() == null || user.getLastSeenAt().isBefore(threshold)) {
+            userRepository.touchLastSeen(user.getId(), now, threshold);
         }
     }
 

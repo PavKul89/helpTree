@@ -43,6 +43,24 @@ public class Review {
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
+    /** One reply from the review recipient. */
+    @Column(name = "reply_text", columnDefinition = "TEXT")
+    private String replyText;
+
+    @Column(name = "reply_at")
+    private LocalDateTime replyAt;
+
+    /** Last time the reply was edited inside the 24-hour reply window. */
+    @Column(name = "reply_updated_at")
+    private LocalDateTime replyUpdatedAt;
+
+    /** Last author edit inside the 24-hour edit window. */
+    @Column(name = "edited_at")
+    private LocalDateTime editedAt;
+
+    @Column(name = "edit_count", nullable = false)
+    private Integer editCount = 0;
+
     @Column(name = "deleted", nullable = false)
     private Boolean deleted = false;
 

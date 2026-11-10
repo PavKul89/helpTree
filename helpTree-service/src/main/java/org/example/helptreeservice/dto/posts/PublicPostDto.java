@@ -38,4 +38,6 @@ public class PublicPostDto {
     private boolean boosted;
     private String authorNicknameColor;
     private Integer commentsCount;
+    private Integer viewsCount;
+    private Integer responsesCount;
 }

@@ -2,9 +2,12 @@ package org.example.helptreeservice.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.example.helptreeservice.converter.StringListJsonConverter;
 import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "messages", indexes = {
@@ -47,6 +50,19 @@ public class Message {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "deleted_by_id")
     private User deletedBy;
+
+    @Column(name = "edited_at")
+    private LocalDateTime editedAt;
+
+    @Column(name = "edit_count", nullable = false)
+    @Builder.Default
+    private Integer editCount = 0;
+
+    /** Up to three image URLs owned by the sender. Stored as a JSON array in TEXT. */
+    @Convert(converter = StringListJsonConverter.class)
+    @Column(name = "attachment_urls", nullable = false, columnDefinition = "TEXT")
+    @Builder.Default
+    private List<String> attachmentUrls = new ArrayList<>();
 
     public boolean isDeleted() {
         return deletedAt != null;

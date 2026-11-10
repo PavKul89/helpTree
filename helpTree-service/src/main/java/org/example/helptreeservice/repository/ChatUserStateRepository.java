@@ -10,6 +10,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -49,4 +50,13 @@ public interface ChatUserStateRepository extends JpaRepository<ChatUserState, Lo
             @Param("chatId") Long chatId,
             @Param("userId") Long userId,
             @Param("messageId") Long messageId);
+
+    /**
+     * Retention sweep: a cursor that points at a physically removed message must
+     * be cleared, otherwise unread counts would be computed from a missing id.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("UPDATE ChatUserState s SET s.lastReadMessageId = NULL "
+            + "WHERE s.lastReadMessageId IN :messageIds")
+    int clearLastReadMessageIds(@Param("messageIds") Collection<Long> messageIds);
 }

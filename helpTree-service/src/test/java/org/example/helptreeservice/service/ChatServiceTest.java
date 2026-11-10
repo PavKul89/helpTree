@@ -6,6 +6,7 @@ import org.example.helptreeservice.dto.chat.CreateChatRequest;
 import org.example.helptreeservice.dto.chat.CreateMessageRequest;
 import org.example.helptreeservice.dto.chat.MessageCursorResponse;
 import org.example.helptreeservice.dto.chat.MessageResponse;
+import org.example.helptreeservice.dto.chat.UpdateMessageRequest;
 import org.example.helptreeservice.entity.Chat;
 import org.example.helptreeservice.entity.ChatUserState;
 import org.example.helptreeservice.entity.Message;
@@ -76,6 +77,8 @@ class ChatServiceTest {
     private ChatRateLimiter chatRateLimiter;
     @Mock
     private UserBlockService userBlockService;
+    @Mock
+    private ImageObjectService imageObjectService;
 
     @Spy
     private ChatProperties chatProperties = new ChatProperties();
@@ -273,7 +276,7 @@ class ChatServiceTest {
         stubParticipantChat();
 
         assertThrows(ForbiddenException.class, () -> chatService.sendMessage(
-                10L, new CreateMessageRequest("hello"), 3L));
+                10L, new CreateMessageRequest("hello", null), 3L));
         verify(messageRepository, never()).save(any());
     }
 
@@ -285,7 +288,7 @@ class ChatServiceTest {
         stubActiveUsers();
 
         assertThrows(ForbiddenException.class, () -> chatService.sendMessage(
-                10L, new CreateMessageRequest("hello"), 1L));
+                10L, new CreateMessageRequest("hello", null), 1L));
         verify(messageRepository, never()).save(any());
     }
 
@@ -299,7 +302,7 @@ class ChatServiceTest {
                         eq(UserBlockScope.MESSAGES), anyString());
 
         assertThrows(ForbiddenException.class, () -> chatService.sendMessage(
-                10L, new CreateMessageRequest("hello"), 1L));
+                10L, new CreateMessageRequest("hello", null), 1L));
         verify(messageRepository, never()).save(any());
     }
 
@@ -309,7 +312,7 @@ class ChatServiceTest {
         stubActiveUsers();
 
         assertThrows(BadRequestException.class, () -> chatService.sendMessage(
-                10L, new CreateMessageRequest("  \n\t "), 1L));
+                10L, new CreateMessageRequest("  \n\t ", null), 1L));
         verify(messageRepository, never()).save(any());
     }
 
@@ -319,7 +322,7 @@ class ChatServiceTest {
         stubActiveUsers();
 
         assertThrows(BadRequestException.class, () -> chatService.sendMessage(
-                10L, new CreateMessageRequest("a".repeat(5001)), 1L));
+                10L, new CreateMessageRequest("a".repeat(5001), null), 1L));
         verify(messageRepository, never()).save(any());
     }
 
@@ -331,7 +334,7 @@ class ChatServiceTest {
                 .when(chatRateLimiter).checkAllowed(1L);
 
         assertThrows(RateLimitExceededException.class, () -> chatService.sendMessage(
-                10L, new CreateMessageRequest("hello"), 1L));
+                10L, new CreateMessageRequest("hello", null), 1L));
         verify(messageRepository, never()).save(any());
     }
 
@@ -359,7 +362,7 @@ class ChatServiceTest {
                 .thenReturn(ChatResponse.builder().id(10L).participantId(1L).build());
 
         MessageResponse result = chatService.sendMessage(
-                10L, new CreateMessageRequest("  hello  "), 1L);
+                10L, new CreateMessageRequest("  hello  ", null), 1L);
 
         assertEquals(response, result);
         ArgumentCaptor<Message> captor = ArgumentCaptor.forClass(Message.class);
@@ -389,7 +392,7 @@ class ChatServiceTest {
 
         TransactionSynchronizationManager.initSynchronization();
         try {
-            chatService.sendMessage(10L, new CreateMessageRequest("hello"), 1L);
+            chatService.sendMessage(10L, new CreateMessageRequest("hello", null), 1L);
 
             verifyNoInteractions(messagingTemplate);
 
@@ -412,12 +415,220 @@ class ChatServiceTest {
 
         TransactionSynchronizationManager.initSynchronization();
         try {
-            chatService.sendMessage(10L, new CreateMessageRequest("hello"), 1L);
+            chatService.sendMessage(10L, new CreateMessageRequest("hello", null), 1L);
         } finally {
             TransactionSynchronizationManager.clearSynchronization();
         }
 
         verifyNoInteractions(messagingTemplate);
+    }
+
+    @Test
+    void sendMessage_shouldStoreClaimedAttachments() {
+        Chat chat = chat();
+        when(chatRepository.findById(10L)).thenReturn(Optional.of(chat));
+        stubActiveUsers();
+        when(messageRepository.save(any(Message.class))).thenAnswer(invocation -> {
+            Message saved = invocation.getArgument(0);
+            saved.setId(99L);
+            return saved;
+        });
+        when(chatMapper.toMessageResponse(any(Message.class))).thenReturn(messageResponse(99L));
+        when(chatUserStateRepository.findByChatIdAndUserId(10L, 1L))
+                .thenReturn(Optional.of(state(chat, user1)));
+        when(chatUserStateRepository.findByChatIdAndUserId(10L, 2L))
+                .thenReturn(Optional.of(state(chat, user2)));
+        when(chatMapper.toResponse(eq(chat), eq(1L), any()))
+                .thenReturn(ChatResponse.builder().id(10L).build());
+        when(chatMapper.toResponse(eq(chat), eq(2L), any()))
+                .thenReturn(ChatResponse.builder().id(10L).build());
+
+        chatService.sendMessage(10L,
+                new CreateMessageRequest("", List.of("u1", "u2")), 1L);
+
+        ArgumentCaptor<Message> captor = ArgumentCaptor.forClass(Message.class);
+        verify(messageRepository).save(captor.capture());
+        assertEquals(List.of("u1", "u2"), captor.getValue().getAttachmentUrls());
+        verify(imageObjectService).claimForOwner(1L, List.of("u1", "u2"),
+                org.example.helptreeservice.enums.ImagePurpose.CHAT);
+    }
+
+    @Test
+    void sendMessage_shouldRejectTooManyAttachments() {
+        stubParticipantChat();
+        stubActiveUsers();
+
+        assertThrows(BadRequestException.class, () -> chatService.sendMessage(10L,
+                new CreateMessageRequest("hello", List.of("u1", "u2", "u3", "u4")), 1L));
+
+        verify(imageObjectService, never()).claimForOwner(anyLong(), any(), any());
+        verify(messageRepository, never()).save(any());
+    }
+
+    @Test
+    void sendMessage_shouldAllowAttachmentOnlyMessage() {
+        Chat chat = chat();
+        when(chatRepository.findById(10L)).thenReturn(Optional.of(chat));
+        stubActiveUsers();
+        when(messageRepository.save(any(Message.class))).thenAnswer(invocation -> {
+            Message saved = invocation.getArgument(0);
+            saved.setId(99L);
+            return saved;
+        });
+        when(chatMapper.toMessageResponse(any(Message.class))).thenReturn(messageResponse(99L));
+        when(chatUserStateRepository.findByChatIdAndUserId(10L, 1L))
+                .thenReturn(Optional.of(state(chat, user1)));
+        when(chatUserStateRepository.findByChatIdAndUserId(10L, 2L))
+                .thenReturn(Optional.of(state(chat, user2)));
+        when(chatMapper.toResponse(eq(chat), eq(1L), any()))
+                .thenReturn(ChatResponse.builder().id(10L).build());
+        when(chatMapper.toResponse(eq(chat), eq(2L), any()))
+                .thenReturn(ChatResponse.builder().id(10L).build());
+
+        chatService.sendMessage(10L,
+                new CreateMessageRequest(null, List.of("u1")), 1L);
+
+        ArgumentCaptor<Message> captor = ArgumentCaptor.forClass(Message.class);
+        verify(messageRepository).save(captor.capture());
+        assertEquals("", captor.getValue().getContent());
+        assertEquals(List.of("u1"), captor.getValue().getAttachmentUrls());
+    }
+
+    // ---------- message editing ----------
+
+    @Test
+    void editMessage_shouldRejectAnotherUsersMessage() {
+        Chat chat = chat();
+        Message message = message(chat, user2, 99L, "Bob's message");
+        when(chatRepository.findById(10L)).thenReturn(Optional.of(chat));
+        when(messageRepository.findByIdAndChatIdAndDeletedAtIsNull(99L, 10L))
+                .thenReturn(Optional.of(message));
+
+        assertThrows(ForbiddenException.class,
+                () -> chatService.editMessage(10L, 99L, updateRequest("hacked"), 1L));
+        verify(messageRepository, never()).save(any());
+    }
+
+    @Test
+    void editMessage_shouldRejectAfterWindow() {
+        Chat chat = chat();
+        Message message = message(chat, user1, 99L, "old");
+        message.setCreatedAt(LocalDateTime.now().minusMinutes(16));
+        when(chatRepository.findById(10L)).thenReturn(Optional.of(chat));
+        when(messageRepository.findByIdAndChatIdAndDeletedAtIsNull(99L, 10L))
+                .thenReturn(Optional.of(message));
+
+        assertThrows(BadRequestException.class,
+                () -> chatService.editMessage(10L, 99L, updateRequest("new"), 1L));
+        assertEquals("old", message.getContent());
+        verify(messageRepository, never()).save(any());
+    }
+
+    @Test
+    void editMessage_shouldUpdateContentAndKeepAttachments() {
+        Chat chat = chat();
+        Message message = message(chat, user1, 99L, "old");
+        message.setAttachmentUrls(new java.util.ArrayList<>(List.of("u1")));
+        when(chatRepository.findById(10L)).thenReturn(Optional.of(chat));
+        when(messageRepository.findByIdAndChatIdAndDeletedAtIsNull(99L, 10L))
+                .thenReturn(Optional.of(message));
+        when(messageRepository.save(message)).thenReturn(message);
+        when(chatMapper.toMessageResponse(message)).thenReturn(messageResponse(99L));
+        when(chatMapper.toResponse(eq(chat), eq(1L), any()))
+                .thenReturn(ChatResponse.builder().id(10L).build());
+        when(chatMapper.toResponse(eq(chat), eq(2L), any()))
+                .thenReturn(ChatResponse.builder().id(10L).build());
+
+        chatService.editMessage(10L, 99L, updateRequest(" new "), 1L);
+
+        assertEquals("new", message.getContent());
+        assertNotNull(message.getEditedAt());
+        assertEquals(1, message.getEditCount());
+        assertEquals(List.of("u1"), message.getAttachmentUrls());
+        verify(messageRepository).save(message);
+    }
+
+    @Test
+    void editMessage_shouldAllowClearingTextWhenAttachmentsRemain() {
+        Chat chat = chat();
+        Message message = message(chat, user1, 99L, "old");
+        message.setAttachmentUrls(new java.util.ArrayList<>(List.of("u1")));
+        when(chatRepository.findById(10L)).thenReturn(Optional.of(chat));
+        when(messageRepository.findByIdAndChatIdAndDeletedAtIsNull(99L, 10L))
+                .thenReturn(Optional.of(message));
+        when(messageRepository.save(message)).thenReturn(message);
+        when(chatMapper.toMessageResponse(message)).thenReturn(messageResponse(99L));
+        when(chatMapper.toResponse(eq(chat), eq(1L), any()))
+                .thenReturn(ChatResponse.builder().id(10L).build());
+        when(chatMapper.toResponse(eq(chat), eq(2L), any()))
+                .thenReturn(ChatResponse.builder().id(10L).build());
+
+        chatService.editMessage(10L, 99L, updateRequest("   "), 1L);
+
+        assertEquals("", message.getContent());
+        verify(messageRepository).save(message);
+    }
+
+    @Test
+    void editMessage_shouldRejectEmptyTextWithoutAttachments() {
+        Chat chat = chat();
+        Message message = message(chat, user1, 99L, "old");
+        when(chatRepository.findById(10L)).thenReturn(Optional.of(chat));
+        when(messageRepository.findByIdAndChatIdAndDeletedAtIsNull(99L, 10L))
+                .thenReturn(Optional.of(message));
+
+        assertThrows(BadRequestException.class,
+                () -> chatService.editMessage(10L, 99L, updateRequest("   "), 1L));
+        verify(messageRepository, never()).save(any());
+    }
+
+    // ---------- retention ----------
+
+    @Test
+    void purgeExpiredMessages_shouldDeleteBatchClearCursorsAndReleaseAttachments() {
+        Chat chat = chat();
+        Message expired = Message.builder()
+                .id(99L)
+                .chat(chat)
+                .sender(user1)
+                .content("old")
+                .createdAt(LocalDateTime.now().minusDays(91))
+                .attachmentUrls(new java.util.ArrayList<>(List.of("u1")))
+                .build();
+        when(messageRepository.findExpiredMessages(any(LocalDateTime.class), any(Pageable.class)))
+                .thenReturn(List.of(expired));
+        when(messageRepository.deleteByIdIn(List.of(99L))).thenReturn(1);
+        when(chatRepository.findById(10L)).thenReturn(Optional.of(chat));
+        when(messageRepository.findTopByChatIdAndDeletedAtIsNullOrderByIdDesc(10L))
+                .thenReturn(Optional.empty());
+        when(messageRepository.existsActiveByAttachmentUrl("u1")).thenReturn(false);
+
+        int deleted = chatService.purgeExpiredMessages(
+                LocalDateTime.now().minusDays(90), 100);
+
+        assertEquals(1, deleted);
+        verify(chatUserStateRepository).clearLastReadMessageIds(List.of(99L));
+        verify(imageObjectService).markChatAttachmentsDeleted(List.of("u1"));
+        assertNull(chat.getLastMessageAt());
+    }
+
+    @Test
+    void purgeExpiredMessages_shouldDoNothingWhenNoExpiredMessages() {
+        when(messageRepository.findExpiredMessages(any(LocalDateTime.class), any(Pageable.class)))
+                .thenReturn(List.of());
+
+        int deleted = chatService.purgeExpiredMessages(
+                LocalDateTime.now().minusDays(90), 100);
+
+        assertEquals(0, deleted);
+        verify(messageRepository, never()).deleteByIdIn(any());
+        verifyNoInteractions(imageObjectService);
+    }
+
+    private UpdateMessageRequest updateRequest(String text) {
+        UpdateMessageRequest request = new UpdateMessageRequest();
+        request.setContent(text);
+        return request;
     }
 
     private void stubSuccessfulSend() {

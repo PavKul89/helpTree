@@ -366,6 +366,40 @@ receivers:
 Отключение не удаляет данные и не меняет схему. Это временная мера, а не
 замена исправлению.
 
+### 7.1. Конфигурация Block 21
+
+| Переменная | По умолчанию | Назначение |
+| --- | --- | --- |
+| `CHAT_EDIT_WINDOW_MINUTES` | `15` | Окно правки своего сообщения. |
+| `CHAT_MAX_ATTACHMENTS` | `3` | Максимум изображений на сообщение. |
+| `CHAT_RETENTION_DAYS` | `90` | Физическое удаление сообщений старше N дней; `0` — хранить бессрочно. |
+| `CHAT_RETENTION_CRON` | `0 30 3 * * *` | Расписание retention-уборки. |
+| `CHAT_RETENTION_BATCH_SIZE` | `500` | Размер батча удаления. |
+| `CHAT_RETENTION_MAX_BATCHES_PER_RUN` | `20` | Верхняя граница батчей за прогон. |
+| `HELP_REMINDERS_ENABLED` | `true` | Напоминания 50%/80% для ACCEPTED-помощи. |
+| `HELP_REMINDER_FIRST_PERCENT` / `HELP_REMINDER_SECOND_PERCENT` | `50` / `80` | Пороги напоминаний. |
+| `HELP_REMINDER_CRON` | `0 0 * * * *` | Расписание напоминаний. |
+| `HELP_REMINDER_BATCH_SIZE` | `200` | Размер батча напоминаний. |
+| `POST_MAX_LINKS` | `5` | Максимум ссылок в заявке. |
+| `POST_DUPLICATE_WINDOW_HOURS` | `24` | Окно защиты от дублей; `0` — выключить. |
+| `PARTITIONS_ENABLED` | `true` | Обслуживание месячных партиций. |
+| `PARTITIONS_CRON` | `0 15 3 * * *` | Расписание обслуживания. |
+| `PARTITIONS_FUTURE_MONTHS` | `3` | Сколько будущих месяцев создавать заранее. |
+| `PARTITIONS_DROP_OLD` | `true` | Удалять старые месяцы. |
+| `PARTITIONS_RETENTION_MONTHS` | `24` | Глубина хранения партиций (для `messages` не меньше retention чата). |
+| `ANTIVIRUS_ENABLED` | `false` | ClamAV INSTREAM, fail-closed. |
+| `ANTIVIRUS_HOST` / `ANTIVIRUS_PORT` | `localhost` / `3310` | Адрес ClamAV. |
+| `WALLET_EXPORT_MAX_ROWS` | `50000` | Максимум строк в экспорте кошелька. |
+| `WALLET_VIP_REMINDER_DAYS` | `7,3,1` | Дни до окончания VIP для напоминаний. |
+| `WALLET_VIP_REMINDER_CRON` | `0 0 10 * * *` | Ежедневный прогон напоминаний. |
+| `AUTH_LAST_SEEN_TOUCH_MINUTES` | `1` | Как часто обновлять `last_seen_at`. |
+| `AUTH_ONLINE_WINDOW_MINUTES` | `5` | Окно, в котором пользователь считается онлайн. |
+
+Связанные health-индикаторы: `antivirus` (при выключенном сканере — `UP` с
+`disabled`) и `websocketBroker` (только при `WS_RELAY_ENABLED=true`). Оба
+возвращают `DOWN` при недоступной зависимости, но не роняют остальные
+проверки: `/actuator/health` агрегирует их по стандартным правилам.
+
 ---
 
 ## 8. Локальный запуск
@@ -512,9 +546,48 @@ powershell -ExecutionPolicy Bypass -File scripts/run-dev.ps1
 4. Разбираться как с data-integrity инцидентом; исправление — только
    аудируемой операцией с записью в ledger.
 
+### Chat retention backlog
+
+1. Проверить логи `ChatRetentionScheduler` и число удалённых за прогон.
+2. Если батчи упираются в `CHAT_RETENTION_MAX_BATCHES_PER_RUN` несколько дней
+   подряд — временно увеличить лимит или запустить прогон вручную.
+3. `CHAT_RETENTION_DAYS=0` означает «хранить бессрочно»; в этом режиме удаление
+   не выполняется и старые партиции `messages` не удаляются.
+4. Удаление физическое: восстановить сообщение можно только из backup.
+
+### Partition maintenance
+
+1. `Partitions: не удалось обслужить таблицу ...` — проверить права на DDL и
+   доступность PostgreSQL.
+2. `Partitions: ... уже обслуживается другим экземпляром` — штатная ситуация
+   при нескольких репликах; следующий прогон продолжит работу.
+3. Ненулевой `SELECT count(*) FROM messages_default` означает, что запись
+   попала в default-партицию. Проверьте `PARTITIONS_ENABLED=true` и cron;
+   следующий успешный прогон перенесёт строки.
+4. Перед изменением `PARTITIONS_RETENTION_MONTHS` помните: для `messages`
+   фактический retention — максимум из настройки и `CHAT_RETENTION_DAYS`.
+
+### Antivirus unavailable
+
+1. `503 SERVICE_UNAVAILABLE` на загрузке при `ANTIVIRUS_ENABLED=true` — это
+   fail-closed, а не баг приложения.
+2. Проверить `ANTIVIRUS_HOST`/`ANTIVIRUS_PORT`, доступность ClamAV и свежесть
+   сигнатур.
+3. Не отключать сканер «чтобы загрузки прошли», если политика требует
+   сканирования; сначала восстановите демон.
+4. Health-индикатор `antivirus` показывает `DOWN`, пока демон недоступен.
+
+### VIP reminders
+
+1. Проверить, что `WALLET_VIP_REMINDER_DAYS` содержит ожидаемые дни.
+2. Напоминание идемпотентно: повторный прогон в тот же день не создаёт дубль.
+3. Если пользователь продлил VIP, `vipUntil` изменился — новый период получит
+   собственные напоминания.
+4. Автопродления нет: отсутствие напоминания не продлевает и не отменяет VIP.
+
 ---
 
-## 10. Проверка Block 20
+## 10. Проверка Block 20–21
 
 ```powershell
 # Backend: полный набор тестов (нужна доступная PostgreSQL)
@@ -538,3 +611,17 @@ npm run build
   токен замаскированы;
 - `docker compose config` не показывает паролей по умолчанию, а без
   `GRAFANA_ADMIN_PASSWORD`/`SILO_*` запуск не проходит.
+
+Block 21:
+
+- `POST /api/posts/{id}/views` дважды подряд возвращает одинаковый
+  `viewsCount`;
+- повторная заявка с тем же текстом от того же автора даёт `409 CONFLICT`;
+- правка сообщения старше `CHAT_EDIT_WINDOW_MINUTES` даёт `400`, а правка
+  своего сообщения в окне — `200` с `editedAt`;
+- экспорт кошелька в `csv` открывается в Excel с корректной кириллицей
+  (UTF-8 BOM), а `format=xml` даёт `400` до обращения к БД;
+- при `ANTIVIRUS_ENABLED=true` и остановленном ClamAV загрузка даёт
+  `503 SERVICE_UNAVAILABLE`, а `/actuator/health` — `antivirus: DOWN`;
+- `PARTITIONS_ENABLED=true` создаёт партиции на текущий и три будущих месяца
+  без ручного DDL.

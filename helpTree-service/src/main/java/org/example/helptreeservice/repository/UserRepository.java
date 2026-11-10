@@ -71,6 +71,32 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
     List<User> findUsersWithDebtToBlock(@Param("now") LocalDateTime now,
                                         @Param("threshold") int threshold);
 
+    /**
+     * Throttled activity touch. The WHERE clause makes the write idempotent for
+     * a burst of requests and keeps {@code updated_at} untouched (activity is
+     * not a profile edit).
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("UPDATE User u SET u.lastSeenAt = :now "
+            + "WHERE u.id = :userId "
+            + "AND (u.lastSeenAt IS NULL OR u.lastSeenAt < :threshold)")
+    int touchLastSeen(@Param("userId") Long userId,
+                      @Param("now") LocalDateTime now,
+                      @Param("threshold") LocalDateTime threshold);
+
+    /**
+     * Active VIP users whose subscription ends inside the reminder horizon.
+     * The caller computes the exact day distance and skips users that are not
+     * at one of the configured reminder days.
+     */
+    @Query("SELECT u FROM User u WHERE u.vipUntil IS NOT NULL "
+            + "AND u.vipUntil > :now AND u.vipUntil <= :cutoff "
+            + "AND (u.deleted = false OR u.deleted IS NULL) "
+            + "ORDER BY u.vipUntil ASC")
+    List<User> findVipExpiringBetween(@Param("now") LocalDateTime now,
+                                      @Param("cutoff") LocalDateTime cutoff,
+                                      Pageable pageable);
+
     @Query("SELECT COUNT(u) FROM User u WHERE u.deleted = false OR u.deleted IS NULL")
     long countActive();
 

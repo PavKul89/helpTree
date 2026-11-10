@@ -75,6 +75,10 @@ Durable intent. Статусы: `PENDING`, `PROCESSING`, `PUBLISHED`, `FAILED`, 
 | `HELP_CONFIRMED` | helper | `HelpService` | `help:{id}:confirmed:helper` |
 | `HELP_CANCELLED` | участники, кроме инициатора | `HelpService` | `help:{id}:cancelled:{userId}` |
 | `NEW_REVIEW` | получатель отзыва | `ReviewService` | `review:{reviewId}` |
+| `REVIEW_REPLIED` | автор отзыва | `ReviewService` | `review:{reviewId}:reply` |
+| `REVIEW_UPDATED` | получатель отзыва | `ReviewService` | `review:{reviewId}:edit:{editCount}` |
+| `HELP_SLA_REMINDER` | помощник и получатель | `HelpService` | `help:{id}:reminder:{percent}:{userId}` |
+| `PAID_FEATURE_EXPIRING` | владелец VIP | `PaidFeatureExpiryScheduler` | `vip-expiry:{userId}:{vipUntil}:{days}` |
 | `NEW_REPORT` | активные администраторы | `ReportService` | `report:{id}:new:admin:{adminId}` |
 | `REPORT_ACCEPTED` / `REPORT_REJECTED` | автор жалобы | `ReportService` | `report:{id}:reporter` |
 | `ACCOUNT_BLOCKED` / `ACCOUNT_UNBLOCKED` | владелец аккаунта | `UserService`, `ReportService` | `account:*`, `report:{id}:target:{userId}` |
@@ -91,6 +95,21 @@ Durable intent. Статусы: `PENDING`, `PROCESSING`, `PUBLISHED`, `FAILED`, 
   достижения — только при `insertIfAbsent > 0`.
 - `ReportService.applyAction` — единственный владелец уведомлений по жалобам:
   reporter получает решение, владелец контента/аккаунта — применённую санкцию.
+
+Block 21 добавляет четыре события, и все они идемпотентны по построению:
+
+- `REVIEW_REPLIED` создаётся только при первом ответе получателя; повторное
+  редактирование ответа в 24-часовом окне уведомлений не порождает.
+- `REVIEW_UPDATED` создаётся на каждую правку отзыва, поэтому `editCount`
+  входит в dedupe key: две правки подряд — два разных события, retry одной
+  правки — одно.
+- `HELP_SLA_REMINDER` отправляется обоим участникам на порогах 50% и 80% от
+  `acceptedTimeoutHours`. Ключ включает `percent` и `userId`; отметки
+  `reminder_50_sent_at`/`reminder_80_sent_at` на строке помощи закрывают
+  повторный прогон даже при рестарте или нескольких экземплярах.
+- `PAID_FEATURE_EXPIRING` — только напоминание о конце VIP (7/3/1 день по
+  умолчанию). Автопродления нет: ключ включает точный `vipUntil`, поэтому
+  продление создаёт новый период и новый набор напоминаний.
 
 ## 3. API
 

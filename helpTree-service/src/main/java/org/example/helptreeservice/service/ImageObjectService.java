@@ -137,6 +137,16 @@ public class ImageObjectService {
             if (object.getPurpose() == ImagePurpose.AVATAR && purpose != ImagePurpose.AVATAR) {
                 throw new BadRequestException("Аватар нельзя использовать как изображение поста");
             }
+            // Chat attachments are deleted together with their message and must
+            // never become a post/avatar image (and vice versa).
+            if (object.getPurpose() == ImagePurpose.CHAT && purpose != ImagePurpose.CHAT) {
+                throw new BadRequestException("Изображение из чата нельзя использовать в другом месте");
+            }
+            if (purpose == ImagePurpose.CHAT
+                    && object.getPurpose() != ImagePurpose.CHAT
+                    && object.getPurpose() != ImagePurpose.GENERAL) {
+                throw new BadRequestException("Это изображение уже используется в другом месте");
+            }
             if (object.getPurpose() != purpose) {
                 object.setPurpose(purpose);
                 imageObjectRepository.save(object);
@@ -236,6 +246,31 @@ public class ImageObjectService {
     @Transactional
     public int markUnreferencedDeleted(Long id, LocalDateTime cutoff) {
         return imageObjectRepository.markUnreferencedDeleted(id, cutoff, LocalDateTime.now());
+    }
+
+    /**
+     * Deletes the ownership rows of chat attachments whose message was removed
+     * by the retention sweep. The Silo cleanup job removes the bytes later.
+     */
+    @Transactional
+    public int markChatAttachmentsDeleted(Collection<String> urls) {
+        if (urls == null || urls.isEmpty()) {
+            return 0;
+        }
+        List<ImageObject> objects = imageObjectRepository.findAllByUrlInAndStatus(
+                urls, ImageStatus.ACTIVE);
+        LocalDateTime now = LocalDateTime.now();
+        int marked = 0;
+        for (ImageObject object : objects) {
+            if (object.getPurpose() != ImagePurpose.CHAT) {
+                continue;
+            }
+            object.setStatus(ImageStatus.DELETED);
+            object.setDeletedAt(now);
+            imageObjectRepository.save(object);
+            marked++;
+        }
+        return marked;
     }
 
     @Transactional

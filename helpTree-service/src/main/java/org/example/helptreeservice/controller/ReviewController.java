@@ -7,9 +7,16 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.example.helptreeservice.config.PaginationConfig;
 import org.example.helptreeservice.dto.common.PageResponse;
+import org.example.helptreeservice.dto.reports.CreateReportRequest;
+import org.example.helptreeservice.dto.reports.CreateReviewReportRequest;
+import org.example.helptreeservice.dto.reports.ReportResponse;
 import org.example.helptreeservice.dto.reviews.CreateReviewRequest;
+import org.example.helptreeservice.dto.reviews.ReplyReviewRequest;
 import org.example.helptreeservice.dto.reviews.ReviewResponse;
+import org.example.helptreeservice.dto.reviews.UpdateReviewRequest;
+import org.example.helptreeservice.enums.ReportTargetType;
 import org.example.helptreeservice.service.AuthorizationService;
+import org.example.helptreeservice.service.ReportService;
 import org.example.helptreeservice.service.ReviewService;
 import org.example.helptreeservice.util.PageRequests;
 import org.springframework.data.domain.Page;
@@ -26,6 +33,7 @@ import org.springframework.web.bind.annotation.*;
 public class ReviewController {
 
     private final ReviewService reviewService;
+    private final ReportService reportService;
     private final AuthorizationService authService;
     private final PaginationConfig paginationConfig;
 
@@ -35,6 +43,41 @@ public class ReviewController {
     public ResponseEntity<ReviewResponse> createReview(@Valid @RequestBody CreateReviewRequest request) {
         Long currentUserId = authService.getCurrentUser().getUserId();
         ReviewResponse response = reviewService.createReview(request, currentUserId);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @PostMapping("/{id}/reply")
+    @Operation(summary = "Ответить на отзыв",
+            description = "Один ответ от получателя; изменить его можно в течение 24 часов.")
+    public ResponseEntity<ReviewResponse> replyToReview(@PathVariable Long id,
+                                                        @Valid @RequestBody ReplyReviewRequest request) {
+        Long currentUserId = authService.getCurrentUser().getUserId();
+        return ResponseEntity.ok(reviewService.replyToReview(id, request, currentUserId));
+    }
+
+    @PatchMapping("/{id}")
+    @Operation(summary = "Отредактировать свой отзыв",
+            description = "Доступно автору в течение 24 часов; рейтинг получателя пересчитывается.")
+    public ResponseEntity<ReviewResponse> updateReview(@PathVariable Long id,
+                                                       @Valid @RequestBody UpdateReviewRequest request) {
+        Long currentUserId = authService.getCurrentUser().getUserId();
+        return ResponseEntity.ok(reviewService.updateReview(id, request, currentUserId));
+    }
+
+    @PostMapping("/{id}/report")
+    @Operation(summary = "Пожаловаться на отзыв",
+            description = "Создаёт жалобу типа REVIEW; идемпотентно при наличии Idempotency-Key.")
+    public ResponseEntity<ReportResponse> reportReview(
+            @PathVariable Long id,
+            @Valid @RequestBody CreateReviewReportRequest request,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+        Long currentUserId = authService.getCurrentUser().getUserId();
+        CreateReportRequest reportRequest = new CreateReportRequest(
+                ReportTargetType.REVIEW,
+                id,
+                request.getReason(),
+                request.getDetails());
+        ReportResponse response = reportService.createReport(reportRequest, currentUserId, idempotencyKey);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 

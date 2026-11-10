@@ -1,10 +1,16 @@
 package org.example.helptreeservice.service;
 
 import jakarta.persistence.criteria.Predicate;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.example.helptreeservice.config.EconomyConfig;
 import org.example.helptreeservice.config.PaginationConfig;
+import org.example.helptreeservice.config.WalletProperties;
 import org.example.helptreeservice.dto.wallet.CoinTransactionDto;
+import org.example.helptreeservice.dto.wallet.PaidFeaturePeriodDto;
 import org.example.helptreeservice.dto.wallet.WalletDto;
+import org.example.helptreeservice.dto.wallet.WalletExport;
 import org.example.helptreeservice.dto.wallet.WalletOperationResult;
 import org.example.helptreeservice.dto.wallet.WalletPricingDto;
 import org.example.helptreeservice.entity.AdminCoinAudit;
@@ -12,6 +18,7 @@ import org.example.helptreeservice.entity.CoinTransaction;
 import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.enums.AdminAuditAction;
 import org.example.helptreeservice.enums.NotificationType;
+import org.example.helptreeservice.enums.PaidFeatureType;
 import org.example.helptreeservice.enums.TransactionDirection;
 import org.example.helptreeservice.enums.TransactionType;
 import org.example.helptreeservice.exception.BadRequestException;
@@ -34,6 +41,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -73,6 +81,12 @@ public class WalletService {
     private final PublicProfileCache publicProfileCache;
     private final NotificationService notificationService;
     private final AdminAuditService adminAuditService;
+    private final PaidFeaturePeriodService paidFeaturePeriodService;
+    private final WalletProperties walletProperties;
+
+    private final ObjectMapper exportObjectMapper = new ObjectMapper()
+            .registerModule(new JavaTimeModule())
+            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
     // ------------------------------------------------------------------ read
 
@@ -136,7 +150,62 @@ public class WalletService {
         Pageable pageable = PageRequest.of(page, resolvedSize,
                 Sort.by(Sort.Direction.DESC, "createdAt").and(Sort.by(Sort.Direction.DESC, "id")));
 
-        Specification<CoinTransaction> spec = (root, query, cb) -> {
+        return transactionRepository.findAll(
+                transactionSpec(userId, type, from, to, direction), pageable)
+                .map(this::toDto);
+    }
+
+    /**
+     * Renders the full (filtered) history as CSV or JSON. The row count is
+     * bounded before loading, because the whole export is one response.
+     */
+    @Transactional(readOnly = true)
+    public WalletExport exportTransactions(Long userId,
+                                           TransactionType type,
+                                           LocalDateTime from,
+                                           LocalDateTime to,
+                                           TransactionDirection direction,
+                                           String format) {
+        if (from != null && to != null && from.isAfter(to)) {
+            throw new BadRequestException("Начало периода не может быть позже конца периода");
+        }
+        String normalized = format == null ? "csv" : format.trim().toLowerCase(java.util.Locale.ROOT);
+        if (!"csv".equals(normalized) && !"json".equals(normalized)) {
+            throw new BadRequestException("Поддерживаются форматы csv и json");
+        }
+        getUserOrThrow(userId);
+
+        Specification<CoinTransaction> spec = transactionSpec(userId, type, from, to, direction);
+        long total = transactionRepository.count(spec);
+        if (total > walletProperties.getExportMaxRows()) {
+            throw new BadRequestException("Слишком много операций для экспорта ("
+                    + total + "). Сузьте период или тип операции.");
+        }
+
+        List<CoinTransaction> rows = transactionRepository.findAll(spec,
+                Sort.by(Sort.Direction.ASC, "createdAt").and(Sort.by(Sort.Direction.ASC, "id")));
+
+        if ("json".equals(normalized)) {
+            return new WalletExport(exportJson(rows), "application/json;charset=UTF-8",
+                    exportFilename(userId, "json"));
+        }
+        return new WalletExport(exportCsv(rows), "text/csv;charset=UTF-8",
+                exportFilename(userId, "csv"));
+    }
+
+    @Transactional(readOnly = true)
+    public Page<PaidFeaturePeriodDto> getPaidFeatureHistory(Long userId, Pageable pageable) {
+        getUserOrThrow(userId);
+        return paidFeaturePeriodService.getHistory(userId, pageable);
+    }
+
+    private Specification<CoinTransaction> transactionSpec(
+            Long userId,
+            TransactionType type,
+            LocalDateTime from,
+            LocalDateTime to,
+            TransactionDirection direction) {
+        return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             predicates.add(cb.equal(root.get("userId"), userId));
             if (type != null) {
@@ -155,8 +224,56 @@ public class WalletService {
             }
             return cb.and(predicates.toArray(new Predicate[0]));
         };
+    }
 
-        return transactionRepository.findAll(spec, pageable).map(this::toDto);
+    private byte[] exportCsv(List<CoinTransaction> rows) {
+        DateTimeFormatter dateTime = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
+        StringBuilder csv = new StringBuilder("\uFEFF");
+        csv.append("id,type,amount,direction,description,relatedUserId,relatedPostId,createdAt\r\n");
+        for (CoinTransaction row : rows) {
+            csv.append(row.getId()).append(',')
+                    .append(row.getType()).append(',')
+                    .append(row.getAmount()).append(',')
+                    .append(row.getAmount() != null && row.getAmount() < 0 ? "OUT" : "IN").append(',')
+                    .append(csvField(row.getDescription())).append(',')
+                    .append(row.getRelatedUserId() == null ? "" : row.getRelatedUserId()).append(',')
+                    .append(row.getRelatedPostId() == null ? "" : row.getRelatedPostId()).append(',')
+                    .append(row.getCreatedAt() == null ? "" : dateTime.format(row.getCreatedAt()))
+                    .append("\r\n");
+        }
+        return csv.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    private byte[] exportJson(List<CoinTransaction> rows) {
+        List<Map<String, Object>> payload = new ArrayList<>(rows.size());
+        for (CoinTransaction row : rows) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("id", row.getId());
+            item.put("type", row.getType());
+            item.put("amount", row.getAmount());
+            item.put("direction", row.getAmount() != null && row.getAmount() < 0 ? "OUT" : "IN");
+            item.put("description", row.getDescription());
+            item.put("relatedUserId", row.getRelatedUserId());
+            item.put("relatedPostId", row.getRelatedPostId());
+            item.put("createdAt", row.getCreatedAt());
+            payload.add(item);
+        }
+        try {
+            return exportObjectMapper.writerWithDefaultPrettyPrinter().writeValueAsBytes(payload);
+        } catch (Exception e) {
+            throw new IllegalStateException("Не удалось сформировать JSON-экспорт", e);
+        }
+    }
+
+    private String csvField(String value) {
+        if (value == null) {
+            return "";
+        }
+        return '"' + value.replace("\"", "\"\"") + '"';
+    }
+
+    private String exportFilename(Long userId, String extension) {
+        return "wallet-transactions-" + userId + "-" + LocalDate.now() + "." + extension;
     }
 
     // -------------------------------------------------------------- accruals
@@ -293,6 +410,8 @@ public class WalletService {
         if (applied.applied()) {
             user.setVipUntil(newVipUntil);
             userRepository.save(user);
+            paidFeaturePeriodService.record(userId, PaidFeatureType.VIP,
+                    applied.transaction().getId(), base, newVipUntil);
         }
 
         log.info("VIP активирован/продлён до {} для пользователя {}", user.getVipUntil(), userId);
@@ -397,6 +516,8 @@ public class WalletService {
             user.setNicknameColor(color);
             userRepository.save(user);
             publicProfileCache.evictAfterCommit(userId);
+            paidFeaturePeriodService.record(userId, PaidFeatureType.NICKNAME_COLOR,
+                    applied.transaction().getId(), LocalDateTime.now(), null);
         }
 
         log.info("Цвет ника изменён на {} для пользователя {}", color, userId);

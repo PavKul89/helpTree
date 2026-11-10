@@ -2,12 +2,14 @@ package org.example.helptreeservice.service;
 
 import org.example.helptreeservice.config.EconomyConfig;
 import org.example.helptreeservice.config.PaginationConfig;
+import org.example.helptreeservice.config.WalletProperties;
 import org.example.helptreeservice.dto.wallet.WalletOperationResult;
 import org.example.helptreeservice.entity.AdminCoinAudit;
 import org.example.helptreeservice.entity.CoinTransaction;
 import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.enums.TransactionDirection;
 import org.example.helptreeservice.enums.TransactionType;
+import org.example.helptreeservice.enums.PaidFeatureType;
 import org.example.helptreeservice.enums.AdminAuditAction;
 import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.ConflictException;
@@ -24,6 +26,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -44,6 +48,7 @@ class WalletServiceTest {
     @Mock private PublicProfileCache publicProfileCache;
     @Mock private NotificationService notificationService;
     @Mock private AdminAuditService adminAuditService;
+    @Mock private PaidFeaturePeriodService paidFeaturePeriodService;
 
     private EconomyConfig economyConfig;
     private WalletService walletService;
@@ -56,7 +61,8 @@ class WalletServiceTest {
         walletService = new WalletService(
                 userRepository, transactionRepository, adminAuditRepository,
                 ratingService, economyConfig, paginationConfig, publicProfileCache,
-                notificationService, adminAuditService);
+                notificationService, adminAuditService, paidFeaturePeriodService,
+                new WalletProperties());
 
         user = new User();
         user.setId(1L);
@@ -445,5 +451,110 @@ class WalletServiceTest {
         assertEquals(economyConfig.getAccountUnblockDebtReduction(),
                 pricing.getAccountUnblockDebtReduction());
         assertEquals(economyConfig.getDebtBlockThreshold(), pricing.getDebtBlockThreshold());
+    }
+
+    @Test
+    void exportTransactions_shouldRenderCsvWithBomAndEscapedFields() {
+        CoinTransaction income = CoinTransaction.builder()
+                .id(1L)
+                .userId(1L)
+                .type(TransactionType.DAILY_LOGIN)
+                .amount(10L)
+                .description("Бонус")
+                .createdAt(LocalDateTime.of(2026, 1, 2, 3, 4, 5))
+                .build();
+        CoinTransaction expense = CoinTransaction.builder()
+                .id(2L)
+                .userId(1L)
+                .type(TransactionType.VIP)
+                .amount(-50L)
+                .description("Описание, с \"кавычками\"")
+                .createdAt(LocalDateTime.of(2026, 1, 3, 3, 4, 5))
+                .build();
+        when(transactionRepository.count(any(Specification.class))).thenReturn(2L);
+        when(transactionRepository.findAll(any(Specification.class), any(Sort.class)))
+                .thenReturn(List.of(income, expense));
+
+        var export = walletService.exportTransactions(
+                1L, null, null, null, null, "csv");
+
+        String csv = new String(export.content(), java.nio.charset.StandardCharsets.UTF_8);
+        assertTrue(csv.startsWith("\uFEFF"));
+        assertTrue(csv.contains("id,type,amount,direction,description"));
+        assertTrue(csv.contains(",IN,"));
+        assertTrue(csv.contains(",OUT,"));
+        assertTrue(csv.contains("\"Описание, с \"\"кавычками\"\"\""));
+        assertEquals("text/csv;charset=UTF-8", export.contentType());
+        assertTrue(export.filename().endsWith(".csv"));
+    }
+
+    @Test
+    void exportTransactions_shouldRenderJson() throws Exception {
+        CoinTransaction income = CoinTransaction.builder()
+                .id(1L)
+                .userId(1L)
+                .type(TransactionType.DAILY_LOGIN)
+                .amount(10L)
+                .description("Бонус")
+                .createdAt(LocalDateTime.of(2026, 1, 2, 3, 4, 5))
+                .build();
+        when(transactionRepository.count(any(Specification.class))).thenReturn(1L);
+        when(transactionRepository.findAll(any(Specification.class), any(Sort.class)))
+                .thenReturn(List.of(income));
+
+        var export = walletService.exportTransactions(
+                1L, null, null, null, null, "json");
+
+        var json = new com.fasterxml.jackson.databind.ObjectMapper()
+                .readTree(export.content());
+        assertEquals(1, json.size());
+        assertEquals("IN", json.get(0).get("direction").asText());
+        assertEquals(1L, json.get(0).get("id").asLong());
+        assertEquals("application/json;charset=UTF-8", export.contentType());
+        assertTrue(export.filename().endsWith(".json"));
+    }
+
+    @Test
+    void exportTransactions_shouldRejectUnsupportedFormatAndInvertedPeriod() {
+        assertThrows(BadRequestException.class, () -> walletService.exportTransactions(
+                1L, null, null, null, null, "xml"));
+        assertThrows(BadRequestException.class, () -> walletService.exportTransactions(
+                1L, null, LocalDateTime.now(), LocalDateTime.now().minusDays(1), null, "csv"));
+        verify(transactionRepository, never()).findAll(
+                any(Specification.class), any(Sort.class));
+    }
+
+    @Test
+    void exportTransactions_shouldRejectTooManyRows() {
+        when(transactionRepository.count(any(Specification.class))).thenReturn(50_001L);
+
+        assertThrows(BadRequestException.class, () -> walletService.exportTransactions(
+                1L, null, null, null, null, "csv"));
+
+        verify(transactionRepository, never()).findAll(
+                any(Specification.class), any(Sort.class));
+    }
+
+    @Test
+    void getPaidFeatureHistory_shouldDelegateToPeriodService() {
+        Pageable pageable = org.springframework.data.domain.PageRequest.of(0, 20);
+        Page<org.example.helptreeservice.dto.wallet.PaidFeaturePeriodDto> page =
+                Page.empty(pageable);
+        when(paidFeaturePeriodService.getHistory(1L, pageable)).thenReturn(page);
+
+        var result = walletService.getPaidFeatureHistory(1L, pageable);
+
+        assertEquals(page, result);
+        verify(paidFeaturePeriodService).getHistory(1L, pageable);
+    }
+
+    @Test
+    void purchaseVip_shouldRecordPaidFeaturePeriod() {
+        LocalDateTime before = LocalDateTime.now();
+
+        walletService.purchaseVip(1L, "vip-key-period");
+
+        verify(paidFeaturePeriodService).record(eq(1L), eq(PaidFeatureType.VIP),
+                eq(900L), any(LocalDateTime.class), argThat(end -> end.isAfter(before)));
     }
 }

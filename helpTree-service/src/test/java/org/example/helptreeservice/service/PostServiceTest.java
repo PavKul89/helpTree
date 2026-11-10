@@ -1,6 +1,8 @@
 package org.example.helptreeservice.service;
 
 import org.example.helptreeservice.config.EconomyConfig;
+import org.example.helptreeservice.config.PostProperties;
+import org.example.helptreeservice.dto.posts.CreatePostRequest;
 import org.example.helptreeservice.dto.posts.PostBoostResult;
 import org.example.helptreeservice.dto.posts.PostDto;
 import org.example.helptreeservice.dto.posts.PublicPostDto;
@@ -10,10 +12,12 @@ import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.enums.AdminAuditAction;
 import org.example.helptreeservice.enums.PostStatus;
 import org.example.helptreeservice.exception.BadRequestException;
+import org.example.helptreeservice.exception.ConflictException;
 import org.example.helptreeservice.exception.ForbiddenException;
 import org.example.helptreeservice.mapper.PostMapper;
 import org.example.helptreeservice.repository.PostRepository;
 import org.example.helptreeservice.repository.UserRepository;
+import org.example.helptreeservice.repository.PostViewRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -39,6 +43,8 @@ class PostServiceTest {
     @Mock
     private PostRepository postRepository;
     @Mock
+    private PostViewRepository postViewRepository;
+    @Mock
     private UserRepository userRepository;
     @Mock
     private PostMapper postMapper;
@@ -54,8 +60,13 @@ class PostServiceTest {
     private PrivacyPolicy privacyPolicy;
     @Mock
     private AdminAuditService adminAuditService;
+    @Mock
+    private PostLinkValidator postLinkValidator;
+    @Mock
+    private PaidFeaturePeriodService paidFeaturePeriodService;
 
     private EconomyConfig economyConfig;
+    private PostProperties postProperties;
 
     private PostService postService;
 
@@ -64,8 +75,10 @@ class PostServiceTest {
     @BeforeEach
     void setUp() {
         economyConfig = new EconomyConfig();
+        postProperties = new PostProperties();
         postService = new PostService(
                 postRepository,
+                postViewRepository,
                 userRepository,
                 postMapper,
                 geocodingService,
@@ -74,7 +87,10 @@ class PostServiceTest {
                 walletService,
                 economyConfig,
                 privacyPolicy,
-                adminAuditService
+                adminAuditService,
+                postLinkValidator,
+                postProperties,
+                paidFeaturePeriodService
         );
         owner = user(1L, "Owner");
 
@@ -94,6 +110,8 @@ class PostServiceTest {
                     .userId(post.getUser() != null ? post.getUser().getId() : null)
                     .build();
         });
+        lenient().when(userService.publicPrivacyView(anyLong()))
+                .thenReturn(new UserService.PublicPrivacyView(true, false, true));
     }
 
     private User user(Long id, String name) {
@@ -295,5 +313,105 @@ class PostServiceTest {
         verify(adminAuditService).record(eq(9L), eq(AdminAuditAction.POST_STATUS_CHANGED),
                 eq(AdminAuditService.ENTITY_POST), eq(5L), anyMap(), anyMap(),
                 eq("Ручное завершение"));
+    }
+
+    @Test
+    void createPost_shouldValidateLinksAndStoreFingerprint() {
+        when(userRepository.findById(1L)).thenReturn(Optional.of(owner));
+        when(userService.isUserBlocked(1L)).thenReturn(false);
+        when(postRepository.save(any(Post.class))).thenAnswer(invocation -> {
+            Post saved = invocation.getArgument(0);
+            saved.setId(5L);
+            return saved;
+        });
+
+        CreatePostRequest request = new CreatePostRequest();
+        request.setTitle("Нужна помощь");
+        request.setDescription("Описание");
+        request.setCategory("Ремонт");
+
+        postService.createPost(request, 1L);
+
+        verify(postLinkValidator).validate("Нужна помощь", "Описание");
+        verify(postRepository).acquireContentLock(startsWith("1:"));
+        org.mockito.ArgumentCaptor<Post> captor =
+                org.mockito.ArgumentCaptor.forClass(Post.class);
+        verify(postRepository).save(captor.capture());
+        assertEquals(64, captor.getValue().getContentFingerprint().length());
+        assertTrue(captor.getValue().getContentFingerprint()
+                .matches("[0-9a-f]{64}"));
+    }
+
+    @Test
+    void createPost_shouldRejectDuplicateInsideWindow() {
+        when(userRepository.findById(1L)).thenReturn(Optional.of(owner));
+        when(userService.isUserBlocked(1L)).thenReturn(false);
+        when(postRepository.existsRecentDuplicate(eq(1L), anyString(), any()))
+                .thenReturn(true);
+
+        CreatePostRequest request = new CreatePostRequest();
+        request.setTitle("Нужна помощь");
+        request.setDescription("Описание");
+
+        assertThrows(ConflictException.class,
+                () -> postService.createPost(request, 1L));
+        verify(postRepository, never()).save(any(Post.class));
+    }
+
+    @Test
+    void createPost_shouldSkipDuplicateGuardWhenWindowDisabled() {
+        postProperties.setDuplicateWindowHours(0);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(owner));
+        when(userService.isUserBlocked(1L)).thenReturn(false);
+        when(postRepository.save(any(Post.class))).thenAnswer(invocation -> {
+            Post saved = invocation.getArgument(0);
+            saved.setId(5L);
+            return saved;
+        });
+
+        CreatePostRequest request = new CreatePostRequest();
+        request.setTitle("Нужна помощь");
+        request.setDescription("Описание");
+
+        postService.createPost(request, 1L);
+
+        verify(postRepository, never()).acquireContentLock(anyString());
+        verify(postRepository, never()).existsRecentDuplicate(anyLong(), anyString(), any());
+    }
+
+    @Test
+    void recordView_shouldIncrementOnlyWhenANewDailyRowWasInserted() {
+        when(postRepository.existsByIdAndDeletedFalse(5L)).thenReturn(true);
+        when(postViewRepository.insertIfAbsent(eq(5L), eq("u:1"),
+                any(java.time.LocalDate.class))).thenReturn(1);
+        when(postRepository.findViewsCountById(5L)).thenReturn(5);
+
+        int views = postService.recordView(5L, "u:1");
+
+        assertEquals(5, views);
+        verify(postRepository).incrementViewsCount(5L);
+    }
+
+    @Test
+    void recordView_shouldNotIncrementTwicePerDay() {
+        when(postRepository.existsByIdAndDeletedFalse(5L)).thenReturn(true);
+        when(postViewRepository.insertIfAbsent(eq(5L), eq("u:1"),
+                any(java.time.LocalDate.class))).thenReturn(0);
+        when(postRepository.findViewsCountById(5L)).thenReturn(5);
+
+        int views = postService.recordView(5L, "u:1");
+
+        assertEquals(5, views);
+        verify(postRepository, never()).incrementViewsCount(anyLong());
+    }
+
+    @Test
+    void recordView_shouldRejectMissingPost() {
+        when(postRepository.existsByIdAndDeletedFalse(5L)).thenReturn(false);
+
+        assertThrows(org.example.helptreeservice.exception.NotFoundException.class,
+                () -> postService.recordView(5L, "u:1"));
+
+        verifyNoInteractions(postViewRepository);
     }
 }

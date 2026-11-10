@@ -1,6 +1,7 @@
 package org.example.helptreeservice.service;
 
 import org.example.helptreeservice.config.EconomyConfig;
+import org.example.helptreeservice.config.PostProperties;
 import org.example.helptreeservice.dto.posts.CreatePostRequest;
 import org.example.helptreeservice.dto.posts.PostBoostResult;
 import org.example.helptreeservice.dto.posts.PostDto;
@@ -13,6 +14,7 @@ import org.example.helptreeservice.dto.admin.AdminBulkResultDto;
 import org.example.helptreeservice.enums.AdminAuditAction;
 import org.example.helptreeservice.enums.ImagePurpose;
 import org.example.helptreeservice.enums.ModerationStatus;
+import org.example.helptreeservice.enums.PaidFeatureType;
 import org.example.helptreeservice.enums.PostStatus;
 import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.ConflictException;
@@ -22,6 +24,7 @@ import org.example.helptreeservice.mapper.PostMapper;
 import org.example.helptreeservice.metrics.annotation.BusinessMetric;
 import org.example.helptreeservice.repository.PostRepository;
 import org.example.helptreeservice.repository.PostSpecification;
+import org.example.helptreeservice.repository.PostViewRepository;
 import org.example.helptreeservice.repository.UserRepository;
 import org.example.helptreeservice.util.SensitiveDataMasker;
 import jakarta.persistence.criteria.Predicate;
@@ -33,8 +36,13 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -48,6 +56,7 @@ import java.util.stream.Collectors;
 public class PostService {
 
     private final PostRepository postRepository;
+    private final PostViewRepository postViewRepository;
     private final UserRepository userRepository;
     private final PostMapper postMapper;
     private final GeocodingService geocodingService;
@@ -57,6 +66,9 @@ public class PostService {
     private final EconomyConfig economyConfig;
     private final PrivacyPolicy privacyPolicy;
     private final AdminAuditService adminAuditService;
+    private final PostLinkValidator postLinkValidator;
+    private final PostProperties postProperties;
+    private final PaidFeaturePeriodService paidFeaturePeriodService;
 
     private PostDto toDto(Post post) {
         PostDto dto = postMapper.toDto(post);
@@ -76,7 +88,23 @@ public class PostService {
         dto.setAuthorAvatarUrl(imageService.refreshUrl(dto.getAuthorAvatarUrl()));
         dto.setLatitude(privacyPolicy.publicCoordinate(dto.getLatitude()));
         dto.setLongitude(privacyPolicy.publicCoordinate(dto.getLongitude()));
+        applyAuthorPrivacy(dto, post.getUser());
         return dto;
+    }
+
+    /**
+     * The author's own city visibility applies to every public post projection,
+     * including the detail endpoint. Coordinates stay at the privacy grid and
+     * do not reveal an exact address.
+     */
+    private void applyAuthorPrivacy(PublicPostDto dto, User author) {
+        if (author == null || author.getId() == null) {
+            return;
+        }
+        UserService.PublicPrivacyView privacy = userService.publicPrivacyView(author.getId());
+        if (!privacy.showCity()) {
+            dto.setUserCity(null);
+        }
     }
 
     /**
@@ -85,7 +113,7 @@ public class PostService {
      * projection is allowed.
      */
     public PublicPostDto toPublicPost(PostDto post) {
-        return PublicPostDto.builder()
+        PublicPostDto dto = PublicPostDto.builder()
                 .id(post.getId())
                 .title(post.getTitle())
                 .description(post.getDescription())
@@ -106,7 +134,14 @@ public class PostService {
                 .boosted(post.isBoosted())
                 .authorNicknameColor(post.getAuthorNicknameColor())
                 .commentsCount(post.getCommentsCount())
+                .viewsCount(post.getViewsCount())
+                .responsesCount(post.getResponsesCount())
                 .build();
+        if (post.getUserId() != null
+                && !userService.publicPrivacyView(post.getUserId()).showCity()) {
+            dto.setUserCity(null);
+        }
+        return dto;
     }
 
     @BusinessMetric(
@@ -127,12 +162,17 @@ public class PostService {
             log.debug("Найден пользователь для создания поста: email={}",
                     SensitiveDataMasker.maskEmail(user.getEmail()));
 
+            postLinkValidator.validate(request.getTitle(), request.getDescription());
+            String fingerprint = fingerprint(request.getTitle(), request.getDescription());
+            guardDuplicate(authorId, fingerprint);
+
             Post post = new Post();
             post.setUser(user);
             post.setTitle(request.getTitle());
             post.setDescription(request.getDescription());
             post.setCategory(request.getCategory());
             post.setAuthorName(user.getName());
+            post.setContentFingerprint(fingerprint);
             post.setCreatedAt(LocalDateTime.now());
             post.setUpdatedAt(LocalDateTime.now());
             post.setStatus(PostStatus.OPEN);
@@ -315,6 +355,11 @@ public class PostService {
                 post.setDescription(request.getDescription());
                 changed = true;
                 log.debug("Изменено описание поста");
+            }
+
+            if (request.getTitle() != null || request.getDescription() != null) {
+                postLinkValidator.validate(post.getTitle(), post.getDescription());
+                post.setContentFingerprint(fingerprint(post.getTitle(), post.getDescription()));
             }
 
             if (request.getAuthorName() != null && !request.getAuthorName().equals(post.getAuthorName())) {
@@ -609,6 +654,63 @@ public class PostService {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * Records one view for the viewer's day. The insert is idempotent through
+     * the unique daily index; the counter is incremented only when a new row was
+     * actually written.
+     */
+    @Transactional
+    public int recordView(Long postId, String viewerKey) {
+        if (!postRepository.existsByIdAndDeletedFalse(postId)) {
+            throw new NotFoundException("Пост не найден с id: " + postId);
+        }
+        int inserted = postViewRepository.insertIfAbsent(postId, viewerKey, LocalDate.now());
+        if (inserted > 0) {
+            postRepository.incrementViewsCount(postId);
+        }
+        Integer views = postRepository.findViewsCountById(postId);
+        return views == null ? 0 : views;
+    }
+
+    /** Applies the 24-hour duplicate guard; the caller already validated links. */
+    private void guardDuplicate(Long authorId, String fingerprint) {
+        if (fingerprint == null || postProperties.getDuplicateWindowHours() <= 0) {
+            return;
+        }
+        // Serialise concurrent submissions from the same author with the same
+        // content before the existence check.
+        postRepository.acquireContentLock(authorId + ":" + fingerprint);
+        LocalDateTime since = LocalDateTime.now()
+                .minusHours(postProperties.getDuplicateWindowHours());
+        if (postRepository.existsRecentDuplicate(authorId, fingerprint, since)) {
+            throw new ConflictException(
+                    "Похожая заявка уже была опубликована вами в последние "
+                            + postProperties.getDuplicateWindowHours() + " ч");
+        }
+    }
+
+    /**
+     * SHA-256 of the whitespace-normalised, lower-cased title and description.
+     * The V59 backfill uses the same shape, so old and new rows are comparable.
+     */
+    private String fingerprint(String title, String description) {
+        String normalized = normalize(title) + "\n" + normalize(description);
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(normalized.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(hash);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 недоступен", e);
+        }
+    }
+
+    private String normalize(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.trim().replaceAll("\\s+", " ").toLowerCase(Locale.ROOT);
+    }
+
     @Transactional(readOnly = true)
     public Page<PublicPostDto> getPostsOnMap(PostStatus status,
                                        String category,
@@ -758,6 +860,8 @@ public class PostService {
         }
 
         Post boosted = getPostEntityById(id);
+        paidFeaturePeriodService.record(payerId, PaidFeatureType.BOOST,
+                id, now, boosted.getBoostedUntil());
         log.info("Пост {} поднят в топ до {}", id, boosted.getBoostedUntil());
         return new PostBoostResult(
                 toDto(boosted),

@@ -419,6 +419,64 @@ class HelpServiceTest {
     }
 
     @Test
+    void sendSlaReminder_shouldSend50PercentOnce() {
+        Help help = help(5L, HelpStatus.ACCEPTED, user(1L), user(2L));
+        help.setAcceptedAt(LocalDateTime.now().minusHours(2));
+        when(helpRepository.findByIdForUpdate(5L)).thenReturn(Optional.of(help));
+
+        boolean sent = helpService.sendSlaReminder(5L,
+                LocalDateTime.now().minusHours(1), LocalDateTime.now().minusHours(3));
+
+        assertTrue(sent);
+        assertNotNull(help.getReminder50SentAt());
+        assertNull(help.getReminder80SentAt());
+        verify(notificationService, times(2)).notify(any());
+    }
+
+    @Test
+    void sendSlaReminder_shouldSendOnlyTheLaterThresholdWhenBothWereCrossed() {
+        Help help = help(5L, HelpStatus.ACCEPTED, user(1L), user(2L));
+        help.setAcceptedAt(LocalDateTime.now().minusHours(4));
+        when(helpRepository.findByIdForUpdate(5L)).thenReturn(Optional.of(help));
+
+        boolean sent = helpService.sendSlaReminder(5L,
+                LocalDateTime.now().minusHours(1), LocalDateTime.now().minusHours(3));
+
+        assertTrue(sent);
+        assertNotNull(help.getReminder50SentAt());
+        assertNotNull(help.getReminder80SentAt());
+        verify(notificationService, times(2)).notify(any());
+    }
+
+    @Test
+    void sendSlaReminder_shouldNotDuplicateAlreadySentThreshold() {
+        Help help = help(5L, HelpStatus.ACCEPTED, user(1L), user(2L));
+        help.setAcceptedAt(LocalDateTime.now().minusHours(4));
+        help.setReminder50SentAt(LocalDateTime.now().minusHours(2));
+        help.setReminder80SentAt(LocalDateTime.now().minusHours(1));
+        when(helpRepository.findByIdForUpdate(5L)).thenReturn(Optional.of(help));
+
+        boolean sent = helpService.sendSlaReminder(5L,
+                LocalDateTime.now().minusHours(1), LocalDateTime.now().minusHours(3));
+
+        assertFalse(sent);
+        verify(notificationService, never()).notify(any());
+        verify(helpRepository, never()).saveAndFlush(any(Help.class));
+    }
+
+    @Test
+    void sendSlaReminder_shouldSkipNonAcceptedHelp() {
+        Help help = help(5L, HelpStatus.COMPLETED, user(1L), user(2L));
+        when(helpRepository.findByIdForUpdate(5L)).thenReturn(Optional.of(help));
+
+        boolean sent = helpService.sendSlaReminder(5L,
+                LocalDateTime.now().minusHours(1), LocalDateTime.now().minusHours(3));
+
+        assertFalse(sent);
+        verify(notificationService, never()).notify(any());
+    }
+
+    @Test
     void getHelpHistory_shouldRejectNonParticipant() {
         Help help = help(5L, HelpStatus.CONFIRMED, user(1L), user(2L));
         when(helpRepository.findById(5L)).thenReturn(Optional.of(help));

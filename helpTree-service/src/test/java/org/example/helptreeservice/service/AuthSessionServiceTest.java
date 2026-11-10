@@ -194,6 +194,33 @@ class AuthSessionServiceTest {
     }
 
     @Test
+    void validateAccessToken_shouldTouchLastSeenOnlyWhenStale() {
+        User user = user(1L);
+        user.setLastSeenAt(LocalDateTime.now().minusMinutes(10));
+        AuthSession session = session(user);
+        when(authSessionRepository.findActiveById(eq(session.getId()), any()))
+                .thenReturn(Optional.of(session));
+
+        service.validateAccessToken(1L, session.getId().toString(), 0L, "USER");
+
+        verify(userRepository).touchLastSeen(eq(1L), any(LocalDateTime.class),
+                any(LocalDateTime.class));
+    }
+
+    @Test
+    void validateAccessToken_shouldSkipRecentLastSeenTouch() {
+        User user = user(1L);
+        user.setLastSeenAt(LocalDateTime.now());
+        AuthSession session = session(user);
+        when(authSessionRepository.findActiveById(eq(session.getId()), any()))
+                .thenReturn(Optional.of(session));
+
+        service.validateAccessToken(1L, session.getId().toString(), 0L, "USER");
+
+        verify(userRepository, never()).touchLastSeen(anyLong(), any(), any());
+    }
+
+    @Test
     void validateAccessToken_shouldRejectDeletedUser() {
         User user = user(1L);
         user.setDeleted(true);

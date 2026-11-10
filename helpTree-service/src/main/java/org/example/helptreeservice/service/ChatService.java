@@ -8,11 +8,13 @@ import org.example.helptreeservice.dto.chat.CreateChatRequest;
 import org.example.helptreeservice.dto.chat.CreateMessageRequest;
 import org.example.helptreeservice.dto.chat.MessageCursorResponse;
 import org.example.helptreeservice.dto.chat.MessageResponse;
+import org.example.helptreeservice.dto.chat.UpdateMessageRequest;
 import org.example.helptreeservice.dto.chat.WsMessageEnvelope;
 import org.example.helptreeservice.entity.Chat;
 import org.example.helptreeservice.entity.ChatUserState;
 import org.example.helptreeservice.entity.Message;
 import org.example.helptreeservice.entity.User;
+import org.example.helptreeservice.enums.ImagePurpose;
 import org.example.helptreeservice.enums.UserBlockScope;
 import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.ForbiddenException;
@@ -33,6 +35,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -52,6 +55,7 @@ public class ChatService {
     private final ChatRateLimiter chatRateLimiter;
     private final ChatProperties chatProperties;
     private final UserBlockService userBlockService;
+    private final ImageObjectService imageObjectService;
 
     /**
      * Creates or returns the single chat for an unordered participant pair.
@@ -130,14 +134,19 @@ public class ChatService {
         userBlockService.assertInteractionAllowed(sender.getId(), recipient.getId(), UserBlockScope.MESSAGES,
                 "Один из пользователей ограничил переписку");
 
-        String content = sanitizeContent(request != null ? request.getContent() : null);
+        String content = sanitizeContent(request != null ? request.getContent() : null,
+                request != null && request.getAttachmentUrls() != null
+                        && !request.getAttachmentUrls().isEmpty());
         chatRateLimiter.checkAllowed(currentUserId);
+        List<String> attachments = claimAttachments(sender.getId(),
+                request != null ? request.getAttachmentUrls() : null);
 
         Message saved = messageRepository.save(Message.builder()
                 .chat(chat)
                 .sender(sender)
                 .content(content)
                 .isRead(false)
+                .attachmentUrls(attachments)
                 .build());
 
         chat.setLastMessageAt(LocalDateTime.now());
@@ -161,6 +170,57 @@ public class ChatService {
         dispatchAfterCommit(deliveries);
 
         log.info("Пользователь {} отправил сообщение в чат {}", currentUserId, chatId);
+        return response;
+    }
+
+    /**
+     * Edits the text of the sender's own message inside the configured window.
+     * Attachments are immutable; a message with attachments keeps them.
+     */
+    @Transactional
+    public MessageResponse editMessage(Long chatId,
+                                       Long messageId,
+                                       UpdateMessageRequest request,
+                                       Long currentUserId) {
+        Chat chat = getChatForParticipant(chatId, currentUserId);
+        Message message = messageRepository
+                .findByIdAndChatIdAndDeletedAtIsNull(messageId, chatId)
+                .orElseThrow(() -> new NotFoundException("Сообщение не найдено"));
+
+        if (!message.getSender().getId().equals(currentUserId)) {
+            throw new ForbiddenException("Вы можете редактировать только свои сообщения");
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        if (message.getCreatedAt() == null
+                || now.isAfter(message.getCreatedAt()
+                        .plusMinutes(chatProperties.getEditWindowMinutes()))) {
+            throw new BadRequestException("Редактировать сообщение можно только в течение "
+                    + chatProperties.getEditWindowMinutes() + " минут");
+        }
+
+        boolean hasAttachments = message.getAttachmentUrls() != null
+                && !message.getAttachmentUrls().isEmpty();
+        String content = sanitizeContent(request != null ? request.getContent() : null, hasAttachments);
+        if (content.isEmpty() && !hasAttachments) {
+            throw new BadRequestException("Сообщение не может быть пустым");
+        }
+
+        message.setContent(content);
+        message.setEditedAt(now);
+        message.setEditCount(message.getEditCount() == null ? 1 : message.getEditCount() + 1);
+        Message saved = messageRepository.save(message);
+
+        MessageResponse response = chatMapper.toMessageResponse(saved);
+        WsMessageEnvelope envelope = WsMessageEnvelope.messageUpdated(response);
+        List<Delivery> deliveries = new ArrayList<>();
+        addChatParticipants(deliveries, chat, envelope);
+        addChatUpdated(deliveries, chat, chat.getUser1().getId());
+        addChatUpdated(deliveries, chat, chat.getUser2().getId());
+        dispatchAfterCommit(deliveries);
+
+        log.info("Пользователь {} отредактировал сообщение {} в чате {}",
+                currentUserId, messageId, chatId);
         return response;
     }
 
@@ -287,6 +347,59 @@ public class ChatService {
         log.info("Пользователь {} удалил сообщение {} из чата {}", currentUserId, messageId, chatId);
     }
 
+    /**
+     * Physically removes one batch of messages older than {@code cutoff}. Chat
+     * participants' read cursors are cleared where they pointed at a removed
+     * message, and chat previews are recomputed. Attachments that are no longer
+     * referenced by any live message become DELETED image objects, so the
+     * existing Silo cleanup job can remove the bytes.
+     */
+    @Transactional
+    public int purgeExpiredMessages(LocalDateTime cutoff, int limit) {
+        int batchSize = Math.max(1, Math.min(limit, chatProperties.getRetentionBatchSize()));
+        List<Message> expired = messageRepository.findExpiredMessages(
+                cutoff, PageRequest.of(0, batchSize));
+        if (expired.isEmpty()) {
+            return 0;
+        }
+
+        List<Long> ids = expired.stream().map(Message::getId).toList();
+        List<String> candidateUrls = expired.stream()
+                .map(Message::getAttachmentUrls)
+                .filter(urls -> urls != null && !urls.isEmpty())
+                .flatMap(List::stream)
+                .distinct()
+                .toList();
+        List<Long> chatIds = expired.stream()
+                .map(message -> message.getChat().getId())
+                .distinct()
+                .toList();
+
+        chatUserStateRepository.clearLastReadMessageIds(ids);
+        int deleted = messageRepository.deleteByIdIn(ids);
+
+        // Recompute the preview timestamp for every touched chat.
+        for (Long chatId : chatIds) {
+            chatRepository.findById(chatId).ifPresent(chat -> {
+                messageRepository.findTopByChatIdAndDeletedAtIsNullOrderByIdDesc(chatId)
+                        .ifPresentOrElse(
+                                latest -> chat.setLastMessageAt(latest.getCreatedAt()),
+                                () -> chat.setLastMessageAt(null));
+                chatRepository.save(chat);
+            });
+        }
+
+        if (!candidateUrls.isEmpty()) {
+            List<String> unreferenced = candidateUrls.stream()
+                    .filter(url -> !messageRepository.existsActiveByAttachmentUrl(url))
+                    .toList();
+            imageObjectService.markChatAttachmentsDeleted(unreferenced);
+        }
+
+        log.info("Retention: удалено {} сообщений старше {}", deleted, cutoff);
+        return deleted;
+    }
+
     private Chat createCanonicalChat(User first, User second) {
         User user1 = first.getId() < second.getId() ? first : second;
         User user2 = first.getId() < second.getId() ? second : first;
@@ -311,15 +424,38 @@ public class ChatService {
                         .build()));
     }
 
-    private String sanitizeContent(String rawContent) {
+    private String sanitizeContent(String rawContent, boolean hasAttachments) {
         String content = contentSanitizer.sanitize(rawContent);
         if (contentSanitizer.isBlank(content)) {
+            if (hasAttachments) {
+                return "";
+            }
             throw new BadRequestException("Сообщение не может быть пустым");
         }
         if (contentSanitizer.exceedsMaxLength(content)) {
             throw new BadRequestException("Сообщение слишком длинное");
         }
         return content;
+    }
+
+    private List<String> claimAttachments(Long senderId, List<String> rawUrls) {
+        if (rawUrls == null || rawUrls.isEmpty()) {
+            return new ArrayList<>();
+        }
+        List<String> urls = rawUrls.stream()
+                .filter(url -> url != null && !url.isBlank())
+                .map(String::trim)
+                .distinct()
+                .toList();
+        if (urls.isEmpty()) {
+            return new ArrayList<>();
+        }
+        if (urls.size() > chatProperties.getMaxAttachments()) {
+            throw new BadRequestException("Можно прикрепить не более "
+                    + chatProperties.getMaxAttachments() + " изображений");
+        }
+        imageObjectService.claimForOwner(senderId, urls, ImagePurpose.CHAT);
+        return new ArrayList<>(new LinkedHashSet<>(urls));
     }
 
     private void publishNewMessage(Chat chat, MessageResponse response,

@@ -1,7 +1,9 @@
 package org.example.helptreeservice.service;
 
 import org.example.helptreeservice.dto.reviews.CreateReviewRequest;
+import org.example.helptreeservice.dto.reviews.ReplyReviewRequest;
 import org.example.helptreeservice.dto.reviews.ReviewResponse;
+import org.example.helptreeservice.dto.reviews.UpdateReviewRequest;
 import org.example.helptreeservice.dto.admin.AdminBulkResultDto;
 import org.example.helptreeservice.entity.Help;
 import org.example.helptreeservice.entity.Review;
@@ -23,12 +25,14 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
@@ -220,6 +224,142 @@ class ReviewServiceTest {
         verify(adminAuditService).record(eq(9L), eq(AdminAuditAction.BULK_OPERATION),
                 eq(AdminAuditService.ENTITY_REVIEW), isNull(), isNull(), anyMap(),
                 eq("Массовая очистка"));
+    }
+
+    @Test
+    void replyToReview_shouldRejectEmptyText() {
+        ReplyReviewRequest request = replyRequest("   ");
+
+        assertThrows(BadRequestException.class,
+                () -> reviewService.replyToReview(77L, request, 1L));
+
+        verifyNoInteractions(reviewRepository);
+    }
+
+    @Test
+    void replyToReview_shouldRejectNonRecipient() {
+        User helper = user(1L);
+        User receiver = user(2L);
+        Review review = review(77L, help(10L, HelpStatus.CONFIRMED, helper, receiver), receiver, helper);
+        when(reviewRepository.findByIdForUpdate(77L)).thenReturn(Optional.of(review));
+
+        assertThrows(ForbiddenException.class,
+                () -> reviewService.replyToReview(77L, replyRequest("Спасибо"), 2L));
+
+        verify(reviewRepository, never()).save(any(Review.class));
+    }
+
+    @Test
+    void replyToReview_shouldPublishFirstReplyAndNotifyAuthor() {
+        User helper = user(1L);
+        User receiver = user(2L);
+        Review review = review(77L, help(10L, HelpStatus.CONFIRMED, helper, receiver), receiver, helper);
+        when(reviewRepository.findByIdForUpdate(77L)).thenReturn(Optional.of(review));
+        when(reviewRepository.save(any(Review.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(reviewMapper.toResponse(any(Review.class))).thenReturn(ReviewResponse.builder().build());
+
+        reviewService.replyToReview(77L, replyRequest(" Спасибо за отзыв "), 1L);
+
+        assertEquals("Спасибо за отзыв", review.getReplyText());
+        assertNotNull(review.getReplyAt());
+        assertNull(review.getReplyUpdatedAt());
+        verify(notificationService).notify(any());
+    }
+
+    @Test
+    void replyToReview_shouldAllowEditInsideWindow() {
+        User helper = user(1L);
+        User receiver = user(2L);
+        Review review = review(77L, help(10L, HelpStatus.CONFIRMED, helper, receiver), receiver, helper);
+        review.setReplyText("Старый ответ");
+        review.setReplyAt(LocalDateTime.now().minusHours(2));
+        when(reviewRepository.findByIdForUpdate(77L)).thenReturn(Optional.of(review));
+        when(reviewRepository.save(any(Review.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(reviewMapper.toResponse(any(Review.class))).thenReturn(ReviewResponse.builder().build());
+
+        reviewService.replyToReview(77L, replyRequest("Новый ответ"), 1L);
+
+        assertEquals("Новый ответ", review.getReplyText());
+        assertNotNull(review.getReplyUpdatedAt());
+        verify(notificationService, never()).notify(any());
+    }
+
+    @Test
+    void replyToReview_shouldRejectEditAfterWindow() {
+        User helper = user(1L);
+        User receiver = user(2L);
+        Review review = review(77L, help(10L, HelpStatus.CONFIRMED, helper, receiver), receiver, helper);
+        review.setReplyText("Старый ответ");
+        review.setReplyAt(LocalDateTime.now().minusHours(25));
+        when(reviewRepository.findByIdForUpdate(77L)).thenReturn(Optional.of(review));
+
+        assertThrows(BadRequestException.class,
+                () -> reviewService.replyToReview(77L, replyRequest("Новый ответ"), 1L));
+
+        assertEquals("Старый ответ", review.getReplyText());
+        verify(reviewRepository, never()).save(any(Review.class));
+    }
+
+    @Test
+    void updateReview_shouldRejectNonAuthor() {
+        User helper = user(1L);
+        User receiver = user(2L);
+        Review review = review(77L, help(10L, HelpStatus.CONFIRMED, helper, receiver), receiver, helper);
+        review.setCreatedAt(LocalDateTime.now().minusHours(1));
+        when(reviewRepository.findByIdForUpdate(77L)).thenReturn(Optional.of(review));
+
+        assertThrows(ForbiddenException.class,
+                () -> reviewService.updateReview(77L, updateRequest(1), 1L));
+
+        verify(reviewRepository, never()).save(any(Review.class));
+    }
+
+    @Test
+    void updateReview_shouldRejectAfterWindow() {
+        User helper = user(1L);
+        User receiver = user(2L);
+        Review review = review(77L, help(10L, HelpStatus.CONFIRMED, helper, receiver), receiver, helper);
+        review.setCreatedAt(LocalDateTime.now().minusHours(25));
+        when(reviewRepository.findByIdForUpdate(77L)).thenReturn(Optional.of(review));
+
+        assertThrows(BadRequestException.class,
+                () -> reviewService.updateReview(77L, updateRequest(1), 2L));
+
+        verify(reviewRepository, never()).save(any(Review.class));
+    }
+
+    @Test
+    void updateReview_shouldApplyChangesRecalculateAndNotify() {
+        User helper = user(1L);
+        User receiver = user(2L);
+        Review review = review(77L, help(10L, HelpStatus.CONFIRMED, helper, receiver), receiver, helper);
+        review.setCreatedAt(LocalDateTime.now().minusHours(1));
+        when(reviewRepository.findByIdForUpdate(77L)).thenReturn(Optional.of(review));
+        when(reviewRepository.save(any(Review.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(reviewMapper.toResponse(any(Review.class))).thenReturn(ReviewResponse.builder().build());
+
+        reviewService.updateReview(77L, updateRequest(3), 2L);
+
+        assertEquals(3, review.getRating());
+        assertEquals(1, review.getEditCount());
+        assertNotNull(review.getEditedAt());
+        verify(ratingService).recalculateUsers(List.of(1L));
+        verify(notificationService).notify(any());
+    }
+
+    private ReplyReviewRequest replyRequest(String text) {
+        ReplyReviewRequest request = new ReplyReviewRequest();
+        request.setReplyText(text);
+        return request;
+    }
+
+    private UpdateReviewRequest updateRequest(Integer rating) {
+        UpdateReviewRequest request = new UpdateReviewRequest();
+        request.setRating(rating);
+        return request;
     }
 
     private CreateReviewRequest request(Long helpId) {

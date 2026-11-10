@@ -141,17 +141,17 @@ class UserBlockIntegrationTest {
                 () -> chatService.createChat(chatRequest(alice.getId()), bob.getId()));
         assertThrows(ForbiddenException.class,
                 () -> chatService.sendMessage(chatId,
-                        new org.example.helptreeservice.dto.chat.CreateMessageRequest("blocked"),
+                        new org.example.helptreeservice.dto.chat.CreateMessageRequest("blocked", null),
                         bob.getId()));
         assertThrows(ForbiddenException.class,
                 () -> chatService.sendMessage(chatId,
-                        new org.example.helptreeservice.dto.chat.CreateMessageRequest("blocked"),
+                        new org.example.helptreeservice.dto.chat.CreateMessageRequest("blocked", null),
                         alice.getId()));
 
         userBlockService.unblockUser(alice.getId(), bob.getId());
 
         assertEquals("allowed", chatService.sendMessage(chatId,
-                new org.example.helptreeservice.dto.chat.CreateMessageRequest("allowed"),
+                new org.example.helptreeservice.dto.chat.CreateMessageRequest("allowed", null),
                 bob.getId()).getContent());
     }
 

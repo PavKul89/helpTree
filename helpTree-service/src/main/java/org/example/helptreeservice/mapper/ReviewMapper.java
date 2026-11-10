@@ -14,5 +14,9 @@ public interface ReviewMapper {
     @Mapping(source = "fromUser.name", target = "fromUserName")
     @Mapping(source = "toUser.id", target = "toUserId")
     @Mapping(source = "toUser.name", target = "toUserName")
+    @Mapping(target = "editableUntil",
+            expression = "java(review.getCreatedAt() == null ? null : review.getCreatedAt().plusHours(24))")
+    @Mapping(target = "replyEditableUntil",
+            expression = "java(review.getReplyAt() == null ? null : review.getReplyAt().plusHours(24))")
     ReviewResponse toResponse(Review review);
 }

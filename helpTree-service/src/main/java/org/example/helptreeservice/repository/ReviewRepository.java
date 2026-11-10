@@ -7,6 +7,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -21,6 +22,14 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
     Optional<Review> findByHelpAndFromUser(Help help, User fromUser);
 
     boolean existsByHelpAndFromUser(Help help, User fromUser);
+
+    /**
+     * Serialises reply/edit changes for one review. Both operations check a
+     * time window, so the row must not change between the check and the save.
+     */
+    @Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT r FROM Review r WHERE r.id = :id")
+    Optional<Review> findByIdForUpdate(@Param("id") Long id);
 
     @EntityGraph(attributePaths = {"fromUser", "toUser", "help", "help.post"})
     @Query("SELECT r FROM Review r WHERE r.help = :help "
@@ -73,4 +82,10 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
                               @Param("from") LocalDateTime from,
                               @Param("to") LocalDateTime to,
                               Pageable pageable);
+
+    /** Every review written by or received by the user, for the account export. */
+    @EntityGraph(attributePaths = {"fromUser", "toUser", "help", "help.post"})
+    @Query("SELECT r FROM Review r WHERE r.fromUser.id = :userId OR r.toUser.id = :userId "
+            + "ORDER BY r.createdAt DESC, r.id DESC")
+    List<Review> findAllForExport(@Param("userId") Long userId);
 }

@@ -4,7 +4,9 @@ import org.example.helptreeservice.dto.users.CreateUserRequest;
 import org.example.helptreeservice.dto.users.UpdateUserRequest;
 import org.example.helptreeservice.dto.users.UserDto;
 import org.example.helptreeservice.dto.users.UserPublicDto;
+import org.example.helptreeservice.config.AuthConfig;
 import org.example.helptreeservice.entity.User;
+import org.example.helptreeservice.entity.UserPrivacySettings;
 import org.example.helptreeservice.entity.UserRatingStats;
 import org.example.helptreeservice.enums.Role;
 import org.example.helptreeservice.exception.BadRequestException;
@@ -14,6 +16,7 @@ import org.example.helptreeservice.mapper.UserMapper;
 import org.example.helptreeservice.repository.PostRepository;
 import org.example.helptreeservice.repository.UserRatingStatsRepository;
 import org.example.helptreeservice.repository.UserRepository;
+import org.example.helptreeservice.repository.UserPrivacySettingsRepository;
 import org.example.helptreeservice.service.notification.NotificationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -57,6 +60,8 @@ class UserServiceTest {
     private PublicProfileCache publicProfileCache;
     @Mock
     private NotificationService notificationService;
+    @Mock
+    private UserPrivacySettingsRepository privacySettingsRepository;
 
     private UserService userService;
 
@@ -75,7 +80,9 @@ class UserServiceTest {
                 authSessionService,
                 new org.example.helptreeservice.config.EconomyConfig(),
                 publicProfileCache,
-                notificationService
+                notificationService,
+                privacySettingsRepository,
+                new AuthConfig()
         );
     }
 
@@ -523,5 +530,74 @@ class UserServiceTest {
 
         assertThrows(NotFoundException.class,
                 () -> userService.getUserEntityByIdIncludingDeleted(99L));
+    }
+
+    @Test
+    void getUserPublicById_shouldHideCityPhoneAndOnlineWhenDisabled() {
+        User user = user(1L, false);
+        user.setCity("Москва");
+        user.setPhone("+70000000000");
+        user.setLastSeenAt(LocalDateTime.now());
+        UserPrivacySettings settings = UserPrivacySettings.builder()
+                .userId(1L)
+                .showCity(false)
+                .showPhone(false)
+                .showOnlineStatus(false)
+                .build();
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(privacySettingsRepository.findById(1L)).thenReturn(Optional.of(settings));
+
+        UserPublicDto dto = userService.getUserPublicById(1L);
+
+        assertNull(dto.getCity());
+        assertNull(dto.getPhone());
+        assertNull(dto.getOnline());
+        assertEquals("User 1", dto.getName());
+    }
+
+    @Test
+    void getUserPublicById_shouldExposeEnabledFieldsAndRecentOnlineStatus() {
+        User user = user(1L, false);
+        user.setCity("Москва");
+        user.setPhone("+70000000000");
+        user.setLastSeenAt(LocalDateTime.now().minusMinutes(2));
+        UserPrivacySettings settings = UserPrivacySettings.builder()
+                .userId(1L)
+                .showCity(true)
+                .showPhone(true)
+                .showOnlineStatus(true)
+                .build();
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(privacySettingsRepository.findById(1L)).thenReturn(Optional.of(settings));
+
+        UserPublicDto dto = userService.getUserPublicById(1L);
+
+        assertEquals("Москва", dto.getCity());
+        assertEquals("+70000000000", dto.getPhone());
+        assertTrue(dto.getOnline());
+    }
+
+    @Test
+    void getUserPublicById_shouldTreatStaleLastSeenAsOffline() {
+        User user = user(1L, false);
+        user.setLastSeenAt(LocalDateTime.now().minusMinutes(10));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(privacySettingsRepository.findById(1L)).thenReturn(Optional.empty());
+
+        UserPublicDto dto = userService.getUserPublicById(1L);
+
+        assertFalse(dto.getOnline());
+        assertNull(dto.getPhone());
+    }
+
+    @Test
+    void publicPrivacyView_shouldUseSafeDefaultsWithoutSettingsRow() {
+        when(privacySettingsRepository.findById(1L)).thenReturn(Optional.empty());
+
+        UserService.PublicPrivacyView view = userService.publicPrivacyView(1L);
+
+        assertTrue(view.showCity());
+        assertFalse(view.showPhone());
+        assertTrue(view.showOnlineStatus());
     }
 }

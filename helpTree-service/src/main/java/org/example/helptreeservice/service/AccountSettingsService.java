@@ -42,6 +42,7 @@ public class AccountSettingsService {
     private final UserService userService;
     private final PasswordService passwordService;
     private final AdminAuditService adminAuditService;
+    private final PublicProfileCache publicProfileCache;
 
     @Transactional(readOnly = true)
     public NotificationPreferencesDto getNotificationPreferences(Long userId) {
@@ -118,6 +119,7 @@ public class AccountSettingsService {
                         .showCity(true)
                         .showEmail(false)
                         .showPhone(false)
+                        .showOnlineStatus(true)
                         .allowDirectMessages(true)
                         .searchable(true)
                         .build());
@@ -134,6 +136,9 @@ public class AccountSettingsService {
         if (request.getShowPhone() != null) {
             settings.setShowPhone(request.getShowPhone());
         }
+        if (request.getShowOnlineStatus() != null) {
+            settings.setShowOnlineStatus(request.getShowOnlineStatus());
+        }
         if (request.getAllowDirectMessages() != null) {
             settings.setAllowDirectMessages(request.getAllowDirectMessages());
         }
@@ -147,7 +152,11 @@ public class AccountSettingsService {
         }
         settings.setUpdatedAt(now);
 
-        return toDto(privacySettingsRepository.save(settings));
+        UserPrivacySettings saved = privacySettingsRepository.save(settings);
+        // Every public projection reads these flags; the cache must not keep
+        // serving the old city/phone/online visibility.
+        publicProfileCache.evictAfterCommit(userId);
+        return toDto(saved);
     }
 
     @Transactional
@@ -216,6 +225,7 @@ public class AccountSettingsService {
                 .showCity(settings.getShowCity())
                 .showEmail(settings.getShowEmail())
                 .showPhone(settings.getShowPhone())
+                .showOnlineStatus(settings.getShowOnlineStatus())
                 .allowDirectMessages(settings.getAllowDirectMessages())
                 .searchable(settings.getSearchable())
                 .updatedAt(settings.getUpdatedAt())
@@ -237,6 +247,7 @@ public class AccountSettingsService {
                 .showCity(true)
                 .showEmail(false)
                 .showPhone(false)
+                .showOnlineStatus(true)
                 .allowDirectMessages(true)
                 .searchable(true)
                 .build();

@@ -44,12 +44,22 @@ public interface ImageObjectRepository extends JpaRepository<ImageObject, Long> 
     @Query(value = """
             SELECT EXISTS (SELECT 1 FROM users u WHERE u.avatar_url = :url)
                 OR EXISTS (SELECT 1 FROM post_images pi WHERE pi.image_url = :url)
+                OR EXISTS (
+                    SELECT 1 FROM messages m
+                    WHERE m.deleted_at IS NULL
+                      AND m.attachment_urls <> '[]'
+                      AND EXISTS (
+                          SELECT 1 FROM jsonb_array_elements_text(m.attachment_urls::jsonb) a
+                          WHERE a = :url
+                      )
+                )
             """, nativeQuery = true)
     boolean existsReferenceByUrl(@Param("url") String url);
 
     /**
-     * Active rows older than the TTL that are not referenced by a live profile
-     * or post. Bounded by {@code limit}; the caller loops over batches.
+     * Active rows older than the TTL that are not referenced by a live profile,
+     * post or chat message. Bounded by {@code limit}; the caller loops over
+     * batches.
      */
     @Query(value = """
             SELECT io.*
@@ -58,6 +68,15 @@ public interface ImageObjectRepository extends JpaRepository<ImageObject, Long> 
               AND io.created_at <= :cutoff
               AND NOT EXISTS (SELECT 1 FROM users u WHERE u.avatar_url = io.url)
               AND NOT EXISTS (SELECT 1 FROM post_images pi WHERE pi.image_url = io.url)
+              AND NOT EXISTS (
+                  SELECT 1 FROM messages m
+                  WHERE m.deleted_at IS NULL
+                    AND m.attachment_urls <> '[]'
+                    AND EXISTS (
+                        SELECT 1 FROM jsonb_array_elements_text(m.attachment_urls::jsonb) a
+                        WHERE a = io.url
+                    )
+              )
             ORDER BY io.id
             LIMIT :limit
             """, nativeQuery = true)
@@ -89,6 +108,15 @@ public interface ImageObjectRepository extends JpaRepository<ImageObject, Long> 
               AND io.created_at <= :cutoff
               AND NOT EXISTS (SELECT 1 FROM users u WHERE u.avatar_url = io.url)
               AND NOT EXISTS (SELECT 1 FROM post_images pi WHERE pi.image_url = io.url)
+              AND NOT EXISTS (
+                  SELECT 1 FROM messages m
+                  WHERE m.deleted_at IS NULL
+                    AND m.attachment_urls <> '[]'
+                    AND EXISTS (
+                        SELECT 1 FROM jsonb_array_elements_text(m.attachment_urls::jsonb) a
+                        WHERE a = io.url
+                    )
+              )
             """, nativeQuery = true)
     int markUnreferencedDeleted(@Param("id") Long id,
                                 @Param("cutoff") LocalDateTime cutoff,

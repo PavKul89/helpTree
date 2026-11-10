@@ -9,6 +9,7 @@ public class UpdatePrivacySettingsRequest {
     private Boolean showCity;
     private Boolean showEmail;
     private Boolean showPhone;
+    private Boolean showOnlineStatus;
     private Boolean allowDirectMessages;
     private Boolean searchable;
 }

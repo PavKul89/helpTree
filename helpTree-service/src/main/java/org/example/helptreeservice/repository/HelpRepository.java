@@ -64,6 +64,22 @@ public interface HelpRepository extends JpaRepository<Help, Long> {
                                                   @Param("cutoff") LocalDateTime cutoff,
                                                   Pageable pageable);
 
+    /**
+     * Helps that crossed at least one reminder threshold and have not had that
+     * reminder delivered yet. The 80% branch is checked independently so a help
+     * that appears after both thresholds still gets a single reminder.
+     */
+    @Query("SELECT h.id FROM Help h " +
+           "WHERE h.status = :status AND h.acceptedAt IS NOT NULL " +
+           "AND (h.deleted = false OR h.deleted IS NULL) " +
+           "AND ((h.reminder50SentAt IS NULL AND h.acceptedAt <= :cutoffFirst) " +
+           "     OR (h.reminder80SentAt IS NULL AND h.acceptedAt <= :cutoffSecond)) " +
+           "ORDER BY h.acceptedAt ASC")
+    List<Long> findIdsForSlaReminder(@Param("status") HelpStatus status,
+                                     @Param("cutoffFirst") LocalDateTime cutoffFirst,
+                                     @Param("cutoffSecond") LocalDateTime cutoffSecond,
+                                     Pageable pageable);
+
     @Query("SELECT h FROM Help h JOIN FETCH h.post JOIN FETCH h.helper JOIN FETCH h.receiver WHERE h.status = :status AND (h.deleted = false OR h.deleted IS NULL)")
     List<Help> findByStatusAndDeletedFalse(@Param("status") HelpStatus status);
 
@@ -199,4 +215,10 @@ public interface HelpRepository extends JpaRepository<Help, Long> {
            "AND (h.deleted = false OR h.deleted IS NULL) " +
            "ORDER BY h.createdAt DESC")
     List<Object[]> findNewResponsesData(@Param("userId") Long userId);
+
+    /** Every help act where the user was helper or receiver, for the export. */
+    @EntityGraph(attributePaths = {"post", "helper", "receiver"})
+    @Query("SELECT h FROM Help h WHERE h.helper.id = :userId OR h.receiver.id = :userId "
+            + "ORDER BY h.createdAt DESC, h.id DESC")
+    List<Help> findAllForExport(@Param("userId") Long userId);
 }

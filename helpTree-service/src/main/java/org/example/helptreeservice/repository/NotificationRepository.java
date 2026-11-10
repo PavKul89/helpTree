@@ -10,6 +10,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -42,6 +43,9 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     Optional<Notification> findByUserIdAndDedupeKey(Long userId, String dedupeKey);
 
     Page<Notification> findByUserIdOrderByCreatedAtDescIdDesc(Long userId, Pageable pageable);
+
+    /** Complete notification history for the portable account export. */
+    List<Notification> findByUserIdOrderByCreatedAtDescIdDesc(Long userId);
 
     Page<Notification> findByUserIdAndReadAtIsNullOrderByCreatedAtDescIdDesc(
             Long userId, Pageable pageable);

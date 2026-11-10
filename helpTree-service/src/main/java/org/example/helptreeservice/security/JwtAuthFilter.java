@@ -193,7 +193,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         if ("GET".equals(method)) {
             return path.equals(walletPrefix)
                     || path.equals(walletPrefix + "/pricing")
-                    || path.equals(walletPrefix + "/transactions");
+                    || path.equals(walletPrefix + "/transactions")
+                    || path.equals(walletPrefix + "/transactions/export")
+                    || path.equals(walletPrefix + "/paid-features");
         }
         return "POST".equals(method)
                 && path.equals(walletPrefix + "/spend")
@@ -219,6 +221,11 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             return true;
         }
         if (path.startsWith("/ws/")) {
+            return true;
+        }
+        // View counting is available to guests too: the IP + User-Agent hash is
+        // the anonymous viewer key. The endpoint itself never exposes data.
+        if ("POST".equals(method) && path.matches("/api/posts/\\d+/views")) {
             return true;
         }
         if ("GET".equals(method)) {

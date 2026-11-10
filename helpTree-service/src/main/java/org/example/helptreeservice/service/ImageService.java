@@ -42,6 +42,7 @@ public class ImageService {
     private final ImageObjectService imageObjectService;
     private final ImageUploadProperties properties;
     private final HelpTreeMetrics metrics;
+    private final AntivirusScanner antivirusScanner;
 
     @Value("${silo.public-endpoint}")
     private String publicEndpoint;
@@ -102,7 +103,10 @@ public class ImageService {
 
         List<ProcessedImage> processed = new ArrayList<>(present.size());
         for (MultipartFile file : present) {
-            processed.add(imageProcessor.process(readBytes(file)));
+            byte[] bytes = readBytes(file);
+            // Fail-closed antivirus check before any decode or storage work.
+            antivirusScanner.scan(bytes);
+            processed.add(imageProcessor.process(bytes));
         }
 
         return store(processed, ownerId, purpose);

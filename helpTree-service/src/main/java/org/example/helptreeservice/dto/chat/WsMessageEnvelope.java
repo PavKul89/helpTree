@@ -39,6 +39,15 @@ public class WsMessageEnvelope {
                 .build();
     }
 
+    public static WsMessageEnvelope messageUpdated(MessageResponse message) {
+        return WsMessageEnvelope.builder()
+                .type("MESSAGE_UPDATED")
+                .message(message)
+                .chatId(message.getChatId())
+                .timestamp(LocalDateTime.now())
+                .build();
+    }
+
     public static WsMessageEnvelope chatDeleted(Long chatId) {
         return WsMessageEnvelope.builder()
                 .type("CHAT_DELETED")

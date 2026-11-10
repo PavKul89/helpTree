@@ -38,6 +38,10 @@ public class UserPrivacySettings {
     @Column(name = "show_phone", nullable = false)
     private Boolean showPhone;
 
+    /** Whether the public profile may show the derived online indicator. */
+    @Column(name = "show_online_status", nullable = false)
+    private Boolean showOnlineStatus;
+
     @Column(name = "allow_direct_messages", nullable = false)
     private Boolean allowDirectMessages;
 

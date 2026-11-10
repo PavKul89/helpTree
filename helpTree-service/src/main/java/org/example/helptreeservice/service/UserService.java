@@ -1,11 +1,13 @@
 package org.example.helptreeservice.service;
 
+import org.example.helptreeservice.config.AuthConfig;
 import org.example.helptreeservice.config.EconomyConfig;
 import org.example.helptreeservice.dto.users.CreateUserRequest;
 import org.example.helptreeservice.dto.users.UpdateUserRequest;
 import org.example.helptreeservice.dto.users.UserDto;
 import org.example.helptreeservice.dto.users.UserPublicDto;
 import org.example.helptreeservice.entity.User;
+import org.example.helptreeservice.entity.UserPrivacySettings;
 import org.example.helptreeservice.enums.ImagePurpose;
 import org.example.helptreeservice.enums.NotificationType;
 import org.example.helptreeservice.enums.Role;
@@ -15,6 +17,7 @@ import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.NotFoundException;
 import org.example.helptreeservice.mapper.UserMapper;
 import org.example.helptreeservice.repository.PostRepository;
+import org.example.helptreeservice.repository.UserPrivacySettingsRepository;
 import org.example.helptreeservice.repository.UserRatingStatsRepository;
 import org.example.helptreeservice.repository.UserRepository;
 import org.example.helptreeservice.repository.UserSpecification;
@@ -33,6 +36,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -57,6 +61,16 @@ public class UserService {
     private final EconomyConfig economyConfig;
     private final PublicProfileCache publicProfileCache;
     private final NotificationService notificationService;
+    private final UserPrivacySettingsRepository privacySettingsRepository;
+    private final AuthConfig authConfig;
+
+    /**
+     * The only privacy facts a public projection needs. Cached separately from
+     * the full profile so a post page can hide the author's city without an
+     * extra query per row.
+     */
+    public record PublicPrivacyView(boolean showCity, boolean showPhone, boolean showOnlineStatus) {
+    }
 
     public UserDto createUser(CreateUserRequest request) {
         return createUserWithRole(request, Role.USER);
@@ -187,11 +201,24 @@ public class UserService {
     public Page<UserPublicDto> getAllUsersPublic(Pageable pageable, String query, String city, Long viewerId) {
         log.info("Запрос страницы публичных пользователей: page={}, size={}, q={}, city={}, viewer={}",
                 pageable.getPageNumber(), pageable.getPageSize(), query, city, viewerId);
-        return userRepository.findAll(
-                        UserSpecification.filter(query, null, null, city, null, false)
-                                .and(UserSpecification.excludeProfileBlocks(viewerId)),
-                        pageable)
-                .map(userMapper::toPublicDto);
+        Page<User> page = userRepository.findAll(
+                UserSpecification.filter(query, null, null, city, null, false)
+                        .and(UserSpecification.excludeProfileBlocks(viewerId)),
+                pageable);
+        Map<Long, UserPrivacySettings> settings = privacySettingsByIds(page.getContent());
+        LocalDateTime now = LocalDateTime.now();
+        return page.map(user -> toPublicDto(user, settings.get(user.getId()), now));
+    }
+
+    private Map<Long, UserPrivacySettings> privacySettingsByIds(List<User> users) {
+        if (users.isEmpty()) {
+            return Map.of();
+        }
+        List<Long> ids = users.stream().map(User::getId).toList();
+        Map<Long, UserPrivacySettings> result = new HashMap<>();
+        privacySettingsRepository.findAllById(ids)
+                .forEach(settings -> result.put(settings.getUserId(), settings));
+        return result;
     }
 
     public UserDto updateUser(Long id, UpdateUserRequest request) {
@@ -586,6 +613,32 @@ public class UserService {
     public UserPublicDto getUserPublicById(Long id) {
         log.info("Публичные данные пользователя ID: {}", id);
         User user = getUserEntityById(id);
+        UserPrivacySettings settings = privacySettingsRepository.findById(id).orElse(null);
+        return toPublicDto(user, settings, LocalDateTime.now());
+    }
+
+    /**
+     * Cached privacy projection for callers that already have a user row (post
+     * feeds). Deriving it from the same defaults as the profile keeps the
+     * visibility rule in one place.
+     */
+    @Cacheable(value = PublicProfileCache.PRIVACY_CACHE_NAME, key = "#userId")
+    @Transactional(readOnly = true)
+    public PublicPrivacyView publicPrivacyView(Long userId) {
+        UserPrivacySettings settings = privacySettingsRepository.findById(userId).orElse(null);
+        return new PublicPrivacyView(
+                settings == null || !Boolean.FALSE.equals(settings.getShowCity()),
+                settings != null && Boolean.TRUE.equals(settings.getShowPhone()),
+                settings == null || !Boolean.FALSE.equals(settings.getShowOnlineStatus()));
+    }
+
+    private UserPublicDto toPublicDto(User user,
+                                      UserPrivacySettings settings,
+                                      LocalDateTime now) {
+        boolean showCity = settings == null || !Boolean.FALSE.equals(settings.getShowCity());
+        boolean showPhone = settings != null && Boolean.TRUE.equals(settings.getShowPhone());
+        boolean showOnline = settings == null || !Boolean.FALSE.equals(settings.getShowOnlineStatus());
+
         return UserPublicDto.builder()
                 .id(user.getId())
                 .name(user.getName())
@@ -593,9 +646,17 @@ public class UserService {
                 .helpedCount(user.getHelpedCount())
                 .debtCount(user.getDebtCount())
                 .avatarUrl(imageService.refreshUrl(user.getAvatarUrl()))
-                .city(user.getCity())
+                .city(showCity ? user.getCity() : null)
+                .phone(showPhone ? user.getPhone() : null)
+                .online(showOnline ? isOnline(user.getLastSeenAt(), now) : null)
                 .nicknameColor(user.getNicknameColor())
                 .build();
+    }
+
+    private boolean isOnline(LocalDateTime lastSeenAt, LocalDateTime now) {
+        return lastSeenAt != null
+                && !lastSeenAt.isBefore(now.minusMinutes(
+                        Math.max(1, authConfig.getOnlineWindowMinutes())));
     }
 
     @CacheEvict(value = "userRating", key = "#id")
@@ -626,18 +687,13 @@ public class UserService {
     @Transactional(readOnly = true)
     public List<UserPublicDto> getUsersPublicByIds(List<Long> ids) {
         log.debug("Получение публичных данных для списка пользователей: {}", ids);
-        return userRepository.findAllById(ids).stream()
+        List<User> users = userRepository.findAllById(ids).stream()
                 .filter(u -> !u.getDeleted())
-                .map(u -> UserPublicDto.builder()
-                        .id(u.getId())
-                        .name(u.getName())
-                        .rating(u.getRating())
-                        .helpedCount(u.getHelpedCount())
-                        .debtCount(u.getDebtCount())
-                        .avatarUrl(imageService.refreshUrl(u.getAvatarUrl()))
-                        .city(u.getCity())
-                        .nicknameColor(u.getNicknameColor())
-                        .build())
+                .toList();
+        Map<Long, UserPrivacySettings> settings = privacySettingsByIds(users);
+        LocalDateTime now = LocalDateTime.now();
+        return users.stream()
+                .map(u -> toPublicDto(u, settings.get(u.getId()), now))
                 .collect(Collectors.toList());
     }
 

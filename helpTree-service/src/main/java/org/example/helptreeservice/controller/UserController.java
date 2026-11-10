@@ -17,7 +17,9 @@ import org.example.helptreeservice.dto.users.UserBlockStatusResponse;
 import org.example.helptreeservice.dto.users.UserDto;
 import org.example.helptreeservice.dto.users.UserPublicDto;
 import org.example.helptreeservice.dto.wallet.CoinTransactionDto;
+import org.example.helptreeservice.dto.wallet.PaidFeaturePeriodDto;
 import org.example.helptreeservice.dto.wallet.WalletDto;
+import org.example.helptreeservice.dto.wallet.WalletExport;
 import org.example.helptreeservice.dto.wallet.WalletOperationResult;
 import org.example.helptreeservice.dto.wallet.WalletPricingDto;
 import org.example.helptreeservice.enums.Role;
@@ -327,6 +329,45 @@ public class UserController {
         requireOwnerOrAdmin(id, "Вы можете просматривать только свои транзакции");
         return ResponseEntity.ok(PageResponse.from(
                 walletService.getTransactions(id, page, size, type, from, to, direction)));
+    }
+
+    /**
+     * Downloads the filtered transaction history. CSV is UTF-8 with a BOM so
+     * Excel opens Russian text correctly; JSON is a plain array.
+     */
+    @GetMapping("/{id}/wallet/transactions/export")
+    @Operation(summary = "Экспорт истории операций",
+            description = "Форматы csv (UTF-8 BOM) и json. Доступно владельцу аккаунта и ADMIN.")
+    public ResponseEntity<byte[]> exportTransactions(
+            @PathVariable Long id,
+            @RequestParam(defaultValue = "csv") String format,
+            @RequestParam(required = false) TransactionType type,
+            @RequestParam(required = false) TransactionDirection direction,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
+        requireOwnerOrAdmin(id, "Вы можете экспортировать только свои транзакции");
+        WalletExport export = walletService.exportTransactions(id, type, from, to, direction, format);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(export.contentType()))
+                .header("Content-Disposition", "attachment; filename=\"" + export.filename() + "\"")
+                .body(export.content());
+    }
+
+    /** Append-only history of VIP, boost and nickname-colour purchases. */
+    @GetMapping("/{id}/wallet/paid-features")
+    @Operation(summary = "История платных функций",
+            description = "Периоды VIP, поднятий заявок и смены цвета ника. Постраничный формат.")
+    public ResponseEntity<PageResponse<PaidFeaturePeriodDto>> getPaidFeatureHistory(
+            @PathVariable Long id,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        requireOwnerOrAdmin(id, "Вы можете просматривать только свою историю покупок");
+        Pageable pageable = PageRequests.of(page, size, paginationConfig,
+                Sort.by(Sort.Direction.DESC, "startedAt"));
+        return ResponseEntity.ok(PageResponse.from(
+                walletService.getPaidFeatureHistory(id, pageable)));
     }
 
     @GetMapping("/{id}/wallet/pricing")

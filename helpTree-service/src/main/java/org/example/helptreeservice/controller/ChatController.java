@@ -10,6 +10,7 @@ import org.example.helptreeservice.dto.chat.ChatResponse;
 import org.example.helptreeservice.dto.chat.CreateChatRequest;
 import org.example.helptreeservice.dto.chat.MessageCursorResponse;
 import org.example.helptreeservice.dto.chat.MessageResponse;
+import org.example.helptreeservice.dto.chat.UpdateMessageRequest;
 import org.example.helptreeservice.dto.common.PageResponse;
 import org.example.helptreeservice.exception.UnauthorizedException;
 import org.example.helptreeservice.service.AuthorizationService;
@@ -122,5 +123,21 @@ public class ChatController {
         }
         chatService.deleteMessage(chatId, messageId, user.getUserId());
         return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/{chatId}/messages/{messageId}")
+    @Operation(summary = "Отредактировать своё сообщение",
+            description = "Доступно отправителю в течение настроенного окна (по умолчанию 15 минут).")
+    public ResponseEntity<MessageResponse> editMessage(
+            @PathVariable Long chatId,
+            @PathVariable Long messageId,
+            @Valid @RequestBody UpdateMessageRequest request) {
+        AuthorizationService.UserContext user = authorizationService.getCurrentUser();
+        if (user == null) {
+            throw new UnauthorizedException("Требуется авторизация");
+        }
+        MessageResponse response = chatService.editMessage(
+                chatId, messageId, request, user.getUserId());
+        return ResponseEntity.ok(response);
     }
 }

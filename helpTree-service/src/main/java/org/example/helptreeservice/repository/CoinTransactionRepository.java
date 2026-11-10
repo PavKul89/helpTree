@@ -21,6 +21,9 @@ public interface CoinTransactionRepository extends JpaRepository<CoinTransaction
 
     Page<CoinTransaction> findByUserIdOrderByCreatedAtDesc(Long userId, Pageable pageable);
 
+    /** Complete ledger history for the portable account export. */
+    List<CoinTransaction> findByUserIdOrderByCreatedAtDescIdDesc(Long userId);
+
     Optional<CoinTransaction> findByUserIdAndTypeAndReferenceId(
             Long userId, TransactionType type, String referenceId);
 

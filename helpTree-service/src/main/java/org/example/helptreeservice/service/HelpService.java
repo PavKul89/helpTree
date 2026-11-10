@@ -160,6 +160,7 @@ public class HelpService {
         post.setHelper(helper);
         post.setUpdatedAt(now);
         postRepository.save(post);
+        postRepository.refreshResponsesCount(post.getId());
 
         recordHistory(savedHelp, null, HelpStatus.ACCEPTED, helperId,
                 HelpActorRole.HELPER, null, now);
@@ -434,6 +435,7 @@ public class HelpService {
      * Rechecks the status under a row lock so a help completed at the same time
      * as the sweep is never cancelled.
      */
+    @Transactional
     public boolean cancelStaleAcceptedHelp(Long helpId, LocalDateTime cutoff) {
         Help help = helpRepository.findByIdForUpdate(helpId).orElse(null);
         if (help == null || Boolean.TRUE.equals(help.getDeleted())) {
@@ -449,6 +451,56 @@ public class HelpService {
         String reason = "Автоматическая отмена: помощь не завершена в установленный срок";
         applyCancellation(help, HelpActorRole.SYSTEM, null, reason);
         log.info("SLA: помощь автоматически отменена helpId={}", helpId);
+        return true;
+    }
+
+    @Transactional(readOnly = true)
+    public List<Long> findHelpIdsForSlaReminder(LocalDateTime cutoffFirst,
+                                                LocalDateTime cutoffSecond,
+                                                int limit) {
+        int batchSize = Math.max(1, Math.min(limit, MAX_SLA_BATCH_SIZE));
+        return helpRepository.findIdsForSlaReminder(
+                HelpStatus.ACCEPTED, cutoffFirst, cutoffSecond, PageRequest.of(0, batchSize));
+    }
+
+    /**
+     * Delivers at most one reminder per sweep. The row lock makes the "was it
+     * already sent" check and the timestamp update atomic across instances.
+     * When both thresholds were crossed before the first successful sweep, only
+     * the later reminder is sent and the earlier one is marked as handled.
+     */
+    @Transactional
+    public boolean sendSlaReminder(Long helpId,
+                                   LocalDateTime cutoffFirst,
+                                   LocalDateTime cutoffSecond) {
+        Help help = helpRepository.findByIdForUpdate(helpId).orElse(null);
+        if (help == null || Boolean.TRUE.equals(help.getDeleted())) {
+            return false;
+        }
+        if (help.getStatus() != HelpStatus.ACCEPTED || help.getAcceptedAt() == null) {
+            return false;
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        int percent;
+        if (help.getReminder80SentAt() == null
+                && !help.getAcceptedAt().isAfter(cutoffSecond)) {
+            help.setReminder80SentAt(now);
+            if (help.getReminder50SentAt() == null) {
+                help.setReminder50SentAt(now);
+            }
+            percent = 80;
+        } else if (help.getReminder50SentAt() == null
+                && !help.getAcceptedAt().isAfter(cutoffFirst)) {
+            help.setReminder50SentAt(now);
+            percent = 50;
+        } else {
+            return false;
+        }
+
+        helpRepository.saveAndFlush(help);
+        notifySlaReminder(help, percent);
+        log.info("SLA: отправлено напоминание {}% по helpId={}", percent, helpId);
         return true;
     }
 
@@ -480,6 +532,9 @@ public class HelpService {
                 help.getCancelReason(), now);
 
         helpRepository.saveAndFlush(help);
+        if (post != null) {
+            postRepository.refreshResponsesCount(post.getId());
+        }
         // The cancellation is a fact now; rebuild the helper's projection.
         ratingService.recalculateUsers(List.of(helperId));
 
@@ -537,6 +592,24 @@ public class HelpService {
                 helpPayload(help, helper.getId(), helper.getName(),
                         HelpStatus.ACCEPTED.name(), null),
                 "help:" + help.getId() + ":accepted:helper"));
+    }
+
+    private void notifySlaReminder(Help help, int percent) {
+        String text = "По заявке «" + postTitle(help) + "» прошло " + percent
+                + "% отведённого времени. Завершите помощь или отмените её, "
+                + "иначе она будет отменена автоматически.";
+        for (Long userId : List.of(help.getHelper().getId(), help.getReceiver().getId())) {
+            Map<String, Object> payload = helpPayload(help, null, "Система",
+                    HelpStatus.ACCEPTED.name(), null);
+            payload.put("reminderPercent", percent);
+            notificationService.notify(NotificationCommand.of(
+                    userId,
+                    NotificationType.HELP_SLA_REMINDER,
+                    "Напоминание о помощи",
+                    text,
+                    payload,
+                    "help:" + help.getId() + ":reminder:" + percent + ":" + userId));
+        }
     }
 
     private void notifyHelpCancelled(Help help,

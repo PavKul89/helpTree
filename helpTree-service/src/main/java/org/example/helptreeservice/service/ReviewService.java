@@ -4,12 +4,15 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.helptreeservice.dto.admin.AdminBulkResultDto;
 import org.example.helptreeservice.dto.reviews.CreateReviewRequest;
+import org.example.helptreeservice.dto.reviews.ReplyReviewRequest;
 import org.example.helptreeservice.dto.reviews.ReviewResponse;
+import org.example.helptreeservice.dto.reviews.UpdateReviewRequest;
 import org.example.helptreeservice.entity.Help;
 import org.example.helptreeservice.entity.Review;
 import org.example.helptreeservice.entity.User;
 import org.example.helptreeservice.enums.AdminAuditAction;
 import org.example.helptreeservice.enums.HelpStatus;
+import org.example.helptreeservice.enums.ModerationStatus;
 import org.example.helptreeservice.enums.NotificationType;
 import org.example.helptreeservice.enums.UserBlockScope;
 import org.example.helptreeservice.exception.BadRequestException;
@@ -35,6 +38,11 @@ import java.util.Map;
 @Service
 @RequiredArgsConstructor
 public class ReviewService {
+
+    /** Author may edit rating/comment for this long after creation. */
+    public static final long REVIEW_EDIT_WINDOW_HOURS = 24L;
+    /** Recipient may edit their single reply for this long after publishing it. */
+    public static final long REPLY_EDIT_WINDOW_HOURS = 24L;
 
     private final ReviewRepository reviewRepository;
     private final HelpRepository helpRepository;
@@ -125,6 +133,131 @@ public class ReviewService {
                 "review:" + savedReview.getId()));
 
         return reviewMapper.toResponse(savedReview);
+    }
+
+    /**
+     * The review recipient can publish exactly one reply. The reply may be
+     * edited during the 24-hour window that starts when it was first published.
+     */
+    @Transactional
+    public ReviewResponse replyToReview(Long reviewId, ReplyReviewRequest request, Long currentUserId) {
+        String text = request.getReplyText() == null ? "" : request.getReplyText().trim();
+        if (text.isEmpty()) {
+            throw new BadRequestException("Текст ответа не может быть пустым");
+        }
+
+        Review review = reviewRepository.findByIdForUpdate(reviewId)
+                .orElseThrow(() -> new NotFoundException("Отзыв не найден"));
+        requireVisible(review);
+
+        if (!review.getToUser().getId().equals(currentUserId)) {
+            throw new ForbiddenException("Ответить на отзыв может только получатель");
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        boolean firstReply = review.getReplyText() == null;
+        if (firstReply) {
+            review.setReplyText(text);
+            review.setReplyAt(now);
+            review.setReplyUpdatedAt(null);
+        } else {
+            if (review.getReplyAt() == null
+                    || now.isAfter(review.getReplyAt().plusHours(REPLY_EDIT_WINDOW_HOURS))) {
+                throw new BadRequestException(
+                        "Ответ можно изменить только в течение 24 часов после публикации");
+            }
+            review.setReplyText(text);
+            review.setReplyUpdatedAt(now);
+        }
+
+        Review saved = reviewRepository.save(review);
+        log.info("Пользователь {} ответил на отзыв {} (первый ответ: {})",
+                currentUserId, reviewId, firstReply);
+
+        if (firstReply) {
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("reviewId", saved.getId());
+            payload.put("helpId", saved.getHelp() == null ? null : saved.getHelp().getId());
+            payload.put("toUserId", saved.getToUser().getId());
+            payload.put("toUserName", saved.getToUser().getName());
+            payload.put("replyText", saved.getReplyText());
+            notificationService.notify(NotificationCommand.of(
+                    saved.getFromUser().getId(),
+                    NotificationType.REVIEW_REPLIED,
+                    "Ответ на ваш отзыв",
+                    saved.getToUser().getName() + " ответил на ваш отзыв.",
+                    payload,
+                    "review:" + saved.getId() + ":reply"));
+        }
+
+        return reviewMapper.toResponse(saved);
+    }
+
+    /**
+     * Author edit inside the 24-hour window. The rating is recalculated because
+     * the review may now count as a different value.
+     */
+    @Transactional
+    public ReviewResponse updateReview(Long reviewId, UpdateReviewRequest request, Long currentUserId) {
+        if (request.getRating() == null && request.getComment() == null) {
+            throw new BadRequestException("Укажите новый рейтинг или комментарий");
+        }
+
+        Review review = reviewRepository.findByIdForUpdate(reviewId)
+                .orElseThrow(() -> new NotFoundException("Отзыв не найден"));
+        requireVisible(review);
+
+        if (!review.getFromUser().getId().equals(currentUserId)) {
+            throw new ForbiddenException("Вы можете редактировать только свои отзывы");
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        if (review.getCreatedAt() == null
+                || now.isAfter(review.getCreatedAt().plusHours(REVIEW_EDIT_WINDOW_HOURS))) {
+            throw new BadRequestException("Редактировать отзыв можно только в течение 24 часов после создания");
+        }
+
+        if (request.getRating() != null) {
+            review.setRating(request.getRating());
+        }
+        if (request.getComment() != null) {
+            String comment = request.getComment().trim();
+            review.setComment(comment.isEmpty() ? null : comment);
+        }
+        review.setEditedAt(now);
+        review.setEditCount(review.getEditCount() == null ? 1 : review.getEditCount() + 1);
+
+        Review saved = reviewRepository.save(review);
+        reviewRepository.flush();
+
+        // The stored value changed, so the recipient's aggregate must follow.
+        ratingService.recalculateUsers(List.of(saved.getToUser().getId()));
+        log.info("Отзыв {} отредактирован пользователем {} (изменение #{})",
+                reviewId, currentUserId, saved.getEditCount());
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("reviewId", saved.getId());
+        payload.put("helpId", saved.getHelp() == null ? null : saved.getHelp().getId());
+        payload.put("rating", saved.getRating());
+        payload.put("fromUserId", saved.getFromUser().getId());
+        payload.put("fromUserName", saved.getFromUser().getName());
+        payload.put("editCount", saved.getEditCount());
+        notificationService.notify(NotificationCommand.of(
+                saved.getToUser().getId(),
+                NotificationType.REVIEW_UPDATED,
+                "Отзыв изменён",
+                saved.getFromUser().getName() + " изменил отзыв: " + saved.getRating() + "/5.",
+                payload,
+                "review:" + saved.getId() + ":edit:" + saved.getEditCount()));
+
+        return reviewMapper.toResponse(saved);
+    }
+
+    private void requireVisible(Review review) {
+        if (Boolean.TRUE.equals(review.getDeleted())
+                || review.getModerationStatus() != ModerationStatus.ACTIVE) {
+            throw new NotFoundException("Отзыв не найден");
+        }
     }
 
     @Transactional(readOnly = true)

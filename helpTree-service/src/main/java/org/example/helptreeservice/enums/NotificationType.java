@@ -18,6 +18,14 @@ public enum NotificationType {
     HELP_CANCELLED,
     /** A user received a review. */
     NEW_REVIEW,
+    /** The review author sees that the recipient replied. */
+    REVIEW_REPLIED,
+    /** The review recipient sees that the author edited the review. */
+    REVIEW_UPDATED,
+    /** A participant sees that an accepted help approaches its SLA deadline. */
+    HELP_SLA_REMINDER,
+    /** A user sees that a paid feature is about to expire. */
+    PAID_FEATURE_EXPIRING,
     /** A moderator sees a newly created report. */
     NEW_REPORT,
     /** The reporter sees that their report was accepted or resolved. */

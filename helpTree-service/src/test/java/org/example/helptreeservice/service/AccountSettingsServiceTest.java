@@ -41,6 +41,7 @@ class AccountSettingsServiceTest {
     @Mock private UserService userService;
     @Mock private PasswordService passwordService;
     @Mock private AdminAuditService adminAuditService;
+    @Mock private PublicProfileCache publicProfileCache;
 
     @InjectMocks private AccountSettingsService service;
 
@@ -142,9 +143,28 @@ class AccountSettingsServiceTest {
         assertTrue(result.getShowCity());
         assertFalse(result.getShowEmail());
         assertFalse(result.getShowPhone());
+        assertTrue(result.getShowOnlineStatus());
         assertTrue(result.getAllowDirectMessages());
         assertTrue(result.getSearchable());
         verify(privacySettingsRepository, never()).save(any());
+    }
+
+    @Test
+    void updatePrivacyShouldToggleOnlineStatusAndEvictPublicCache() {
+        when(userRepository.findById(USER_ID)).thenReturn(Optional.of(activeUser()));
+        when(privacySettingsRepository.findById(USER_ID)).thenReturn(Optional.empty());
+        when(privacySettingsRepository.save(any(UserPrivacySettings.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        UpdatePrivacySettingsRequest request = new UpdatePrivacySettingsRequest();
+        request.setShowPhone(true);
+        request.setShowOnlineStatus(false);
+
+        PrivacySettingsDto result = service.updatePrivacySettings(USER_ID, request);
+
+        assertTrue(result.getShowPhone());
+        assertFalse(result.getShowOnlineStatus());
+        verify(publicProfileCache).evictAfterCommit(USER_ID);
     }
 
     @Test

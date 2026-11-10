@@ -105,6 +105,15 @@ public class User {
     @Column(name = "last_login")
     private LocalDateTime lastLogin;
 
+    /**
+     * Last authenticated activity. Touched by access-token validation at most
+     * once per {@code app.auth.last-seen-touch-minutes}; never written on every
+     * request. Public profiles derive "online" from this value only when the
+     * owner enabled {@code showOnlineStatus}.
+     */
+    @Column(name = "last_seen_at")
+    private LocalDateTime lastSeenAt;
+
     @Column(name = "token_version", nullable = false)
     private Long tokenVersion = 0L;
 

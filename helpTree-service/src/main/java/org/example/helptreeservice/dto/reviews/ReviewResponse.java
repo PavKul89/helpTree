@@ -17,4 +17,13 @@ public class ReviewResponse {
     private Integer rating;
     private String comment;
     private LocalDateTime createdAt;
+    private String replyText;
+    private LocalDateTime replyAt;
+    private LocalDateTime replyUpdatedAt;
+    private LocalDateTime editedAt;
+    private Integer editCount;
+    /** Last moment the author may still edit this review. */
+    private LocalDateTime editableUntil;
+    /** Last moment the recipient may still edit the reply, null when no reply exists. */
+    private LocalDateTime replyEditableUntil;
 }

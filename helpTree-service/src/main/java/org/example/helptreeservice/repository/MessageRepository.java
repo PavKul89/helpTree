@@ -10,6 +10,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -54,4 +56,34 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
     long findMaxActiveMessageId(@Param("chatId") Long chatId);
 
     long countBySenderId(Long senderId);
+
+    /** Full authored-message history for the portable account export. */
+    @EntityGraph(attributePaths = {"chat"})
+    @Query("SELECT m FROM Message m WHERE m.sender.id = :userId ORDER BY m.createdAt DESC, m.id DESC")
+    List<Message> findAllForExportBySenderId(@Param("userId") Long userId);
+
+    @Query("SELECT m FROM Message m WHERE m.createdAt < :cutoff ORDER BY m.createdAt ASC")
+    List<Message> findExpiredMessages(@Param("cutoff") LocalDateTime cutoff, Pageable pageable);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("DELETE FROM Message m WHERE m.id IN :ids")
+    int deleteByIdIn(@Param("ids") Collection<Long> ids);
+
+    /**
+     * True while any live message still references the URL. Attachment URLs are
+     * stored as a JSON array, so the check uses jsonb expansion instead of a
+     * column comparison.
+     */
+    @Query(value = """
+            SELECT EXISTS (
+                SELECT 1 FROM messages m
+                WHERE m.deleted_at IS NULL
+                  AND m.attachment_urls <> '[]'
+                  AND EXISTS (
+                      SELECT 1 FROM jsonb_array_elements_text(m.attachment_urls::jsonb) a
+                      WHERE a = :url
+                  )
+            )
+            """, nativeQuery = true)
+    boolean existsActiveByAttachmentUrl(@Param("url") String url);
 }

@@ -110,7 +110,7 @@ class ChatIsolationIntegrationTest {
     }
 
     private MessageResponse send(Long chatId, Long userId, String content) {
-        return chatService.sendMessage(chatId, new CreateMessageRequest(content), userId);
+        return chatService.sendMessage(chatId, new CreateMessageRequest(content, null), userId);
     }
 
     @Test

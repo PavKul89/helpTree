@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @NoArgsConstructor
@@ -21,4 +22,9 @@ public class MessageResponse {
     private String content;
     private LocalDateTime createdAt;
     private Boolean isRead;
+    private List<String> attachmentUrls;
+    private LocalDateTime editedAt;
+    private Integer editCount;
+    /** Last moment the sender may still edit this message. */
+    private LocalDateTime editableUntil;
 }

@@ -10,9 +10,15 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * Cancels ACCEPTED helps that were never completed within the configured SLA.
- * There are no notification channels in the project, so the sweep only records
- * the system cancellation and reopens the post.
+ * SLA sweeps for ACCEPTED helps.
+ *
+ * <ul>
+ *   <li>{@link #sendSlaReminders()} notifies both participants when 50% and 80%
+ *       of {@code acceptedTimeoutHours} have elapsed. Each threshold is recorded
+ *       on the help row, so a restart or a second instance cannot duplicate it.</li>
+ *   <li>{@link #cancelStaleAcceptedHelps()} keeps the existing automatic
+ *       cancellation at 100% of the timeout.</li>
+ * </ul>
  */
 @Component
 @RequiredArgsConstructor
@@ -21,6 +27,44 @@ public class HelpSlaScheduler {
 
     private final HelpService helpService;
     private final HelpProperties helpProperties;
+
+    @Scheduled(cron = "${app.help.reminder-cron:0 0 * * * *}")
+    public void sendSlaReminders() {
+        if (!helpProperties.isSlaEnabled() || !helpProperties.isRemindersEnabled()) {
+            return;
+        }
+
+        long timeoutMinutes = Math.max(1L, helpProperties.getAcceptedTimeoutHours() * 60L);
+        int firstPercent = Math.min(99, Math.max(1, helpProperties.getReminderFirstPercent()));
+        int secondPercent = Math.min(99, Math.max(firstPercent, helpProperties.getReminderSecondPercent()));
+
+        LocalDateTime now = LocalDateTime.now();
+        // A threshold is reached once that share of the timeout has elapsed:
+        // 80% means the help was accepted 0.8 × timeout ago.
+        LocalDateTime cutoffFirst = now.minusMinutes(
+                Math.round(timeoutMinutes * firstPercent / 100.0));
+        LocalDateTime cutoffSecond = now.minusMinutes(
+                Math.round(timeoutMinutes * secondPercent / 100.0));
+
+        List<Long> ids = helpService.findHelpIdsForSlaReminder(
+                cutoffFirst, cutoffSecond, helpProperties.getReminderBatchSize());
+        if (ids.isEmpty()) {
+            return;
+        }
+
+        int sent = 0;
+        for (Long helpId : ids) {
+            try {
+                if (helpService.sendSlaReminder(helpId, cutoffFirst, cutoffSecond)) {
+                    sent++;
+                }
+            } catch (Exception e) {
+                log.error("Не удалось отправить SLA-напоминание helpId={}", helpId, e);
+            }
+        }
+
+        log.info("SLA: отправлено {} из {} напоминаний", sent, ids.size());
+    }
 
     @Scheduled(cron = "${app.help.sla-cron:0 0 * * * *}")
     public void cancelStaleAcceptedHelps() {
