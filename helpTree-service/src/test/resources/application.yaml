@@ -3,6 +3,10 @@ spring:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/helpTree_db}
     username: ${DB_USER:helpTree}
     password: ${DB_PASS:helpTree}
+    hikari:
+      # The Block 22 concurrency scenarios open many parallel transactions and
+      # some inner services use REQUIRES_NEW; a larger pool avoids self-starvation.
+      maximum-pool-size: 30
   jpa:
     hibernate:
       ddl-auto: none
