@@ -64,18 +64,31 @@ public class ProductionConfigValidator implements InitializingBean {
             errors.add("JWT_SECRET must be a random value of at least "
                     + MIN_JWT_SECRET_LENGTH + " characters and must not contain a sample/default marker");
         }
-        if (SecretRules.isWeak(environment.getProperty("spring.datasource.password"),
-                MIN_DB_PASSWORD_LENGTH)) {
+        String databasePassword = environment.getProperty("spring.datasource.password");
+        if (isRepositoryDefault(databasePassword, "helpTree")
+                || SecretRules.isWeak(databasePassword, MIN_DB_PASSWORD_LENGTH)) {
             errors.add("DB_PASS must be a non-default value of at least "
                     + MIN_DB_PASSWORD_LENGTH + " characters");
         }
-        if (SecretRules.isWeak(environment.getProperty("silo.secret-key"),
-                MIN_STORAGE_SECRET_LENGTH)) {
+        String storageSecret = environment.getProperty("silo.secret-key");
+        if (isRepositoryDefault(storageSecret, "helptree-dev-password-change-me")
+                || SecretRules.isWeak(storageSecret, MIN_STORAGE_SECRET_LENGTH)) {
             errors.add("SILO_SECRET_KEY must be a non-default value of at least "
                     + MIN_STORAGE_SECRET_LENGTH + " characters");
         }
-        if (SecretRules.isWeak(environment.getProperty("silo.access-key"), 3)) {
+        String storageAccessKey = environment.getProperty("silo.access-key");
+        if (isRepositoryDefault(storageAccessKey, "helptree")
+                || SecretRules.isWeak(storageAccessKey, 3)) {
             errors.add("SILO_ACCESS_KEY must be set to a non-default storage access key");
+        }
+        String adminPassword = environment.getProperty("app.admin.password");
+        if (isRepositoryDefault(adminPassword, "dev-admin-password-change-in-prod")
+                || !SecretRules.hasLength(adminPassword, 12)) {
+            errors.add("ADMIN_PASSWORD must be at least 12 characters and must not use a repository default");
+        }
+        if (isRepositoryDefault(environment.getProperty("app.admin.email"),
+                "admin@helptree.dev")) {
+            errors.add("ADMIN_EMAIL must not use the repository default");
         }
         if (SecretRules.isWeak(environment.getProperty("app.metrics.prometheus.password"),
                 MIN_PROMETHEUS_SCRAPE_PASSWORD_LENGTH)) {
@@ -139,18 +152,23 @@ public class ProductionConfigValidator implements InitializingBean {
         String cors = environment.getProperty("app.cors.allowed-origins", "");
         if (cors.contains("*")) {
             errors.add("CORS_ORIGINS must not contain '*'");
-        } else if (containsLocalhost(cors)) {
-            warnings.add("CORS_ORIGINS still contains localhost; replace it with the production frontend origin");
+        }
+        if (containsLocalhost(cors)) {
+            errors.add("CORS_ORIGINS must not contain localhost or 127.0.0.1 in production");
         }
 
         String websocket = environment.getProperty("app.websocket.allowed-origins", "");
         if (websocket.contains("*")) {
             errors.add("WS_ALLOWED_ORIGINS must not contain '*'");
-        } else if (containsLocalhost(websocket)) {
-            warnings.add("WS_ALLOWED_ORIGINS still contains localhost; replace it with the production frontend origin");
+        }
+        if (containsLocalhost(websocket)) {
+            errors.add("WS_ALLOWED_ORIGINS must not contain localhost or 127.0.0.1 in production");
         }
 
         String frontend = environment.getProperty("app.auth.frontend-base-url", "");
+        if (containsLocalhost(frontend)) {
+            errors.add("FRONTEND_BASE_URL must not contain localhost or 127.0.0.1 in production");
+        }
         if (!frontend.toLowerCase(Locale.ROOT).startsWith("https://")) {
             warnings.add("FRONTEND_BASE_URL should use https in production");
         }
@@ -159,6 +177,10 @@ public class ProductionConfigValidator implements InitializingBean {
     private boolean containsLocalhost(String value) {
         String normalized = value.toLowerCase(Locale.ROOT);
         return normalized.contains("localhost") || normalized.contains("127.0.0.1");
+    }
+
+    private boolean isRepositoryDefault(String value, String defaultValue) {
+        return value != null && value.trim().equalsIgnoreCase(defaultValue);
     }
 
     private void validateOperations(List<String> warnings) {

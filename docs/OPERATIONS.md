@@ -23,6 +23,13 @@ default-администратора. Ошибка конфигурации до
 `${SILO_ACCESS_KEY}` без значений по умолчанию. Отсутствующая переменная
 ломает старт с понятной ошибкой Spring.
 
+В production используется уже существующий `ProductionConfigValidator`,
+расширенный проверками репозиторных значений; отдельный второй валидатор не
+создаётся. Значения вроде `testSecretKeyForJwtTesting...`,
+`admin@helptree.dev` и `dev-admin-password-change-in-prod` находятся в
+`src/test/resources/application.yaml` для тестов, а не являются fallback в
+основной конфигурации.
+
 ### 1.1. Обязательны всегда
 
 | Переменная | Требование |
@@ -55,19 +62,25 @@ Bean активен только с профилем `prod` и падает до
 - `JWT_SECRET`, `DB_PASS`, `SILO_SECRET_KEY` или `SILO_ACCESS_KEY` пустые,
   короткие или содержат маркер примера (`change-me`, `dev-only`, `example`,
   `password`, `minioadmin` и т. п.);
+- заданы репозиторные значения `DB_PASS=helpTree`, `SILO_ACCESS_KEY=helptree`,
+  `SILO_SECRET_KEY=helptree-dev-password-change-me`,
+  `ADMIN_EMAIL=admin@helptree.dev` или
+  `ADMIN_PASSWORD=dev-admin-password-change-in-prod`; production-пароль
+  администратора должен быть не короче 12 символов;
 - `PROMETHEUS_SCRAPE_PASSWORD` короче 16 символов или содержит маркер примера;
 - включён `WS_RELAY_ENABLED`, но не заданы `WS_RELAY_CLIENT_PASSCODE` и
-  `WS_RELAY_SYSTEM_PASSCODE`;
+  `WS_RELAY_SYSTEM_PASSCODE` либо указан `guest`;
 - `ADMIN_BOOTSTRAP_ENABLED=true`, а `ADMIN_EMAIL`/`ADMIN_PASSWORD` не проходят
   проверку;
 - в `management.endpoints.web.exposure.include` есть `*`, `env`,
   `configprops`, `heapdump`, `threaddump` или `shutdown`;
-- `CORS_ORIGINS` или `WS_ALLOWED_ORIGINS` содержит `*`;
+- `CORS_ORIGINS` или `WS_ALLOWED_ORIGINS` содержит `*`, `localhost` или
+  `127.0.0.1`, либо `FRONTEND_BASE_URL` содержит локальный адрес;
 - положительные лимиты (`RATE_LIMIT_*`, `JWT_EXPIRATION_MS`, `UPLOAD_*`,
   `REPORTS_SLA_HOURS` и др.) меньше или равны нулю.
 
-Предупреждения (не блокируют старт): `localhost` в origin, отключённый
-rate limit/login protection/reconciliation, `MAIL_ENABLED=true` с
+Предупреждения (не блокируют старт): отключённый rate
+limit/login protection/reconciliation, `MAIL_ENABLED=true` с
 `MAIL_HOST=localhost`, `FRONTEND_BASE_URL` без `https://`.
 
 Секреты никогда не печатаются в сообщении об ошибке: указывается только имя
@@ -127,6 +140,15 @@ ADMIN_PASSWORD=<12+ chars, 3 character classes, not a sample>
 
 Не оставляйте bootstrap включённым: это не «постоянный» механизм, а
 одноразовая операция.
+
+`AdminInitializer` запускает bootstrap только при
+`ADMIN_BOOTSTRAP_ENABLED=true` и создаёт аккаунт, только если активного
+администратора ещё нет. Изменение `ADMIN_PASSWORD` после создания учётной
+записи не меняет её пароль: задайте пароль до первого bootstrap-запуска либо
+смените его через интерфейс приложения.
+
+Для production Compose (план 5) добавьте backend-сервису
+`SPRING_PROFILES_ACTIVE=prod`; без профиля эти проверки не включаются.
 
 ---
 

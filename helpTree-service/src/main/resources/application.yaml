@@ -439,19 +439,3 @@ silo:
   access-key: ${SILO_ACCESS_KEY}
   secret-key: ${SILO_SECRET_KEY}
   bucket: ${SILO_BUCKET:helptree-images}
-
-resilience4j:
-  ratelimiter:
-    configs:
-      default:
-        limitForPeriod: 1000
-        limitRefreshPeriod: 60s
-        timeoutDuration: 1000ms
-      auth:
-        limitForPeriod: 100
-        limitRefreshPeriod: 60s
-        timeoutDuration: 1000ms
-      create:
-        limitForPeriod: 50
-        limitRefreshPeriod: 60s
-        timeoutDuration: 1000ms
