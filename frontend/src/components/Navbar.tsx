@@ -100,6 +100,17 @@ export const Navbar: React.FC = () => {
     onNotification: handleNotification,
   });
 
+  const loadWallet = useCallback(async () => {
+    if (!user) return;
+
+    try {
+      const wallet = await walletApi.getWallet(user.id);
+      setHelpCoins(wallet.balance);
+    } catch (err) {
+      console.error(err);
+    }
+  }, [user]);
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -122,7 +133,7 @@ export const Navbar: React.FC = () => {
       loadWallet();
       loadUnreadNotifications();
     }
-  }, [user]);
+  }, [user, loadWallet]);
 
   useEffect(() => {
     const handleCountUpdated = (event: Event) => {
@@ -197,17 +208,6 @@ export const Navbar: React.FC = () => {
       }
     } catch (err) {
       console.error(err);
-    }
-  };
-
-  const loadWallet = async () => {
-    if (user) {
-      try {
-        const wallet = await walletApi.getWallet(user.id);
-        setHelpCoins(wallet.balance);
-      } catch (err) {
-        console.error(err);
-      }
     }
   };
 

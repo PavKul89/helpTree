@@ -21,14 +21,21 @@
 ```powershell
 # Интеграционные тесты против локальной БД
 $env:INTEGRATION_TEST = 'true'
-.\mvnw.cmd -pl helpTree-service test '-Dtest=Block22*' -DfailIfNoTests=false
+.\mvnw.cmd -B -pl helpTree-service test
 ```
 
-Без `INTEGRATION_TEST=true` интеграционные классы пропускаются, а выполняются
-только контрактные unit-тесты:
+Поднимите PostgreSQL на `localhost:5432` с базой `helpTree_db` и учётными
+данными `helpTree` / `helpTree` перед запуском. Без `INTEGRATION_TEST=true`
+интеграционные классы пропускаются.
+
+Фронтенд:
 
 ```powershell
-.\mvnw.cmd -pl helpTree-service test '-Dtest=Block22ContractTest' -DfailIfNoTests=false
+Set-Location frontend
+npm ci
+$env:CI = 'true'
+npm test -- --watchAll=false
+npm run build
 ```
 
 Тестовый профиль (`src/test/resources/application.yaml`) отключает rate limiting
