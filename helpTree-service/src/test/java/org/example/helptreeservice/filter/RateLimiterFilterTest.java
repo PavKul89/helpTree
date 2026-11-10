@@ -1,6 +1,7 @@
 package org.example.helptreeservice.filter;
 
 import jakarta.servlet.FilterChain;
+import org.example.helptreeservice.config.AuthConfig;
 import org.example.helptreeservice.config.RateLimitConfig;
 import org.example.helptreeservice.security.ClientInfoResolver;
 import org.example.helptreeservice.service.ratelimit.DistributedRateLimiter;
@@ -100,6 +101,18 @@ class RateLimiterFilterTest {
     }
 
     @Test
+    void forwardedAddressesUseSeparateBucketsOnlyWhenTrusted() throws Exception {
+        assertEquals(List.of(
+                        "rl:auth.login:203.0.113.10:anon",
+                        "rl:auth.login:203.0.113.11:anon"),
+                loginKeysForForwardedHeaders(true));
+        assertEquals(List.of(
+                        "rl:auth.login:192.0.2.1:anon",
+                        "rl:auth.login:192.0.2.1:anon"),
+                loginKeysForForwardedHeaders(false));
+    }
+
+    @Test
     void shouldSkipPreflightActuatorAndWebSocketHandshake() throws Exception {
         MockHttpServletRequest options = request("OPTIONS", "/api/posts", null);
         MockHttpServletRequest actuator = request("GET", "/actuator/health", null);
@@ -141,5 +154,29 @@ class RateLimiterFilterTest {
             request.setAttribute("X-User-Id", userId);
         }
         return request;
+    }
+
+    private List<String> loginKeysForForwardedHeaders(boolean trustForwardedHeaders) throws Exception {
+        AuthConfig authConfig = new AuthConfig();
+        authConfig.setTrustForwardedHeaders(trustForwardedHeaders);
+        filter = new RateLimiterFilter(config, rateLimiter, new ClientInfoResolver(authConfig));
+        when(rateLimiter.acquire(anyString(), anyInt(), any(Duration.class)))
+                .thenReturn(RateLimitDecision.allowed(10, 9, 60));
+        org.mockito.Mockito.clearInvocations(rateLimiter);
+
+        MockHttpServletRequest first = request("POST", "/api/auth/login", null);
+        first.setRemoteAddr("192.0.2.1");
+        first.addHeader("X-Forwarded-For", "203.0.113.10");
+        MockHttpServletRequest second = request("POST", "/api/auth/login", null);
+        second.setRemoteAddr("192.0.2.1");
+        second.addHeader("X-Forwarded-For", "203.0.113.11");
+
+        filter.doFilter(first, new MockHttpServletResponse(), chain);
+        filter.doFilter(second, new MockHttpServletResponse(), chain);
+
+        ArgumentCaptor<String> keys = ArgumentCaptor.forClass(String.class);
+        verify(rateLimiter, org.mockito.Mockito.times(2))
+                .acquire(keys.capture(), eq(10), any(Duration.class));
+        return keys.getAllValues();
     }
 }

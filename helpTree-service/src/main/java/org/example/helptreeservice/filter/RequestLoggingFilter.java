@@ -5,6 +5,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.example.helptreeservice.security.ClientInfoResolver;
 import org.example.helptreeservice.util.TraceIds;
 import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
@@ -24,6 +25,12 @@ import java.io.IOException;
 @Component
 public class RequestLoggingFilter extends OncePerRequestFilter {
 
+    private final ClientInfoResolver clientInfoResolver;
+
+    public RequestLoggingFilter(ClientInfoResolver clientInfoResolver) {
+        this.clientInfoResolver = clientInfoResolver;
+    }
+
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
@@ -38,7 +45,7 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
                     request.getRequestURI(),
                     response.getStatus(),
                     durationMillis,
-                    request.getRemoteAddr(),
+                    clientInfoResolver.resolveIp(request),
                     MDC.get(TraceIds.MDC_KEY));
         }
     }

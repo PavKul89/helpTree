@@ -1,8 +1,7 @@
 import axios from 'axios';
 import type { PageResponse } from './pagination';
 import type { AuthResponse, LoginRequest, RegisterRequest, User, UserPublic, WsTicket } from '../types';
-
-const API_URL = 'http://localhost:8080';
+import { API_URL } from '../config';
 
 export type ProfileVisibility = 'PUBLIC' | 'REGISTERED' | 'PRIVATE';
 export type DigestFrequency = 'INSTANT' | 'DAILY' | 'WEEKLY' | 'OFF';

@@ -1,12 +1,10 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Client, StompSubscription } from '@stomp/stompjs';
-import { API_URL } from '../api/axios';
+import { WS_URL } from '../config';
 import { authApi } from '../api/authApi';
 import type { Chat, Message, Notification, WsMessageEnvelope } from '../types';
 
 export type WsMessageType = 'NEW_MESSAGE' | 'MESSAGE_DELETED' | 'MESSAGES_READ' | 'CHAT_DELETED' | 'CHAT_UPDATED' | 'NOTIFICATION' | 'ERROR';
-
-const WS_URL = process.env.REACT_APP_WS_URL || `${API_URL.replace(/^http/, 'ws')}/ws/chat`;
 
 interface UseWebSocketChatOptions {
   userId: number | null;
