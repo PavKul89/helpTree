@@ -16,8 +16,9 @@ class ProductionConfigValidatorTest {
         environment.setProperty("spring.datasource.password", "S3cure-Db-Passphrase");
         environment.setProperty("silo.secret-key", "Zx9vQ2mLp8Rt4Yw6");
         environment.setProperty("silo.access-key", "helptree-storage");
+        environment.setProperty("app.metrics.prometheus.password", "Pr0mScrape-Only-Entropy-42!");
         environment.setProperty("management.endpoints.web.exposure.include",
-                "health,info,prometheus,metrics,loggers");
+                "health,metrics,info,prometheus");
         environment.setProperty("app.cors.allowed-origins", "https://helptree.example.org");
         environment.setProperty("app.websocket.allowed-origins", "https://helptree.example.org");
         environment.setProperty("app.auth.frontend-base-url", "https://helptree.example.org");
@@ -39,6 +40,18 @@ class ProductionConfigValidatorTest {
 
         assertTrue(error.getMessage().contains("JWT_SECRET"));
         assertFalse(error.getMessage().contains("dev-only-secret-not-for-production"));
+    }
+
+    @Test
+    void weakPrometheusScrapePasswordAbortsStartupWithoutPrintingTheValue() {
+        MockEnvironment environment = validEnvironment();
+        environment.setProperty("app.metrics.prometheus.password", "weak-scrape-password");
+
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+                () -> new ProductionConfigValidator(environment).afterPropertiesSet());
+
+        assertTrue(error.getMessage().contains("PROMETHEUS_SCRAPE_PASSWORD"));
+        assertFalse(error.getMessage().contains("weak-scrape-password"));
     }
 
     @Test

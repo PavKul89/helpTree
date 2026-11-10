@@ -77,10 +77,19 @@ spring:
       mail.smtp.auth: ${MAIL_SMTP_AUTH:false}
       mail.smtp.starttls.enable: ${MAIL_SMTP_STARTTLS:false}
 
+# API documentation is opt-in outside local development.
+springdoc:
+  api-docs:
+    enabled: ${SWAGGER_ENABLED:false}
+  swagger-ui:
+    enabled: ${SWAGGER_ENABLED:false}
+
 # ======================================================
 # ТРАССИРОВКА
 # ======================================================
 management:
+  server:
+    port: ${MANAGEMENT_PORT:8081}
   health:
     # SMTP is optional. Without this switch Spring Boot's MailHealthIndicator
     # probes localhost:25 and marks the whole application DOWN when mail is disabled.
@@ -140,7 +149,6 @@ management:
           - metrics
           - info
           - prometheus
-          - loggers
         exclude:
           - env
           - configprops
@@ -309,6 +317,9 @@ app:
     # set, not by every scrape.
     refresh-ms: ${METRICS_REFRESH_MS:60000}
     initial-delay-ms: ${METRICS_INITIAL_DELAY_MS:15000}
+    prometheus:
+      username: ${PROMETHEUS_SCRAPE_USERNAME:prometheus}
+      password: ${PROMETHEUS_SCRAPE_PASSWORD:}
   reports:
     # A report older than this marks an SLA breach in the moderation metric.
     sla-hours: ${REPORTS_SLA_HOURS:24}

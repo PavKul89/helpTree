@@ -122,10 +122,14 @@ class JwtAuthFilterTest {
     void isPublicPath_shouldAllowInfrastructurePaths() throws Exception {
         assertTrue(isPublic("/actuator/health", "GET"));
         assertTrue(isPublic("/actuator/health/liveness", "GET"));
+        assertTrue(isPublic("/actuator/info", "GET"));
         assertTrue(isPublic("/actuator/health/readiness", "GET"));
         assertTrue(isPublic("/ws/chat", "GET"));
         assertTrue(isPublic("/swagger-ui/index.html", "GET"));
         assertFalse(isPublic("/actuator/env", "GET"));
+        assertFalse(isPublic("/actuator/metrics", "GET"));
+        assertFalse(isPublic("/actuator/loggers", "GET"));
+        assertFalse(isPublic("/actuator/prometheus", "GET"));
         assertFalse(isPublic("/actuator/health", "POST"));
     }
 

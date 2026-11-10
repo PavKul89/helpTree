@@ -38,6 +38,8 @@ spring:
 # ТРАССИРОВКА (dev)
 # ======================================================
 management:
+  server:
+    port: ${SERVER_PORT:8080}
   tracing:
     enabled: true
     sampling:
@@ -71,8 +73,6 @@ management:
           - metrics
           - info
           - prometheus
-          - loggers
-          - tracing
 
 logging:
   level:
@@ -83,3 +83,9 @@ logging:
     io.micrometer.tracing: DEBUG
     io.opentelemetry: DEBUG
     io.opentelemetry.exporter.otlp: DEBUG
+
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true

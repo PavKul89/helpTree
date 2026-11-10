@@ -8,14 +8,19 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
@@ -83,6 +88,33 @@ public class SecurityConfig {
     }
 
     @Bean
+    @Order(1)
+    public SecurityFilterChain prometheusSecurityFilterChain(
+            HttpSecurity http,
+            PasswordEncoder passwordEncoder,
+            @Value("${app.metrics.prometheus.username:prometheus}") String username,
+            @Value("${app.metrics.prometheus.password:}") String password) throws Exception {
+        if (username.isBlank() || password.isBlank()) {
+            throw new IllegalStateException(
+                    "PROMETHEUS_SCRAPE_USERNAME and PROMETHEUS_SCRAPE_PASSWORD must be configured");
+        }
+        UserDetailsService prometheusUserDetailsService = new InMemoryUserDetailsManager(
+                User.withUsername(username)
+                        .password(passwordEncoder.encode(password))
+                        .roles("PROMETHEUS")
+                        .build());
+        http
+            .securityMatcher("/actuator/prometheus")
+            .userDetailsService(prometheusUserDetailsService)
+            .csrf(AbstractHttpConfigurer::disable)
+            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .authorizeHttpRequests(auth -> auth.anyRequest().hasRole("PROMETHEUS"))
+            .httpBasic(Customizer.withDefaults());
+        return http.build();
+    }
+
+    @Bean
+    @Order(2)
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
@@ -91,7 +123,7 @@ public class SecurityConfig {
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
             .addFilterAfter(rateLimiterFilter, JwtAuthFilter.class)
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info", "/actuator/prometheus").permitAll()
+                .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()
                 // Everything else is administrative: metrics, loggers and any
                 // endpoint exposed later must never be readable anonymously.
                 .requestMatchers("/actuator/**").hasRole("ADMIN")

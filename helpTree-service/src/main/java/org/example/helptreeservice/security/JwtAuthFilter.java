@@ -52,7 +52,6 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     private static final Set<String> PUBLIC_EXACT_PATHS = Set.of(
             "/actuator/info",
-            "/actuator/prometheus",
             "/swagger-ui.html",
             "/api/achievements",
             "/api/activities"

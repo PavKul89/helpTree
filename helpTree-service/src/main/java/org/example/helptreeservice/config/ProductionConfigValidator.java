@@ -30,6 +30,7 @@ public class ProductionConfigValidator implements InitializingBean {
     static final int MIN_JWT_SECRET_LENGTH = 64;
     static final int MIN_DB_PASSWORD_LENGTH = 12;
     static final int MIN_STORAGE_SECRET_LENGTH = 16;
+    static final int MIN_PROMETHEUS_SCRAPE_PASSWORD_LENGTH = 16;
     static final int MIN_RELAY_SECRET_LENGTH = 8;
 
     private final Environment environment;
@@ -75,6 +76,11 @@ public class ProductionConfigValidator implements InitializingBean {
         }
         if (SecretRules.isWeak(environment.getProperty("silo.access-key"), 3)) {
             errors.add("SILO_ACCESS_KEY must be set to a non-default storage access key");
+        }
+        if (SecretRules.isWeak(environment.getProperty("app.metrics.prometheus.password"),
+                MIN_PROMETHEUS_SCRAPE_PASSWORD_LENGTH)) {
+            errors.add("PROMETHEUS_SCRAPE_PASSWORD must be a non-default value of at least "
+                    + MIN_PROMETHEUS_SCRAPE_PASSWORD_LENGTH + " characters");
         }
 
         boolean relayEnabled = environment.getProperty("app.websocket.relay-enabled",

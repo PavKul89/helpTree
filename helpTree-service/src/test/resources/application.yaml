@@ -13,9 +13,25 @@ spring:
   flyway:
     enabled: true
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,info,prometheus
+
+springdoc:
+  api-docs:
+    enabled: ${SWAGGER_ENABLED:false}
+  swagger-ui:
+    enabled: ${SWAGGER_ENABLED:false}
+
 app:
   jwtSecret: testSecretKeyForJwtTesting12345678901234567890
   jwtExpirationMs: 86400000
+  metrics:
+    prometheus:
+      username: scraper-test
+      password: Local-Scraper-Only-42!
   admin:
     email: admin@helptree.dev
     password: dev-admin-password-change-in-prod

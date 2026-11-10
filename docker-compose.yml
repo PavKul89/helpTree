@@ -28,8 +28,13 @@ services:
       - ./helpTree-service/src/main/resources/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
       - prometheus_data:/prometheus
+    environment:
+      PROMETHEUS_SCRAPE_USERNAME: ${PROMETHEUS_SCRAPE_USERNAME:?Set PROMETHEUS_SCRAPE_USERNAME in .env}
+      PROMETHEUS_SCRAPE_PASSWORD: ${PROMETHEUS_SCRAPE_PASSWORD:?Set PROMETHEUS_SCRAPE_PASSWORD in .env}
+      PROMETHEUS_TARGET: "${PROMETHEUS_TARGET:-host.docker.internal:8080}"
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--config.expand-env'
       - '--storage.tsdb.path=/prometheus'
       - '--storage.tsdb.retention.time=15d'
     ports:

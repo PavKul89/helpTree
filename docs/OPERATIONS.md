@@ -55,6 +55,7 @@ Bean активен только с профилем `prod` и падает до
 - `JWT_SECRET`, `DB_PASS`, `SILO_SECRET_KEY` или `SILO_ACCESS_KEY` пустые,
   короткие или содержат маркер примера (`change-me`, `dev-only`, `example`,
   `password`, `minioadmin` и т. п.);
+- `PROMETHEUS_SCRAPE_PASSWORD` короче 16 символов или содержит маркер примера;
 - включён `WS_RELAY_ENABLED`, но не заданы `WS_RELAY_CLIENT_PASSCODE` и
   `WS_RELAY_SYSTEM_PASSCODE`;
 - `ADMIN_BOOTSTRAP_ENABLED=true`, а `ADMIN_EMAIL`/`ADMIN_PASSWORD` не проходят
@@ -138,15 +139,18 @@ Actuator закрыт по умолчанию. Публично доступны
 | `/actuator/health` | все | агрегированный статус, без деталей |
 | `/actuator/health/liveness`, `/readiness` | все | probes |
 | `/actuator/info` | все | версия приложения |
-| `/actuator/prometheus` | все | scrape Prometheus |
+| `/actuator/prometheus` | Basic Auth scrape-пользователя | scrape Prometheus |
 
-Всё остальное, включая `/actuator/metrics` и `/actuator/loggers`, требует
-`ROLE_ADMIN` (правило `/actuator/**` в `SecurityConfig`). Детали health
+`/actuator/metrics` требует `ROLE_ADMIN`. `/actuator/loggers` не включён в
+web exposure. Остальные доступные actuator endpoint'ы требуют `ROLE_ADMIN`
+(правило `/actuator/**` в `SecurityConfig`). Детали health
 (`show-details: when_authorized`) тоже видны только администратору.
 
-`/actuator/loggers` — административная операция: через неё можно временно
-включить DEBUG для конкретного logger и так же вернуть INFO. Не оставляйте
-DEBUG включённым: это повышает объём логов и риск утечки.
+Для скрейпера задайте одинаковые `PROMETHEUS_SCRAPE_USERNAME` и
+`PROMETHEUS_SCRAPE_PASSWORD` приложению и контейнеру Prometheus через окружение
+или `.env`; пароль не хранится в репозитории. Путь
+`/actuator/prometheus` принимает только эти отдельные Basic Auth данные, а не
+пользовательские JWT.
 
 ```bash
 # Публичный статус
@@ -156,17 +160,22 @@ curl -s https://api.example.org/actuator/health
 curl -s -H "Authorization: Bearer <admin-token>" \
   https://api.example.org/actuator/metrics/helptree.outbox.backlog
 
-curl -s -X POST -H "Authorization: Bearer <admin-token>" \
-  -H 'Content-Type: application/json' \
-  -d '{"configuredLevel":"DEBUG"}' \
-  https://api.example.org/actuator/loggers/org.example.helptreeservice.service.ReportService
 ```
 
 Дополнительная изоляция: вынесите Actuator на отдельный порт
-(`MANAGEMENT_SERVER_PORT=8081`) и не публикуйте его через ingress. Тогда
+(`MANAGEMENT_PORT=8081`) и не публикуйте его через ingress или Docker `ports`.
+Тогда
 даже ошибка в правилах безопасности не откроет метрики наружу.
 
-Список exposure задан явно (`health, metrics, info, prometheus, loggers`) и
+В dev-профиле management использует тот же порт, что и приложение, чтобы
+Prometheus мог скрейпить локальный backend. В текущем Compose backend запускается
+на хосте, поэтому `PROMETHEUS_TARGET` по умолчанию равен
+`host.docker.internal:8080`; при переносе backend в Docker укажите
+`<имя-контейнера-бэкенда>:8081`.
+
+Swagger и OpenAPI выключены по умолчанию (`SWAGGER_ENABLED=false`) и включаются
+в dev-профиле. Список exposure задан явно
+(`health, metrics, info, prometheus`) и
 исключает `env`, `configprops`, `heapdump`, `threaddump`, `shutdown`.
 `ProductionConfigValidator` запрещает вернуть их обратно.
 
@@ -604,8 +613,9 @@ npm run build
 
 - старт с `SPRING_PROFILES_ACTIVE=prod` и слабым `JWT_SECRET` завершается
   ошибкой, значение секрета не попадает в лог;
-- `/actuator/health` и `/actuator/prometheus` доступны без токена;
-- `/actuator/metrics` и `/actuator/loggers` без ADMIN возвращают 403;
+- `/actuator/health` и `/actuator/info` доступны без аутентификации;
+- `/actuator/prometheus` принимает только scrape Basic Auth;
+- `/actuator/metrics` без ADMIN возвращает 401/403, а `/actuator/loggers` не exposed;
 - отключение флага даёт `503` с `code=FEATURE_DISABLED`;
 - в логе есть `traceId`, `requestId`, `userId`, `errorType`, а email/телефон/
   токен замаскированы;
