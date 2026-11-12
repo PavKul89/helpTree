@@ -264,6 +264,7 @@ class HelpLifecycleIntegrationTest {
 
     @Test
     void adminCancellationRequiresReasonAndCannotCancelConfirmedHelp() {
+        User admin = createUser("Admin Cancel Admin");
         User helper = createUser("Admin Cancel Helper");
         User receiver = createUser("Admin Cancel Receiver");
         Post post = createPost(receiver);
@@ -271,10 +272,10 @@ class HelpLifecycleIntegrationTest {
         HelpResponse accepted = helpService.acceptHelp(acceptRequest(post), helper.getId());
 
         assertThrows(BadRequestException.class,
-                () -> helpService.cancelHelp(accepted.getId(), 1L, true, "   "));
+                () -> helpService.cancelHelp(accepted.getId(), admin.getId(), true, "   "));
 
         HelpResponse cancelled = helpService.cancelHelp(
-                accepted.getId(), 1L, true, "Нарушение правил");
+                accepted.getId(), admin.getId(), true, "Нарушение правил");
         assertEquals("ADMIN", cancelled.getCancelInitiator());
         assertNull(reloadPost(post).getHelper());
 
@@ -283,7 +284,7 @@ class HelpLifecycleIntegrationTest {
         helpService.completeHelp(second.getId(), secondHelper.getId(), false);
         helpService.confirmHelp(second.getId(), receiver.getId(), false);
         assertThrows(ConflictException.class,
-                () -> helpService.cancelHelp(second.getId(), 1L, true, "Поздно"));
+                () -> helpService.cancelHelp(second.getId(), admin.getId(), true, "Поздно"));
     }
 
     @Test
