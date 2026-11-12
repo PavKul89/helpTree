@@ -123,6 +123,10 @@ public class WalletService {
                 .accountUnblockDebtReduction(economyConfig.getAccountUnblockDebtReduction())
                 .debtBlockThreshold(economyConfig.getDebtBlockThreshold())
                 .dailyBonusCoins(economyConfig.getCoinsPerDailyLogin())
+                .coinsPerHelp(economyConfig.getCoinsPerHelp())
+                .coinsPerHelpReceived(economyConfig.getCoinsPerHelpReceived())
+                .coinsPerReview(economyConfig.getCoinsPerReview())
+                .firstHelpBonus(economyConfig.getFirstHelpBonus())
                 .build();
     }
 

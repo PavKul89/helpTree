@@ -27,7 +27,7 @@ public class HelpStatsDto {
     @Schema(example = "3")
     private int cancelledHelps;
 
-    @Schema(description = "Confirmed helps grouped by month (YYYY-MM)", example = "{\"2026-01\": 12}")
+    @Schema(description = "Confirmed helps grouped by month (MM/YYYY)", example = "{\"01/2026\": 12}")
     private Map<String, Long> byMonth;
 
     @Schema(description = "Confirmed helps grouped by category", example = "{\"REPAIR\": 20}")

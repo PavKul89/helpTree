@@ -12,6 +12,7 @@ import { ProfilePage } from './pages/ProfilePage';
 import { ChatListPage } from './pages/ChatListPage';
 import { ChatPage } from './pages/ChatPage';
 import { UsersPage } from './pages/UsersPage';
+import { SearchPage } from './pages/SearchPage';
 import { MyOrdersPage } from './pages/MyOrdersPage';
 import { FavoritesPage } from './pages/FavoritesPage';
 import { HelpGraphPage } from './pages/HelpGraphPage';
@@ -80,6 +81,7 @@ const AppLayout = () => {
               </ProtectedRoute>
             } />
             <Route path="/users" element={<UsersPage />} />
+            <Route path="/search" element={<SearchPage />} />
             <Route path="/my-orders" element={
               <ProtectedRoute>
                 <MyOrdersPage />

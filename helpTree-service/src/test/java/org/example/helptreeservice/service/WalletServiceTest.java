@@ -451,6 +451,10 @@ class WalletServiceTest {
         assertEquals(economyConfig.getAccountUnblockDebtReduction(),
                 pricing.getAccountUnblockDebtReduction());
         assertEquals(economyConfig.getDebtBlockThreshold(), pricing.getDebtBlockThreshold());
+        assertEquals(economyConfig.getCoinsPerHelp(), pricing.getCoinsPerHelp());
+        assertEquals(economyConfig.getCoinsPerHelpReceived(), pricing.getCoinsPerHelpReceived());
+        assertEquals(economyConfig.getCoinsPerReview(), pricing.getCoinsPerReview());
+        assertEquals(economyConfig.getFirstHelpBonus(), pricing.getFirstHelpBonus());
     }
 
     @Test

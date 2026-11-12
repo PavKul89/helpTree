@@ -37,7 +37,7 @@ public class SearchController {
 
     @GetMapping
     @Operation(summary = "Поиск по публичным сущностям (постранично)",
-            description = "type=POSTS|USERS|REVIEWS|ALL. Ответ — PageResponse. "
+            description = "type=ALL|POST|USER|REVIEW. Ответ — PageResponse. "
                     + "Глубокая пагинация поддерживается, но лучше сужать запрос.")
     @SecurityRequirements
     public ResponseEntity<PageResponse<SearchResultDto>> search(

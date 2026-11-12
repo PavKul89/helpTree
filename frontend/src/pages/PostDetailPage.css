@@ -533,6 +533,42 @@
   margin: 0;
 }
 
+.post-detail-review-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.post-detail-review-report {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 7px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--forest-text-subtle);
+  font-size: 10px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.post-detail-review-report:hover {
+  color: var(--forest-lime);
+}
+
+.post-detail-report-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.post-detail-report-panel {
+  margin: 18px 0 0;
+}
+
 .post-detail-review-comment {
   margin-top: 7px !important;
   color: var(--forest-text-muted);

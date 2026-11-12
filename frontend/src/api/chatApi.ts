@@ -48,4 +48,12 @@ export const chatApi = {
   deleteMessage: async (chatId: number, messageId: number): Promise<void> => {
     await api.delete(`/api/chats/${chatId}/messages/${messageId}`);
   },
+
+  /** Edits the sender's own message inside the server-owned edit window. */
+  editMessage: async (chatId: number, messageId: number, content: string): Promise<Message> => {
+    const response = await api.patch<Message>(`/api/chats/${chatId}/messages/${messageId}`, {
+      content,
+    });
+    return response.data;
+  },
 };

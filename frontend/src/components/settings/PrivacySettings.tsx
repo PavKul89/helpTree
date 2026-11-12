@@ -18,6 +18,7 @@ interface FormState {
   showCity: boolean;
   showEmail: boolean;
   showPhone: boolean;
+  showOnlineStatus: boolean;
   allowDirectMessages: boolean;
   searchable: boolean;
 }
@@ -27,6 +28,7 @@ const EMPTY_FORM: FormState = {
   showCity: true,
   showEmail: false,
   showPhone: false,
+  showOnlineStatus: true,
   allowDirectMessages: true,
   searchable: true,
 };
@@ -42,6 +44,7 @@ const toForm = (settings: PrivacySettingsResponse): FormState => ({
   showCity: settings.showCity,
   showEmail: settings.showEmail,
   showPhone: settings.showPhone,
+  showOnlineStatus: settings.showOnlineStatus,
   allowDirectMessages: settings.allowDirectMessages,
   searchable: settings.searchable,
 });
@@ -190,6 +193,17 @@ export const PrivacySettings: React.FC<PrivacySettingsProps> = ({ onDirtyChange 
                 <span>
                   <strong>Телефон</strong>
                   <small>По умолчанию скрыт из публичного профиля.</small>
+                </span>
+              </label>
+              <label className="settings-toggle">
+                <input
+                  type="checkbox"
+                  checked={form.showOnlineStatus}
+                  onChange={(event) => update('showOnlineStatus', event.target.checked)}
+                />
+                <span>
+                  <strong>Статус «онлайн»</strong>
+                  <small>Показывать другим участникам, что вы сейчас на сайте.</small>
                 </span>
               </label>
               <label className="settings-toggle">

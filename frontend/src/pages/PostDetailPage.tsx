@@ -22,6 +22,8 @@ import { helpApi } from '../api/helpApi';
 import { reviewApi } from '../api/reviewApi';
 import { chatApi } from '../api/chatApi';
 import { authApi } from '../api/authApi';
+import { reportsApi } from '../api/reportsApi';
+import { notifyWalletUpdated, walletApi, type WalletPricingDto } from '../api/walletApi';
 import type { Post, Comment, CommentSort, Help, Review, ReportReason } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/Toast';
@@ -42,8 +44,16 @@ const REPORT_REASONS: { value: ReportReason; label: string }[] = [
   { value: 'ABUSE', label: 'Оскорбление' },
   { value: 'HARASSMENT', label: 'Травля' },
   { value: 'INAPPROPRIATE', label: 'Неуместный контент' },
+  { value: 'FRAUD', label: 'Мошенничество' },
+  { value: 'IMPERSONATION', label: 'Выдаёт себя за другого' },
   { value: 'OTHER', label: 'Другое' },
 ];
+
+type ReportTarget = {
+  type: 'POST' | 'USER' | 'REVIEW';
+  id: number;
+  title: string;
+};
 
 const StatusBadge = ({ status, type = 'post' }: { status: string; type?: 'post' | 'help' }) => {
   const color = getStatusColor(status, type);
@@ -97,6 +107,9 @@ export const PostDetailPage = () => {
   const [reportReason, setReportReason] = useState<ReportReason>('SPAM');
   const [reportDetails, setReportDetails] = useState('');
   const [isReporting, setIsReporting] = useState(false);
+  const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
+  const [pricing, setPricing] = useState<WalletPricingDto | null>(null);
+  const reportKeyRef = useRef<string | null>(null);
   const commentsSortRef = useRef<CommentSort>('OLDEST');
 
   const applyCommentPage = useCallback(
@@ -198,6 +211,23 @@ export const PostDetailPage = () => {
       .then((favorites) => setIsFavorite(favorites.includes(post.id)))
       .catch(() => setIsFavorite(false));
   }, [post?.id, currentUserId]);
+
+  useEffect(() => {
+    if (!currentUserId) {
+      setPricing(null);
+      return;
+    }
+    const controller = new AbortController();
+    walletApi
+      .getPricing(currentUserId, controller.signal)
+      .then((data) => {
+        if (!controller.signal.aborted) setPricing(data);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setPricing(null);
+      });
+    return () => controller.abort();
+  }, [currentUserId]);
 
   const isAuthor = Boolean(post && user?.id === post.userId);
   const isUserBlocked = Boolean(
@@ -306,6 +336,7 @@ export const PostDetailPage = () => {
       const result = await postsApi.boost(postId, boostKeyRef.current);
       boostKeyRef.current = null;
       setPost(result.post);
+      notifyWalletUpdated(result.balance);
       showToast(result.message, 'success');
     } catch (error: unknown) {
       const message =
@@ -344,7 +375,11 @@ export const PostDetailPage = () => {
       await reviewApi.create({ helpId, rating: 5, comment: reviewComment });
       setReviewComment('');
       await loadData();
-      showToast('Отзыв отправлен! +2 HC', 'success');
+      notifyWalletUpdated();
+      showToast(
+        pricing ? `Отзыв отправлен! +${pricing.coinsPerReview} HC` : 'Отзыв отправлен!',
+        'success'
+      );
     } catch {
       showToast('Не удалось отправить отзыв.', 'error');
     }
@@ -385,6 +420,55 @@ export const PostDetailPage = () => {
         details: reportDetails.trim() || undefined,
       });
       setReportingCommentId(null);
+      setReportDetails('');
+      setReportReason('SPAM');
+      showToast('Жалоба отправлена. Спасибо, что помогаете модерировать.', 'success');
+    } catch (error: unknown) {
+      const message =
+        typeof error === 'object' && error !== null && 'response' in error
+          ? (error as { response?: { data?: { message?: string } } }).response?.data?.message
+          : undefined;
+      showToast(message || 'Не удалось отправить жалобу.', 'error');
+    } finally {
+      setIsReporting(false);
+    }
+  };
+
+  const openReportTarget = (target: ReportTarget) => {
+    setReplyingTo(null);
+    setReportingCommentId(null);
+    setReportDetails('');
+    setReportReason('SPAM');
+    reportKeyRef.current = null;
+    setReportTarget(target);
+  };
+
+  const handleSubmitReport = async () => {
+    if (!reportTarget || !user || isReporting) return;
+    setIsReporting(true);
+    if (!reportKeyRef.current) {
+      reportKeyRef.current = createIdempotencyKey('report');
+    }
+    try {
+      if (reportTarget.type === 'REVIEW') {
+        await reviewApi.report(
+          reportTarget.id,
+          { reason: reportReason, details: reportDetails.trim() || undefined },
+          reportKeyRef.current
+        );
+      } else {
+        await reportsApi.create(
+          {
+            targetType: reportTarget.type,
+            targetId: reportTarget.id,
+            reason: reportReason,
+            description: reportDetails.trim() || undefined,
+          },
+          reportKeyRef.current
+        );
+      }
+      reportKeyRef.current = null;
+      setReportTarget(null);
       setReportDetails('');
       setReportReason('SPAM');
       showToast('Жалоба отправлена. Спасибо, что помогаете модерировать.', 'success');
@@ -729,6 +813,34 @@ export const PostDetailPage = () => {
                 {isFavorite ? 'В избранном' : 'В избранное'}
               </button>
             )}
+            {user && user.id !== post.userId && (
+              <div className="post-detail-report-links">
+                <button
+                  type="button"
+                  className="post-detail-favorite"
+                  onClick={() =>
+                    openReportTarget({ type: 'POST', id: post.id, title: post.title })
+                  }
+                >
+                  <Flag size={15} aria-hidden="true" />
+                  Жалоба на заявку
+                </button>
+                <button
+                  type="button"
+                  className="post-detail-favorite"
+                  onClick={() =>
+                    openReportTarget({
+                      type: 'USER',
+                      id: post.userId,
+                      title: `профиль «${post.authorName}»`,
+                    })
+                  }
+                >
+                  <Flag size={15} aria-hidden="true" />
+                  Жалоба на автора
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -751,7 +863,7 @@ export const PostDetailPage = () => {
                   className="post-detail-boost-button"
                 >
                   <Zap size={15} aria-hidden="true" />
-                  {isBoosting ? 'Поднимаем…' : isPostBoosted ? `В топе · ${boostTimeRemaining}` : 'Поднять в топ · 5 HC'}
+                  {isBoosting ? 'Поднимаем…' : isPostBoosted ? `В топе · ${boostTimeRemaining}` : `Поднять в топ${pricing ? ` · ${pricing.boostPrice} HC` : ''}`}
                 </Button>
               )}
               <Button variant="outline" onClick={() => navigate(`/posts/${post.id}/edit`)}>
@@ -764,6 +876,46 @@ export const PostDetailPage = () => {
           </div>
         )}
       </article>
+
+      {reportTarget && (
+        <section className="post-detail-report-panel" aria-label="Форма жалобы">
+          <form
+            className="post-detail-report-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleSubmitReport();
+            }}
+          >
+            <label htmlFor="post-detail-report-target">
+              Жалоба на {reportTarget.title}
+            </label>
+            <select
+              id="post-detail-report-target"
+              value={reportReason}
+              onChange={(event) => setReportReason(event.target.value as ReportReason)}
+            >
+              {REPORT_REASONS.map((option) => (
+                <option value={option.value} key={option.value}>{option.label}</option>
+              ))}
+            </select>
+            <textarea
+              value={reportDetails}
+              onChange={(event) => setReportDetails(event.target.value)}
+              placeholder="Детали (необязательно)"
+              rows={3}
+              maxLength={2000}
+              aria-label="Детали жалобы"
+            />
+            <div className="post-detail-report-actions">
+              <Button type="submit" disabled={isReporting}>
+                <Flag size={14} aria-hidden="true" />
+                {isReporting ? 'Отправляем…' : 'Отправить жалобу'}
+              </Button>
+              <button type="button" onClick={() => setReportTarget(null)}>Отмена</button>
+            </div>
+          </form>
+        </section>
+      )}
 
       <Modal
         isOpen={showDeletePostModal}
@@ -820,7 +972,24 @@ export const PostDetailPage = () => {
           <div className="post-detail-section-heading"><h2>Отзывы</h2></div>
           {reviews.length > 0 ? reviews.map((review) => (
             <article className="post-detail-review" key={review.id}>
-              <p><strong>{review.fromUserName}</strong> оставил отзыв для <strong>{review.toUserName}</strong></p>
+              <div className="post-detail-review-head">
+                <p><strong>{review.fromUserName}</strong> оставил отзыв для <strong>{review.toUserName}</strong></p>
+                {user && user.id !== review.fromUserId && (
+                  <button
+                    type="button"
+                    className="post-detail-review-report"
+                    onClick={() =>
+                      openReportTarget({
+                        type: 'REVIEW',
+                        id: review.id,
+                        title: `отзыв от ${review.fromUserName}`,
+                      })
+                    }
+                  >
+                    <Flag size={13} aria-hidden="true" /> Жалоба
+                  </button>
+                )}
+              </div>
               {review.comment && <p className="post-detail-review-comment">{review.comment}</p>}
             </article>
           )) : <p className="post-detail-empty-note">Отзывов пока нет.</p>}

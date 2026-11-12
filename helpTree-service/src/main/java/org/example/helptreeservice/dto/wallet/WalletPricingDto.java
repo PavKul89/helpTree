@@ -24,4 +24,10 @@ public class WalletPricingDto {
     /** Debt above this threshold blocks the account again, so it limits unblock eligibility. */
     private Integer debtBlockThreshold;
     private Long dailyBonusCoins;
+
+    /* Earning rates: the UI renders these instead of hardcoding economy constants. */
+    private Long coinsPerHelp;
+    private Long coinsPerHelpReceived;
+    private Long coinsPerReview;
+    private Long firstHelpBonus;
 }

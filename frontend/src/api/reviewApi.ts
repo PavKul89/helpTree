@@ -1,6 +1,7 @@
 import api from './axios';
 import { collectAllPages, type PageResponse } from './pagination';
-import type { Review } from '../types';
+import { createIdempotencyKey } from '../utils/idempotency';
+import type { CreateReviewReportRequest, Report, Review } from '../types';
 
 export const reviewApi = {
   create: async (data: { helpId: number; rating: number; comment?: string }): Promise<Review> => {
@@ -36,5 +37,16 @@ export const reviewApi = {
 
   delete: async (reviewId: number): Promise<void> => {
     await api.delete(`/api/reviews/${reviewId}`);
+  },
+
+  report: async (
+    reviewId: number,
+    data: CreateReviewReportRequest,
+    idempotencyKey: string = createIdempotencyKey('review-report')
+  ): Promise<Report> => {
+    const response = await api.post<Report>(`/api/reviews/${reviewId}/report`, data, {
+      headers: { 'Idempotency-Key': idempotencyKey },
+    });
+    return response.data;
   },
 };

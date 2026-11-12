@@ -499,6 +499,10 @@ export const AdminUserDetailPage: React.FC = () => {
     try {
       const result = await adminApi.recalculateRating(id);
       setRecalcResult(result);
+      setUser((previous) =>
+        previous ? { ...previous, rating: result.overallRating } : previous
+      );
+      setRatingValue(String(result.overallRating));
       showToast(`Рейтинг пересчитан: ${formatRating(result.overallRating)}.`, 'success');
       setRecalcOpen(false);
     } catch (recalcFailure) {
@@ -837,8 +841,10 @@ export const AdminUserDetailPage: React.FC = () => {
             Аккаунт заблокирован
             {user.blockedUntil ? ` до ${formatDateTime(user.blockedUntil)}` : ''}.
             {user.blockedAt ? ` Блокировка начата ${formatDateTime(user.blockedAt)}.` : ''}
-            {' '}Блокировка управляется долгом и планировщиком; отдельного admin-эндпоинта
-            блокировки/разблокировки в API нет.
+            {' '}Ограничение может быть связано с долгом или решением модерации.
+            Прямого admin-эндпоинта блокировки/разблокировки нет: санкции
+            применяются при обработке жалоб, а долговая блокировка снимается
+            после разблокировки кошелька.
           </p>
         </div>
       )}
@@ -1824,8 +1830,7 @@ export const AdminUserDetailPage: React.FC = () => {
         description={`Профиль «${user.name}», текущий рейтинг ${formatRating(user.rating)}.`}
         consequences={[
           'Сервер пересчитает статистику рейтинга по фактическим помощям и отзывам.',
-          'Итоговое значение может отличаться от текущего рейтинга профиля.',
-          'Результат пересчёта отобразится на этой странице; поле профиля rating не перезаписывается.',
+          'Итоговое значение сразу обновится в профиле пользователя и в поле рейтинга на этой странице.',
         ]}
         confirmText="Пересчитать"
         tone="default"

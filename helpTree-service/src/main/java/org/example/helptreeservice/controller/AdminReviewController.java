@@ -49,7 +49,7 @@ public class AdminReviewController {
 
     @GetMapping
     @Operation(summary = "Все отзывы (ADMIN, постранично)",
-            description = "Фильтры по автору, оценке и диапазону дат. Сортировка по createdAt DESC.")
+            description = "Фильтры по получателю отзыва (userId), оценке и диапазону дат. Сортировка по createdAt DESC.")
     public ResponseEntity<PageResponse<ReviewResponse>> getReviews(
             @RequestParam(required = false) Long userId,
             @RequestParam(required = false) Integer rating,

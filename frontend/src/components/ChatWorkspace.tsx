@@ -11,11 +11,13 @@ import {
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
+  Check,
   CheckCheck,
   ChevronRight,
   LoaderCircle,
   MessageCircle,
   MessageSquareText,
+  Pencil,
   RefreshCw,
   Search,
   Send,
@@ -73,6 +75,10 @@ export const ChatWorkspace = () => {
   const [sending, setSending] = useState(false);
   const [draft, setDraft] = useState('');
   const [deletingChatId, setDeletingChatId] = useState<number | null>(null);
+  const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
+  const [editDraft, setEditDraft] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [deletingMessageId, setDeletingMessageId] = useState<number | null>(null);
   const [newMessagesBelow, setNewMessagesBelow] = useState(0);
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -151,6 +157,14 @@ export const ChatWorkspace = () => {
   const handleMessageDeleted = useCallback((eventChatId: number, messageId: number) => {
     if (activeChatRef.current !== eventChatId) return;
     setMessages((current) => current.filter((message) => message.id !== messageId));
+    setEditingMessageId((current) => (current === messageId ? null : current));
+  }, []);
+
+  const handleMessageUpdated = useCallback((message: Message) => {
+    if (activeChatRef.current !== message.chatId) return;
+    setMessages((current) =>
+      current.map((item) => (item.id === message.id ? message : item))
+    );
   }, []);
 
   const handleMessagesRead = useCallback((eventChatId: number) => {
@@ -173,6 +187,7 @@ export const ChatWorkspace = () => {
   const { isConnected, subscribeToChat, unsubscribeFromChat, sendMessage } = useWebSocketChat({
     userId: user?.id ?? null,
     onNewMessage: handleNewMessage,
+    onMessageUpdated: handleMessageUpdated,
     onMessageDeleted: handleMessageDeleted,
     onMessagesRead: handleMessagesRead,
     onChatDeleted: handleChatDeleted,
@@ -225,6 +240,8 @@ export const ChatWorkspace = () => {
       sendTimeoutRef.current = null;
     }
     setSending(false);
+    setEditingMessageId(null);
+    setEditDraft('');
 
     const loadMessages = async () => {
       try {
@@ -362,9 +379,65 @@ export const ChatWorkspace = () => {
     }
   };
 
+  const canEditMessage = (message: Message): boolean => {
+    if (message.senderId !== user?.id || !message.editableUntil) return false;
+    return new Date(message.editableUntil).getTime() > Date.now();
+  };
+
+  const startEditingMessage = (message: Message) => {
+    setEditingMessageId(message.id);
+    setEditDraft(message.content);
+  };
+
+  const cancelEditingMessage = () => {
+    setEditingMessageId(null);
+    setEditDraft('');
+  };
+
+  const handleSaveEdit = async (message: Message) => {
+    const content = editDraft.trim();
+    if (!content || savingEdit) return;
+    if (content.length > MAX_MESSAGE_LENGTH) {
+      showToast(`Сообщение не должно превышать ${MAX_MESSAGE_LENGTH} символов.`, 'error');
+      return;
+    }
+
+    setSavingEdit(true);
+    try {
+      const updated = await chatApi.editMessage(message.chatId, message.id, content);
+      setMessages((current) =>
+        current.map((item) => (item.id === updated.id ? updated : item))
+      );
+      cancelEditingMessage();
+      showToast('Сообщение изменено.', 'success');
+    } catch {
+      showToast('Не удалось изменить сообщение: окно редактирования истекло или связь потеряна.', 'error');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const handleDeleteMessage = async (message: Message) => {
+    if (deletingMessageId !== null) return;
+    const confirmed = window.confirm('Удалить это сообщение? Действие необратимо.');
+    if (!confirmed) return;
+
+    setDeletingMessageId(message.id);
+    try {
+      await chatApi.deleteMessage(message.chatId, message.id);
+      setMessages((current) => current.filter((item) => item.id !== message.id));
+      setEditingMessageId((current) => (current === message.id ? null : current));
+      showToast('Сообщение удалено.', 'info');
+    } catch {
+      showToast('Не удалось удалить сообщение.', 'error');
+    } finally {
+      setDeletingMessageId(null);
+    }
+  };
+
   const handleDeleteChat = async (target: Chat) => {
     const confirmed = window.confirm(
-      `Удалить диалог с ${target.participantName}? Сообщения будут удалены.`
+      `Удалить диалог с ${target.participantName}? Он исчезнет из вашего списка, у собеседника переписка сохранится.`
     );
     if (!confirmed) return;
     setDeletingChatId(target.id);
@@ -605,6 +678,7 @@ export const ChatWorkspace = () => {
                         <div className="message-day-label"><span>{group.date}</span></div>
                         {group.messages.map((message) => {
                           const own = message.senderId === user?.id;
+                          const isEditing = editingMessageId === message.id;
                           return (
                             <article
                               className={`message-row${own ? ' is-own' : ''}`}
@@ -618,15 +692,98 @@ export const ChatWorkspace = () => {
                                 />
                               )}
                               <div className="message-bubble">
-                                <p>{message.content}</p>
-                                <span className="message-time">
-                                  <time dateTime={message.createdAt}>
-                                    {formatTime(message.createdAt)}
-                                  </time>
-                                  {own && message.isRead && ownMessageIdsRef.current.has(message.id) && (
-                                    <CheckCheck size={13} aria-label="Прочитано" />
-                                  )}
-                                </span>
+                                {isEditing ? (
+                                  <div className="message-edit">
+                                    <textarea
+                                      value={editDraft}
+                                      onChange={(event) => setEditDraft(event.target.value)}
+                                      aria-label="Редактировать сообщение"
+                                      maxLength={MAX_MESSAGE_LENGTH}
+                                      rows={Math.min(6, Math.max(1, editDraft.split('\n').length))}
+                                      disabled={savingEdit}
+                                    />
+                                    <div className="message-edit-actions">
+                                      <button
+                                        type="button"
+                                        onClick={() => void handleSaveEdit(message)}
+                                        disabled={savingEdit || !editDraft.trim()}
+                                      >
+                                        {savingEdit ? (
+                                          <LoaderCircle className="chat-spin" size={13} />
+                                        ) : (
+                                          <Check size={13} aria-hidden="true" />
+                                        )}
+                                        Сохранить
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={cancelEditingMessage}
+                                        disabled={savingEdit}
+                                      >
+                                        <X size={13} aria-hidden="true" />
+                                        Отмена
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <p>{message.content}</p>
+                                    {message.attachmentUrls && message.attachmentUrls.length > 0 && (
+                                      <ul className="message-attachments">
+                                        {message.attachmentUrls.map((url, index) => (
+                                          <li key={`${message.id}-attachment-${index}`}>
+                                            <a href={url} target="_blank" rel="noreferrer noopener">
+                                              Вложение {index + 1}
+                                            </a>
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    )}
+                                    <span className="message-time">
+                                      {message.editedAt && (
+                                        <span
+                                          className="message-edited"
+                                          title={`Изменено ${formatTime(message.editedAt)}`}
+                                        >
+                                          изменено
+                                        </span>
+                                      )}
+                                      <time dateTime={message.createdAt}>
+                                        {formatTime(message.createdAt)}
+                                      </time>
+                                      {own && message.isRead && ownMessageIdsRef.current.has(message.id) && (
+                                        <CheckCheck size={13} aria-label="Прочитано" />
+                                      )}
+                                    </span>
+                                    {own && (
+                                      <div className="message-actions">
+                                        {canEditMessage(message) && (
+                                          <button
+                                            type="button"
+                                            onClick={() => startEditingMessage(message)}
+                                            aria-label="Редактировать сообщение"
+                                            title="Редактировать"
+                                          >
+                                            <Pencil size={12} aria-hidden="true" />
+                                          </button>
+                                        )}
+                                        <button
+                                          type="button"
+                                          onClick={() => void handleDeleteMessage(message)}
+                                          disabled={deletingMessageId === message.id}
+                                          aria-label="Удалить сообщение"
+                                          title="Удалить"
+                                        >
+                                          {deletingMessageId === message.id ? (
+                                            <LoaderCircle className="chat-spin" size={12} />
+                                          ) : (
+                                            <Trash2 size={12} aria-hidden="true" />
+                                          )}
+                                        </button>
+                                      </div>
+                                    )}
+                                  </>
+                                )}
                               </div>
                             </article>
                           );

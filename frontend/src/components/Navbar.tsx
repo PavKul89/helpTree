@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { chatApi } from '../api/chatApi';
 import { authApi } from '../api/authApi';
-import { WALLET_UPDATED_EVENT, walletApi } from '../api/walletApi';
+import { WALLET_UPDATED_EVENT, walletApi, type WalletPricingDto } from '../api/walletApi';
 import {
   NOTIFICATION_COUNT_EVENT,
   NOTIFICATION_EVENT,
@@ -55,6 +55,7 @@ export const Navbar: React.FC = () => {
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [helpCoins, setHelpCoins] = useState<number>(0);
   const [isVip, setIsVip] = useState(false);
+  const [pricing, setPricing] = useState<WalletPricingDto | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchInput, setSearchInput] = useState('');
   const [unreadNotifications, setUnreadNotifications] = useState(0);
@@ -62,7 +63,11 @@ export const Navbar: React.FC = () => {
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
-    setSearchInput(location.pathname === '/posts' ? params.get('q') ?? '' : '');
+    setSearchInput(
+      location.pathname === '/posts' || location.pathname === '/search'
+        ? params.get('q') ?? ''
+        : ''
+    );
   }, [location.pathname, location.search]);
 
   const handleChatUpdated = useCallback((updatedChat: Chat) => {
@@ -93,6 +98,7 @@ export const Navbar: React.FC = () => {
   useWebSocketChat({
     userId: user?.id ?? null,
     onNewMessage: () => {},
+    onMessageUpdated: () => {},
     onMessageDeleted: () => {},
     onMessagesRead: () => {},
     onChatDeleted: handleChatDeleted,
@@ -108,6 +114,13 @@ export const Navbar: React.FC = () => {
       setHelpCoins(wallet.balance);
     } catch (err) {
       console.error(err);
+    }
+
+    try {
+      setPricing(await walletApi.getPricing(user.id));
+    } catch (err) {
+      console.error(err);
+      setPricing(null);
     }
   }, [user]);
 
@@ -246,17 +259,13 @@ export const Navbar: React.FC = () => {
 
   const submitSearch = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const params = location.pathname === '/posts'
-      ? new URLSearchParams(location.search)
-      : new URLSearchParams();
+    const params = new URLSearchParams();
     const query = searchInput.trim();
 
     if (query) params.set('q', query);
-    else params.delete('q');
-    params.delete('page');
 
     const search = params.toString();
-    navigate(search ? `/posts?${search}` : '/posts');
+    navigate(search ? `/search?${search}` : '/search');
     setMobileOpen(false);
   };
 
@@ -307,16 +316,16 @@ export const Navbar: React.FC = () => {
             Заявки
           </Link>
           <form className="navbar-search" role="search" onSubmit={submitSearch}>
-            <label className="navbar-search-label" htmlFor="navbar-search-input">Поиск заявок</label>
+            <label className="navbar-search-label" htmlFor="navbar-search-input">Поиск</label>
             <input
               id="navbar-search-input"
               type="search"
               value={searchInput}
               onChange={(event) => setSearchInput(event.target.value)}
-              placeholder="Поиск заявок"
+              placeholder="Заявки, люди, отзывы"
               autoComplete="off"
             />
-            <button type="submit" aria-label="Найти заявки">
+            <button type="submit" aria-label="Искать">
               <Search size={17} aria-hidden="true" />
             </button>
           </form>
@@ -456,16 +465,16 @@ export const Navbar: React.FC = () => {
             Заявки
           </Link>
           <form className="navbar-search navbar-search--mobile" role="search" onSubmit={submitSearch}>
-            <label className="navbar-search-label" htmlFor="navbar-mobile-search-input">Поиск заявок</label>
+            <label className="navbar-search-label" htmlFor="navbar-mobile-search-input">Поиск</label>
             <input
               id="navbar-mobile-search-input"
               type="search"
               value={searchInput}
               onChange={(event) => setSearchInput(event.target.value)}
-              placeholder="Поиск заявок"
+              placeholder="Заявки, люди, отзывы"
               autoComplete="off"
             />
-            <button type="submit" aria-label="Найти заявки">
+            <button type="submit" aria-label="Искать">
               <Search size={17} aria-hidden="true" />
             </button>
           </form>
@@ -552,7 +561,8 @@ export const Navbar: React.FC = () => {
         <div className="navbar-banner navbar-banner--blocked">
           <Ban size={16} aria-hidden="true" />
           <span>
-            Ваш аккаунт заблокирован за долг. Помогите другим или разблокируйте за 100 HC.
+            Ваш аккаунт заблокирован за долг. Помогите другим или разблокируйте
+            {pricing ? ` за ${pricing.accountUnblockPrice} HC.` : ' в кошельке.'}
             {daysUntilBlock !== null && daysUntilBlock > 0 && (
               daysUntilBlock >= 24
                 ? ` Осталось ${Math.floor(daysUntilBlock / 24)} дней и ${Math.floor(daysUntilBlock % 24)} часов.`
@@ -566,7 +576,8 @@ export const Navbar: React.FC = () => {
         <div className="navbar-banner navbar-banner--warning">
           <AlertTriangle size={16} aria-hidden="true" />
           <span>
-            Внимание! Ваш долг: {debtWarning}. Помогите {debtWarning - 2} людям, чтобы избежать блокировки.
+            Внимание! Ваш долг: {debtWarning}. Помогите другим, чтобы снизить долг
+            {pricing ? `; блокировка наступает при долге выше ${pricing.debtBlockThreshold}.` : '.'}
           </span>
         </div>
       )}

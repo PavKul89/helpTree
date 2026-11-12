@@ -4,11 +4,20 @@ import { WS_URL } from '../config';
 import { authApi } from '../api/authApi';
 import type { Chat, Message, Notification, WsMessageEnvelope } from '../types';
 
-export type WsMessageType = 'NEW_MESSAGE' | 'MESSAGE_DELETED' | 'MESSAGES_READ' | 'CHAT_DELETED' | 'CHAT_UPDATED' | 'NOTIFICATION' | 'ERROR';
+export type WsMessageType =
+  | 'NEW_MESSAGE'
+  | 'MESSAGE_UPDATED'
+  | 'MESSAGE_DELETED'
+  | 'MESSAGES_READ'
+  | 'CHAT_DELETED'
+  | 'CHAT_UPDATED'
+  | 'NOTIFICATION'
+  | 'ERROR';
 
 interface UseWebSocketChatOptions {
   userId: number | null;
   onNewMessage: (message: Message) => void;
+  onMessageUpdated: (message: Message) => void;
   onMessageDeleted: (chatId: number, messageId: number) => void;
   onMessagesRead: (chatId: number) => void;
   onChatDeleted: (chatId: number) => void;
@@ -35,6 +44,7 @@ export function useWebSocketChat(options: UseWebSocketChatOptions) {
   const handleEnvelope = useCallback((envelope: WsMessageEnvelope) => {
     const {
       onNewMessage,
+      onMessageUpdated,
       onMessageDeleted,
       onMessagesRead,
       onChatDeleted,
@@ -47,6 +57,11 @@ export function useWebSocketChat(options: UseWebSocketChatOptions) {
       case 'NEW_MESSAGE':
         if (envelope.message) {
           onNewMessage(envelope.message);
+        }
+        break;
+      case 'MESSAGE_UPDATED':
+        if (envelope.message) {
+          onMessageUpdated(envelope.message);
         }
         break;
       case 'MESSAGE_DELETED':

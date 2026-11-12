@@ -120,6 +120,7 @@ interface ProfileFieldControlProps {
   max?: string;
   required?: boolean;
   wide?: boolean;
+  readOnly?: boolean;
 }
 
 const ProfileFieldControl: React.FC<ProfileFieldControlProps> = ({
@@ -136,6 +137,7 @@ const ProfileFieldControl: React.FC<ProfileFieldControlProps> = ({
   max,
   required = false,
   wide = false,
+  readOnly = false,
 }) => {
   const hintId = `${id}-hint`;
   const errorId = `${id}-error`;
@@ -161,6 +163,7 @@ const ProfileFieldControl: React.FC<ProfileFieldControlProps> = ({
         maxLength={maxLength}
         max={max}
         required={required}
+        readOnly={readOnly}
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy}
         className={error ? 'has-error' : undefined}
@@ -245,13 +248,11 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
     try {
       const payload: {
         name: string;
-        email: string;
         phone?: string;
         city?: string;
         birthDate?: string;
       } = {
         name: normalizedForm.name,
-        email: normalizedForm.email,
       };
 
       if (normalizedForm.phone !== normalizedBaseline.phone) {
@@ -339,11 +340,12 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
             value={form.email}
             onChange={(value) => updateField('email', value)}
             error={errors.email}
-            hint="Используется для входа. После изменения входите с новым адресом."
+            hint="Используется для входа. Сменить email можно только отдельной процедурой подтверждения, поэтому здесь поле недоступно."
             autoComplete="email"
             inputMode="email"
             maxLength={200}
             required
+            readOnly
           />
           <ProfileFieldControl
             id="settings-phone"

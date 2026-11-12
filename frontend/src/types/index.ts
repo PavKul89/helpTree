@@ -71,6 +71,15 @@ export interface Review {
   rating: number;
   comment?: string;
   createdAt: string;
+  replyText?: string;
+  replyAt?: string;
+  replyUpdatedAt?: string;
+  editedAt?: string;
+  editCount?: number;
+  /** Last moment the author may still edit this review. */
+  editableUntil?: string;
+  /** Last moment the recipient may still edit the reply, null when no reply exists. */
+  replyEditableUntil?: string;
 }
 
 export interface Comment {
@@ -109,9 +118,62 @@ export interface CommentAction {
   totalComments: number;
 }
 
-export type ReportReason = 'SPAM' | 'ABUSE' | 'HARASSMENT' | 'INAPPROPRIATE' | 'OTHER';
+export type SearchType = 'ALL' | 'POST' | 'USER' | 'REVIEW';
+
+/** One hit of GET /api/search. */
+export interface SearchResult {
+  type: Exclude<SearchType, 'ALL'>;
+  id: number;
+  title: string;
+  snippet?: string;
+  category?: string;
+  city?: string;
+  rating?: number;
+  createdAt: string;
+  ownerId?: number;
+  /** Relative route supplied by the server for this hit. */
+  link: string;
+}
+
+export type ReportReason =
+  | 'SPAM'
+  | 'ABUSE'
+  | 'HARASSMENT'
+  | 'INAPPROPRIATE'
+  | 'FRAUD'
+  | 'IMPERSONATION'
+  | 'OTHER';
+
+export type ReportTargetType =
+  | 'POST'
+  | 'USER'
+  | 'COMMENT'
+  | 'REVIEW'
+  | 'MESSAGE'
+  /** Historical only: new HELP/CHAT reports are rejected by the server. */
+  | 'HELP'
+  | 'CHAT'
+  /** Target of a report-level moderation action; never a report target itself. */
+  | 'REPORT';
+
+export type ReportStatus = 'OPEN' | 'IN_REVIEW' | 'RESOLVED' | 'REJECTED' | 'DUPLICATE';
+export type ReportPriority = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
 
 export interface CreateCommentReportRequest {
+  reason: ReportReason;
+  details?: string;
+}
+
+/** Body of POST /api/reports. */
+export interface CreateReportRequest {
+  targetType: ReportTargetType;
+  targetId: number;
+  reason: ReportReason;
+  description?: string;
+}
+
+/** Body of POST /api/reviews/{id}/report. */
+export interface CreateReviewReportRequest {
   reason: ReportReason;
   details?: string;
 }
@@ -120,17 +182,46 @@ export interface Report {
   id: number;
   reporterId?: number;
   reporterName?: string;
-  targetType: 'POST' | 'USER' | 'COMMENT' | 'MESSAGE' | 'HELP' | 'CHAT';
+  targetType: ReportTargetType;
   targetId: number;
   reason: ReportReason;
-  details?: string;
-  status: 'OPEN' | 'IN_REVIEW' | 'RESOLVED' | 'REJECTED' | 'DUPLICATE';
-  priority: 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
+  description?: string;
+  status: ReportStatus;
+  priority: ReportPriority;
+  assignedModeratorId?: number;
+  assignedModeratorName?: string;
   resolution?: string;
+  duplicateOfId?: number;
   resolvedById?: number;
   resolvedByName?: string;
   resolvedAt?: string;
   createdAt: string;
+  updatedAt?: string;
+}
+
+export interface ReportMeta {
+  targetTypes: ReportTargetType[];
+  reasons: ReportReason[];
+  statuses: ReportStatus[];
+  priorities: ReportPriority[];
+  maxDescriptionLength: number;
+}
+
+export interface ReportEvent {
+  id: number;
+  actorId?: number;
+  actorName?: string;
+  eventType: string;
+  fromStatus?: ReportStatus;
+  toStatus?: ReportStatus;
+  internalNote?: string | null;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface ReportDetails {
+  report: Report;
+  events: ReportEvent[];
 }
 
 export interface Chat {
@@ -152,6 +243,11 @@ export interface Message {
   content: string;
   createdAt: string;
   isRead: boolean;
+  attachmentUrls?: string[];
+  editedAt?: string;
+  editCount?: number;
+  /** Last moment the sender may still edit this message. */
+  editableUntil?: string;
 }
 
 export interface AuthResponse {
@@ -204,7 +300,15 @@ export interface CreateMessageRequest {
 }
 
 export interface WsMessageEnvelope {
-  type: 'NEW_MESSAGE' | 'MESSAGE_DELETED' | 'MESSAGES_READ' | 'CHAT_DELETED' | 'CHAT_UPDATED' | 'NOTIFICATION' | 'ERROR';
+  type:
+    | 'NEW_MESSAGE'
+    | 'MESSAGE_UPDATED'
+    | 'MESSAGE_DELETED'
+    | 'MESSAGES_READ'
+    | 'CHAT_DELETED'
+    | 'CHAT_UPDATED'
+    | 'NOTIFICATION'
+    | 'ERROR';
   message?: Message;
   chat?: Chat;
   chatId?: number;
@@ -223,6 +327,10 @@ export type NotificationType =
   | 'HELP_CONFIRMED'
   | 'HELP_CANCELLED'
   | 'NEW_REVIEW'
+  | 'REVIEW_REPLIED'
+  | 'REVIEW_UPDATED'
+  | 'HELP_SLA_REMINDER'
+  | 'PAID_FEATURE_EXPIRING'
   | 'NEW_REPORT'
   | 'REPORT_ACCEPTED'
   | 'REPORT_REJECTED'

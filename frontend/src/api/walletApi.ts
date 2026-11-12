@@ -48,6 +48,10 @@ export interface WalletPricingDto {
   accountUnblockDebtReduction: number;
   debtBlockThreshold: number;
   dailyBonusCoins: number;
+  coinsPerHelp: number;
+  coinsPerHelpReceived: number;
+  coinsPerReview: number;
+  firstHelpBonus: number;
 }
 
 export type WalletPurchaseType = 'VIP' | 'ACCOUNT_UNBLOCK' | 'NICKNAME_COLOR';

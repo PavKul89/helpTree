@@ -955,17 +955,17 @@ export const WalletPage: React.FC = () => {
                 <li>
                   <HandHeart size={16} aria-hidden="true" />
                   <span>Помощь по заявке</span>
-                  <strong>+10</strong>
+                  <strong>{pricing ? `+${formatNumber(pricing.coinsPerHelp)}` : '—'}</strong>
                 </li>
                 <li>
                   <ArrowDownLeft size={16} aria-hidden="true" />
                   <span>Полученная помощь</span>
-                  <strong>+2</strong>
+                  <strong>{pricing ? `+${formatNumber(pricing.coinsPerHelpReceived)}` : '—'}</strong>
                 </li>
                 <li>
                   <Star size={16} aria-hidden="true" />
                   <span>Отзыв</span>
-                  <strong>+2</strong>
+                  <strong>{pricing ? `+${formatNumber(pricing.coinsPerReview)}` : '—'}</strong>
                 </li>
                 <li>
                   <CalendarCheck size={16} aria-hidden="true" />
@@ -975,7 +975,7 @@ export const WalletPage: React.FC = () => {
                 <li>
                   <Award size={16} aria-hidden="true" />
                   <span>Бонус новичка</span>
-                  <strong>+3</strong>
+                  <strong>{pricing ? `+${formatNumber(pricing.firstHelpBonus)}` : '—'}</strong>
                 </li>
               </ul>
               <p className="wallet-facts-note">

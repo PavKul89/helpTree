@@ -1,19 +1,26 @@
-import type { ReactNode } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import {
   AlertTriangle,
   ArrowLeft,
   Check,
   Coins,
+  Flag,
   Heart,
   Info,
+  Loader2,
   Lock,
   MapPin,
   MessageCircle,
+  RefreshCw,
   Settings2,
   ShieldCheck,
+  ShieldOff,
 } from 'lucide-react';
+import { reportsApi } from '../api/reportsApi';
 import { useAuth } from '../context/AuthContext';
+import { getRelativeTime } from '../utils/dateUtils';
+import type { Report, ReportReason, ReportStatus, ReportTargetType } from '../types';
 import './SafetyPage.css';
 
 interface GuidanceCard {
@@ -55,8 +62,66 @@ const GUIDANCE_CARDS: GuidanceCard[] = [
   },
 ];
 
+const STATUS_META: Record<ReportStatus, { label: string; tone: string }> = {
+  OPEN: { label: 'Открыта', tone: 'open' },
+  IN_REVIEW: { label: 'На рассмотрении', tone: 'review' },
+  RESOLVED: { label: 'Рассмотрена', tone: 'resolved' },
+  REJECTED: { label: 'Отклонена', tone: 'rejected' },
+  DUPLICATE: { label: 'Дубликат', tone: 'duplicate' },
+};
+
+const TARGET_META: Record<ReportTargetType, string> = {
+  POST: 'Заявка',
+  USER: 'Пользователь',
+  COMMENT: 'Комментарий',
+  REVIEW: 'Отзыв',
+  MESSAGE: 'Сообщение',
+  HELP: 'Помощь',
+  CHAT: 'Чат',
+  REPORT: 'Обращение',
+};
+
+const REASON_META: Record<ReportReason, string> = {
+  SPAM: 'Спам',
+  ABUSE: 'Оскорбление',
+  HARASSMENT: 'Преследование',
+  INAPPROPRIATE: 'Неуместный контент',
+  FRAUD: 'Мошенничество',
+  IMPERSONATION: 'Выдача себя за другого',
+  OTHER: 'Другое',
+};
+
+const REPORT_PAGE_SIZE = 6;
+
 export const SafetyPage = () => {
   const { user } = useAuth();
+  const [reports, setReports] = useState<Report[]>([]);
+  const [reportsTotal, setReportsTotal] = useState(0);
+  const [reportsLoading, setReportsLoading] = useState(false);
+  const [reportsError, setReportsError] = useState<string | null>(null);
+
+  const loadReports = useCallback(async () => {
+    if (!user) {
+      setReports([]);
+      setReportsTotal(0);
+      return;
+    }
+    setReportsLoading(true);
+    setReportsError(null);
+    try {
+      const response = await reportsApi.getMine({ page: 0, size: REPORT_PAGE_SIZE });
+      setReports(response.content);
+      setReportsTotal(response.totalElements);
+    } catch {
+      setReportsError('Не удалось загрузить ваши жалобы. Попробуйте ещё раз.');
+    } finally {
+      setReportsLoading(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    void loadReports();
+  }, [loadReports]);
 
   return (
     <div className="safety-page">
@@ -140,19 +205,24 @@ export const SafetyPage = () => {
               </li>
               <li>
                 <Check size={15} aria-hidden="true" />
-                <span>Вы можете удалить своё сообщение.</span>
-              </li>
-              <li>
-                <Check size={15} aria-hidden="true" />
                 <span>
-                  Удаление чата доступно его участнику и удаляет переписку для обоих
-                  собеседников.
+                  Своё сообщение можно отредактировать в течение 15 минут после
+                  отправки и удалить в любой момент.
                 </span>
               </li>
               <li>
                 <Check size={15} aria-hidden="true" />
                 <span>
-                  Встроенной жалобы на сообщение или собеседника в текущей версии нет.
+                  Удаление чата скрывает диалог в вашем списке. У собеседника
+                  переписка сохраняется, поэтому не рассчитывайте, что удаление чата
+                  стирает сообщения для другого участника.
+                </span>
+              </li>
+              <li>
+                <Check size={15} aria-hidden="true" />
+                <span>
+                  Если общение стало нежелательным, откройте профиль собеседника и
+                  заблокируйте его — переписка и взаимодействие будут закрыты.
                 </span>
               </li>
             </ul>
@@ -192,58 +262,165 @@ export const SafetyPage = () => {
         </div>
       </section>
 
-      <section className="safety-section" aria-labelledby="safety-limits-title">
-        <div className="safety-limitations">
-          <div className="safety-limitations-head">
-            <span className="safety-limitations-icon" aria-hidden="true">
-              <AlertTriangle size={22} />
-            </span>
-            <div>
-              <h2 id="safety-limits-title">Встроенные жалобы пока не поддерживаются</h2>
-              <p>
-                В текущей версии HelpTree нет серверного API для жалоб и модерации
-                обращений. Поэтому в интерфейсе нет кнопок «Пожаловаться», списка «Мои
-                жалобы», статусов рассмотрения и раздела модерации: такие элементы были
-                бы декоративными и вводили бы в заблуждение.
-              </p>
-            </div>
-          </div>
-
-          <ul className="safety-limits-list">
-            <li>
-              Жалобы на пользователей, заявки, публикации, комментарии, отзывы и
-              сообщения чата.
-            </li>
-            <li>Личная блокировка нежелательного пользователя и список блокировок.</li>
-            <li>Ограничения отправки сообщений в чате на основании жалоб.</li>
-            <li>Уведомления о статусе и решении по обращению.</li>
-          </ul>
-
-          <p className="safety-limitations-note">
-            Это ограничение backend, а не скрытая настройка интерфейса. Пока сервер не
-            принимает обращения, HelpTree не показывает ложные подтверждения и не
-            обещает сроки рассмотрения.
+      <section className="safety-section" aria-labelledby="safety-reports-title">
+        <div className="safety-section-head">
+          <h2 id="safety-reports-title">Жалобы, блокировки и модерация</h2>
+          <p>
+            Эти механизмы работают на сервере: обращение попадает в очередь модерации,
+            а его статус можно отслеживать ниже.
           </p>
         </div>
+        <div className="safety-split safety-split--three">
+          <article className="safety-panel">
+            <span className="safety-panel-icon" aria-hidden="true">
+              <Flag size={18} />
+            </span>
+            <h3>На что можно пожаловаться</h3>
+            <p>
+              На заявку, комментарий, отзыв и пользователя. На странице заявки можно
+              пожаловаться на саму заявку, её комментарии, отзывы и автора. Жалоба
+              содержит причину и необязательное описание, а повторная открытая жалоба
+              на тот же объект отклоняется сервером.
+            </p>
+          </article>
+          <article className="safety-panel">
+            <span className="safety-panel-icon" aria-hidden="true">
+              <ShieldOff size={18} />
+            </span>
+            <h3>Личная блокировка</h3>
+            <p>
+              В профиле пользователя доступна блокировка с областью действия: всё
+              взаимодействие, только сообщения, публичный профиль с отзывами или
+              отклики на помощь. Блокировку можно снять там же.
+            </p>
+          </article>
+          <article className="safety-panel">
+            <span className="safety-panel-icon" aria-hidden="true">
+              <AlertTriangle size={18} />
+            </span>
+            <h3>Что происходит дальше</h3>
+            <p>
+              Обращение получает статус «Открыта», затем «На рассмотрении» и решение —
+              «Рассмотрена», «Отклонена» или «Дубликат». О решении и действиях модерации
+              приходят уведомления.
+            </p>
+          </article>
+        </div>
+
+        {user && (
+          <div className="safety-my-reports">
+            <div className="safety-my-reports-head">
+              <div>
+                <h3>Мои жалобы</h3>
+                <p>
+                  {reportsTotal > 0
+                    ? `Всего обращений: ${reportsTotal}. Показаны последние ${reports.length}.`
+                    : 'Здесь появятся отправленные вами обращения и их статусы.'}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="safety-reports-refresh"
+                onClick={() => void loadReports()}
+                disabled={reportsLoading}
+              >
+                {reportsLoading ? (
+                  <Loader2 size={14} className="safety-spin" aria-hidden="true" />
+                ) : (
+                  <RefreshCw size={14} aria-hidden="true" />
+                )}
+                Обновить
+              </button>
+            </div>
+
+            {reportsError && (
+              <p className="safety-reports-error" role="alert">
+                {reportsError}
+              </p>
+            )}
+
+            {!reportsError && reportsLoading && reports.length === 0 && (
+              <p className="safety-reports-empty">
+                <Loader2 size={14} className="safety-spin" aria-hidden="true" />
+                Загружаем обращения…
+              </p>
+            )}
+
+            {!reportsError && !reportsLoading && reports.length === 0 && (
+              <p className="safety-reports-empty">
+                Вы ещё не отправляли жалоб. Кнопки «Жалоба на заявку» и «Жалоба на
+                автора» есть на странице заявки, а в комментариях и отзывах — отдельная
+                кнопка жалобы.
+              </p>
+            )}
+
+            {reports.length > 0 && (
+              <ul className="safety-reports-list">
+                {reports.map((report) => {
+                  const status = STATUS_META[report.status];
+                  return (
+                    <li key={report.id} className="safety-report-item">
+                      <div className="safety-report-main">
+                        <span className={`safety-report-status is-${status.tone}`}>
+                          {status.label}
+                        </span>
+                        <strong>
+                          {TARGET_META[report.targetType]} #{report.targetId}
+                        </strong>
+                        <span className="safety-report-reason">
+                          {REASON_META[report.reason]}
+                        </span>
+                      </div>
+                      {report.description && (
+                        <p className="safety-report-description">{report.description}</p>
+                      )}
+                      {report.resolution && (
+                        <p className="safety-report-resolution">
+                          Решение: {report.resolution}
+                        </p>
+                      )}
+                      <div className="safety-report-meta">
+                        <span>№{report.id}</span>
+                        <span>Создана {getRelativeTime(report.createdAt)}</span>
+                        {report.updatedAt && report.updatedAt !== report.createdAt && (
+                          <span>Обновлена {getRelativeTime(report.updatedAt)}</span>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        )}
       </section>
 
       <section className="safety-section" aria-labelledby="safety-incident-title">
         <div className="safety-section-head">
           <h2 id="safety-incident-title">Если вы столкнулись с нарушением</h2>
-          <p>Что можно сделать прямо сейчас, не дожидаясь встроенных инструментов.</p>
+          <p>Что можно сделать прямо сейчас.</p>
         </div>
         <div className="safety-panel safety-panel--steps">
           <ol className="safety-steps">
             <li>
               <span>
                 <strong>Остановите взаимодействие.</strong> Прекратите переписку или
-                встречу, если чувствуете угрозу или сильное давление.
+                встречу, если чувствуете угрозу или сильное давление. При необходимости
+                заблокируйте пользователя.
               </span>
             </li>
             <li>
               <span>
                 <strong>Сохраните факты.</strong> Сделайте скриншоты и сохраните ссылки
-                на заявку или профиль — это поможет восстановить обстоятельства.
+                на заявку или профиль — это поможет восстановить обстоятельства и
+                дополнить жалобу.
+              </span>
+            </li>
+            <li>
+              <span>
+                <strong>Отправьте жалобу.</strong> Используйте кнопки жалобы на
+                странице заявки — для самой заявки, её комментариев, отзывов или автора.
+                Статус обращения отображается в разделе «Мои жалобы».
               </span>
             </li>
             <li>
@@ -261,9 +438,9 @@ export const SafetyPage = () => {
             </li>
           </ol>
           <p className="safety-steps-note">
-            HelpTree — платформа взаимопомощи, а не служба экстренной помощи. В текущей
-            версии у неё нет встроенного приёма жалоб, поэтому она не может
-            гарантировать рассмотрение обращения внутри приложения.
+            HelpTree — платформа взаимопомощи, а не служба экстренной помощи. Жалоба
+            попадает в очередь модерации, но не заменяет обращение в экстренные службы и
+            не гарантирует немедленную реакцию.
           </p>
         </div>
       </section>

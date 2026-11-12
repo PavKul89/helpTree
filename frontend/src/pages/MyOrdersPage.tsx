@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { postsApi } from '../api/postsApi';
 import { helpApi } from '../api/helpApi';
+import { notifyWalletUpdated } from '../api/walletApi';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/Toast';
 import { Modal } from '../components/Modal';
@@ -112,7 +113,7 @@ export const MyOrdersPage = () => {
   }, [loadData]);
 
   const helpsList = myHelps;
-  const completedHelps = helpsList.filter((help) => help.status === 'COMPLETED').length;
+  const completedHelps = helpsList.filter((help) => help.status === 'CONFIRMED').length;
   const stats: StatItem[] = [
     { label: 'Всего постов', value: myPosts.length, Icon: FileText },
     { label: 'Открытых', value: myPosts.filter((post) => post.status === 'OPEN').length, Icon: TreeDeciduous },
@@ -147,6 +148,7 @@ export const MyOrdersPage = () => {
     try {
       const result = await postsApi.boost(postId, boostKeyRef.current.key);
       boostKeyRef.current = null;
+      notifyWalletUpdated(result.balance);
       showToast(result.message, 'success');
       setMyPosts((posts) => posts.map((post) => post.id === postId ? result.post : post));
     } catch (error: unknown) {

@@ -33,6 +33,7 @@ export interface PrivacySettings {
   showCity: boolean;
   showEmail: boolean;
   showPhone: boolean;
+  showOnlineStatus: boolean;
   allowDirectMessages: boolean;
   searchable: boolean;
   updatedAt?: string;
@@ -45,6 +46,7 @@ export type UpdatePrivacySettings = Partial<
     | 'showCity'
     | 'showEmail'
     | 'showPhone'
+    | 'showOnlineStatus'
     | 'allowDirectMessages'
     | 'searchable'
   >

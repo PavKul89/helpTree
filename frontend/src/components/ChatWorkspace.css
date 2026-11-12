@@ -541,6 +541,122 @@
   color: var(--chat-lime);
 }
 
+.message-edited {
+  margin-right: auto;
+  color: var(--chat-subtle);
+  font-size: 8px;
+  font-style: italic;
+}
+
+.message-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+  margin-top: 2px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.message-row:hover .message-actions,
+.message-row:focus-within .message-actions {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .message-actions {
+    opacity: 1;
+  }
+}
+
+.message-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--chat-subtle);
+  cursor: pointer;
+}
+
+.message-actions button:hover:not(:disabled) {
+  background: rgba(180, 225, 155, 0.12);
+  color: var(--chat-lime);
+}
+
+.message-actions button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.message-attachments {
+  display: grid;
+  gap: 4px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.message-attachments a {
+  color: var(--chat-lime);
+  font-size: 10px;
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+}
+
+.message-edit {
+  display: grid;
+  gap: 6px;
+}
+
+.message-edit textarea {
+  min-width: 220px;
+  padding: 7px 8px;
+  border: 1px solid rgba(200, 245, 106, 0.32);
+  border-radius: 9px;
+  background: rgba(7, 27, 19, 0.55);
+  color: var(--chat-text);
+  font-size: 12px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.message-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.message-edit-actions button {
+  display: inline-flex;
+  min-height: 26px;
+  align-items: center;
+  gap: 4px;
+  padding: 0 9px;
+  border: 1px solid var(--chat-border);
+  border-radius: 7px;
+  background: rgba(180, 225, 155, 0.08);
+  color: var(--chat-muted);
+  font-size: 9px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.message-edit-actions button:hover:not(:disabled) {
+  border-color: rgba(200, 245, 106, 0.4);
+  color: var(--chat-lime);
+}
+
+.message-edit-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .new-messages-indicator {
   position: absolute;
   z-index: 2;

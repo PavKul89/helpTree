@@ -155,6 +155,7 @@ export const MapPage = () => {
   const deferredSearch = useDeferredValue(search);
   const [category, setCategory] = useState('');
   const [cityFilter, setCityFilter] = useState('');
+  const [radiusKm, setRadiusKm] = useState(10);
 
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [scrollTick, setScrollTick] = useState(0);
@@ -177,7 +178,18 @@ export const MapPage = () => {
   const requestRef = useRef(0);
   const geoRequestRef = useRef(0);
 
-  const filterKey = `${deferredSearch.trim()}|${category}|${cityFilter}`;
+  const filterKey = `${deferredSearch.trim()}|${category}|${cityFilter}|${
+    geo.status === 'granted' ? `${geo.position[0]},${geo.position[1]},${radiusKm}` : ''
+  }`;
+  const geoLatitude = geo.status === 'granted' ? geo.position[0] : undefined;
+  const geoLongitude = geo.status === 'granted' ? geo.position[1] : undefined;
+  const geoQuery = useMemo(
+    () =>
+      geoLatitude !== undefined && geoLongitude !== undefined
+        ? { latitude: geoLatitude, longitude: geoLongitude, radius: radiusKm }
+        : undefined,
+    [geoLatitude, geoLongitude, radiusKm]
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -195,6 +207,7 @@ export const MapPage = () => {
           q: deferredSearch.trim() || undefined,
           category: category || undefined,
           city: cityFilter || undefined,
+          ...(geoQuery ?? {}),
         },
         controller.signal
       )
@@ -217,7 +230,7 @@ export const MapPage = () => {
       });
 
     return () => controller.abort();
-  }, [reloadTick, filterKey, deferredSearch, category, cityFilter]);
+  }, [reloadTick, filterKey, deferredSearch, category, cityFilter, geoQuery]);
 
   const loadMoreFromServer = useCallback(async () => {
     if (loadingMore || !hasNext) return;
@@ -229,6 +242,7 @@ export const MapPage = () => {
         q: deferredSearch.trim() || undefined,
         category: category || undefined,
         city: cityFilter || undefined,
+        ...(geoQuery ?? {}),
       });
       const loaded = data.content.filter(Boolean);
       setPosts((previous) => [...previous, ...loaded]);
@@ -241,7 +255,7 @@ export const MapPage = () => {
     } finally {
       setLoadingMore(false);
     }
-  }, [loadingMore, hasNext, page, deferredSearch, category, cityFilter]);
+  }, [loadingMore, hasNext, page, deferredSearch, category, cityFilter, geoQuery]);
 
   const categoryOptions = useMemo(() => {
     const values = new Set(posts.map((post) => post.category).filter(Boolean));
@@ -275,7 +289,7 @@ export const MapPage = () => {
 
   const unlocatedAllCount = posts.length - locatedPosts.length;
   const unlocatedFilteredCount = filteredPosts.length - filteredLocated.length;
-  const hasActiveFilters = Boolean(search.trim() || category || cityFilter);
+  const hasActiveFilters = Boolean(search.trim() || category || cityFilter || geo.status === 'granted');
   const initialLoading = loading && posts.length === 0;
   const fatalError = Boolean(error) && posts.length === 0;
   const isLocating = geo.status === 'locating';
@@ -434,7 +448,9 @@ export const MapPage = () => {
     setSearch('');
     setCategory('');
     setCityFilter('');
+    setRadiusKm(10);
     setSelectedId(null);
+    setGeo({ status: 'idle' });
   }, []);
 
   const handleLocate = useCallback(() => {
@@ -483,7 +499,7 @@ export const MapPage = () => {
         return {
           tone: 'info',
           title: 'Определяем местоположение',
-          text: 'Подтвердите доступ в браузере. Координаты нужны только для центрирования карты и не отправляются на сервер.',
+          text: 'Подтвердите доступ в браузере. Координаты используются для центрирования карты и фильтра заявок по радиусу.',
           retry: false,
         };
       case 'denied':
@@ -623,6 +639,23 @@ export const MapPage = () => {
             </span>
           </label>
 
+          {geo.status === 'granted' && (
+            <label className="map-field">
+              <span>Радиус</span>
+              <span className="map-select-wrap">
+                <select
+                  value={radiusKm}
+                  onChange={(event) => setRadiusKm(Number(event.target.value))}
+                >
+                  {[5, 10, 25, 50].map((value) => (
+                    <option value={value} key={value}>{value} км</option>
+                  ))}
+                </select>
+                <ChevronDown size={14} aria-hidden="true" />
+              </span>
+            </label>
+          )}
+
           <button
             type="button"
             className="map-reset"
@@ -682,6 +715,20 @@ export const MapPage = () => {
             </span>
           )}
 
+          {geo.status === 'granted' && (
+            <span className="map-chip">
+              <LocateFixed size={12} aria-hidden="true" />
+              <span className="map-chip-label">Рядом: {radiusKm} км</span>
+              <button
+                type="button"
+                onClick={() => setGeo({ status: 'idle' })}
+                aria-label="Убрать фильтр по расстоянию"
+              >
+                <X size={12} aria-hidden="true" />
+              </button>
+            </span>
+          )}
+
           <button type="button" className="map-active-reset" onClick={resetFilters}>
             Сбросить всё
           </button>
@@ -692,8 +739,9 @@ export const MapPage = () => {
         <p className="map-privacy">
           <ShieldCheck size={15} aria-hidden="true" />
           <span>
-            Геолокация включается только по кнопке «Рядом со мной» и работает в
-            браузере. Ваши координаты не отправляются на сервер.
+            Геолокация включается только по кнопке «Рядом со мной». Если фильтр
+            активен, браузер передаёт координаты серверу, чтобы выбрать заявки в
+            выбранном радиусе; сервер не сохраняет их в профиле.
           </span>
         </p>
       )}
@@ -1007,8 +1055,8 @@ export const MapPage = () => {
                   </span>
                   <h2>Заявки без координат</h2>
                   <p>
-                    У открытых заявок пока не заполнены широта и долгота, поэтому
-                    нанести их на карту нельзя. Они доступны в списке рядом.
+                    Среди заявок по текущим фильтрам нет записей с широтой и долготой,
+                    поэтому нанести их на карту нельзя. Они доступны в списке рядом.
                   </p>
                 </div>
               ) : (
