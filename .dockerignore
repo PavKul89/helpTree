@@ -1,0 +1,11 @@
+.git
+.gitignore
+.env
+.env.*
+**/target
+**/node_modules
+**/build
+**/.DS_Store
+docs
+monitoring
+scripts

@@ -1,0 +1,249 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "3"
+
+services:
+  caddy:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN in .env}
+      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+      silo:
+        condition: service_healthy
+    networks:
+      - helptree
+    healthcheck:
+      test: ["CMD", "caddy", "validate", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    mem_limit: 256m
+    logging: *default-logging
+
+  backend:
+    image: ${BACKEND_IMAGE:-helptree-backend:local}
+    build:
+      context: .
+      dockerfile: helpTree-service/Dockerfile
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_URL: jdbc:postgresql://postgres:5432/helpTree_db
+      DB_USER: ${DB_USER:?Set DB_USER in .env}
+      DB_PASS: ${DB_PASS:?Set DB_PASS in .env}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      ADMIN_BOOTSTRAP_ENABLED: ${ADMIN_BOOTSTRAP_ENABLED:-false}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:?Set ADMIN_EMAIL in .env}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env}
+      SILO_ENDPOINT: http://silo:9000
+      SILO_PUBLIC_ENDPOINT: https://storage.${DOMAIN:?Set DOMAIN in .env}
+      SILO_ACCESS_KEY: ${SILO_ACCESS_KEY:?Set SILO_ACCESS_KEY in .env}
+      SILO_SECRET_KEY: ${SILO_SECRET_KEY:?Set SILO_SECRET_KEY in .env}
+      SILO_BUCKET: ${SILO_BUCKET:?Set SILO_BUCKET in .env}
+      CORS_ORIGINS: https://${DOMAIN}
+      WS_ALLOWED_ORIGINS: https://${DOMAIN}
+      FRONTEND_BASE_URL: https://${DOMAIN}
+      TRUST_FORWARDED_HEADERS: "true"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318/v1/traces
+      SWAGGER_ENABLED: "false"
+      MANAGEMENT_PORT: "8081"
+      PROMETHEUS_SCRAPE_USERNAME: prometheus
+      PROMETHEUS_SCRAPE_PASSWORD: ${PROMETHEUS_SCRAPE_PASSWORD:?Set PROMETHEUS_SCRAPE_PASSWORD in .env}
+      MAIL_ENABLED: ${MAIL_ENABLED:-false}
+      MAIL_HOST: ${MAIL_HOST:-localhost}
+      MAIL_PORT: ${MAIL_PORT:-25}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_SMTP_AUTH: ${MAIL_SMTP_AUTH:-false}
+      MAIL_SMTP_STARTTLS: ${MAIL_SMTP_STARTTLS:-false}
+      MAIL_FROM: ${MAIL_FROM:-no-reply@helptree.local}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+    expose:
+      - "8080"
+      - "8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      silo:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8081/actuator/health >/dev/null || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+    networks:
+      - helptree
+    mem_limit: 1g
+    logging: *default-logging
+
+  frontend:
+    image: ${FRONTEND_IMAGE:-helptree-frontend:local}
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        REACT_APP_API_URL: ""
+        REACT_APP_WS_URL: ""
+    restart: unless-stopped
+    expose:
+      - "80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/health >/dev/null || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+    networks:
+      - helptree
+    mem_limit: 128m
+    logging: *default-logging
+
+  postgres:
+    image: postgres:16.5-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:?Set DB_USER in .env}
+      POSTGRES_PASSWORD: ${DB_PASS:?Set DB_PASS in .env}
+      POSTGRES_DB: helpTree_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - helptree
+    mem_limit: 1g
+    logging: *default-logging
+
+  silo:
+    image: pgsty/silo:RELEASE.2026-10-26T00-00-00Z
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${SILO_ACCESS_KEY:?Set SILO_ACCESS_KEY in .env}
+      MINIO_ROOT_PASSWORD: ${SILO_SECRET_KEY:?Set SILO_SECRET_KEY in .env}
+      MINIO_BROWSER: "off"
+    volumes:
+      - silo_data:/data
+    expose:
+      - "9000"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - mc alias set health http://localhost:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}" >/dev/null && mc ready health
+      interval: 20s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+    networks:
+      - helptree
+    mem_limit: 1g
+    logging: *default-logging
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-lifecycle
+    secrets:
+      - prometheus_scrape_password
+    volumes:
+      - ./deploy/prometheus.prod.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    expose:
+      - "9090"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:9090/-/healthy"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+    networks:
+      - helptree
+    mem_limit: 512m
+    logging: *default-logging
+
+  grafana:
+    image: grafana/grafana:12.1.1
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in .env}
+      GF_INSTALL_PLUGINS: ""
+      GF_UPDATE_CHECKER_ENABLED: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    expose:
+      - "3000"
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health >/dev/null || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
+    networks:
+      - helptree
+    mem_limit: 512m
+    logging: *default-logging
+
+  jaeger:
+    image: cr.jaegertracing.io/jaegertracing/jaeger:2.13.0
+    restart: unless-stopped
+    expose:
+      - "4317"
+      - "4318"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:16686/"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - helptree
+    mem_limit: 512m
+    logging: *default-logging
+
+volumes:
+  caddy_data:
+  caddy_config:
+  postgres_data:
+  silo_data:
+  prometheus_data:
+  grafana_data:
+
+secrets:
+  prometheus_scrape_password:
+    environment: PROMETHEUS_SCRAPE_PASSWORD
+
+networks:
+  helptree:
+    driver: bridge
