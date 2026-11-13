@@ -1,6 +1,7 @@
 package org.example.helptreeservice.service;
 
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.example.helptreeservice.exception.UnauthorizedException;
@@ -100,6 +101,25 @@ class JwtServiceTest {
     }
 
     @Test
+    void parseAccessClaims_shouldRejectExpiredAccessToken() {
+        Date issuedAt = new Date(System.currentTimeMillis() - 10_000L);
+        String expiredToken = Jwts.builder()
+                .subject("expired@test.com")
+                .claim(JwtService.CLAIM_USER_ID, 1L)
+                .claim(JwtService.CLAIM_ROLE, "USER")
+                .claim(JwtService.CLAIM_SESSION_ID, SESSION_ID)
+                .claim(JwtService.CLAIM_TOKEN_VERSION, 0L)
+                .claim(JwtService.CLAIM_TOKEN_TYPE, JwtService.TOKEN_TYPE_ACCESS)
+                .issuedAt(issuedAt)
+                .expiration(new Date(issuedAt.getTime() + 1_000L))
+                .signWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8)))
+                .compact();
+
+        assertThrows(ExpiredJwtException.class,
+                () -> jwtService.parseAccessClaims(expiredToken));
+    }
+
+    @Test
     void generateWsTicket_shouldCreateShortLivedTicketThatIsNotAnAccessToken() {
         String ticket = jwtService.generateWsTicket(
                 1L, "test@email.com", "USER", SESSION_ID, 0L, 60);
@@ -162,4 +182,3 @@ class JwtServiceTest {
                 () -> jwtService.parseAccessClaims(unknown));
     }
 }
-

@@ -37,7 +37,7 @@ export const LoginPage = () => {
     setIsSubmitting(true);
     try {
       const response = await authApi.login({ email: email.trim(), password });
-      login(response.accessToken, {
+      login(response.accessToken, response.refreshToken, {
         id: response.userId,
         email: response.email,
         name: response.email.split('@')[0],

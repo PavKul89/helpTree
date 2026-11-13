@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { Client, StompSubscription } from '@stomp/stompjs';
 import { WS_URL } from '../config';
 import { authApi } from '../api/authApi';
+import { refreshAccessToken } from '../api/axios';
 import type { Chat, Message, Notification, WsMessageEnvelope } from '../types';
 
 export type WsMessageType =
@@ -36,6 +37,8 @@ export function useWebSocketChat(options: UseWebSocketChatOptions) {
   const errorSubscriptionRef = useRef<StompSubscription | null>(null);
   const chatIdsRef = useRef<Set<number>>(new Set());
   const handlersRef = useRef(options);
+  const authRetryRef = useRef(0);
+  const connectRef = useRef<() => void>(() => undefined);
 
   useEffect(() => {
     handlersRef.current = options;
@@ -225,6 +228,10 @@ export function useWebSocketChat(options: UseWebSocketChatOptions) {
           const wsTicket = await authApi.getWsTicket();
           const separator = WS_URL.includes('?') ? '&' : '?';
           client.brokerURL = `${WS_URL}${separator}ticket=${encodeURIComponent(wsTicket.ticket)}`;
+          const currentToken = localStorage.getItem('accessToken') || localStorage.getItem('token');
+          if (currentToken) {
+            client.connectHeaders.Authorization = `Bearer ${currentToken}`;
+          }
         } catch (error) {
           // Rejecting here aborts the STOMP connect loop and surfaces as an
           // unhandled promise rejection (the dev error overlay). The ticket
@@ -239,6 +246,7 @@ export function useWebSocketChat(options: UseWebSocketChatOptions) {
       heartbeatIncoming: 10000,
       heartbeatOutgoing: 10000,
       onConnect: () => {
+        authRetryRef.current = 0;
         setIsConnected(true);
         subscribeToUser();
         chatIdsRef.current.forEach((chatId) => subscribeToChat(chatId));
@@ -257,12 +265,32 @@ export function useWebSocketChat(options: UseWebSocketChatOptions) {
       onStompError: (frame) => {
         console.error('STOMP error:', frame.headers['message'], frame.body);
         setIsConnected(false);
+        const errorText = `${frame.headers['message'] || ''} ${frame.body || ''}`.toLowerCase();
+        const isAuthorizationError =
+          /401|unauthori[sz]ed|forbidden|access denied|token|authentication|авторизац|доступ запрещ/.test(
+            errorText
+          );
+        if (isAuthorizationError && authRetryRef.current === 0) {
+          authRetryRef.current = 1;
+          void (async () => {
+            await client.deactivate();
+            await refreshAccessToken();
+            if (clientRef.current === client) {
+              clientRef.current = null;
+            }
+            connectRef.current();
+          })().catch((error: unknown) => {
+            console.error('Не удалось обновить авторизацию WebSocket', error);
+          });
+        }
       },
     });
 
     clientRef.current = client;
     client.activate();
   }, [userId, subscribeToUser, subscribeToChat, clearSubscriptions]);
+
+  connectRef.current = connect;
 
   const disconnect = useCallback(() => {
     clearSubscriptions();

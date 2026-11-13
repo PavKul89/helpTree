@@ -181,7 +181,7 @@ app:
   # No fallback. ProductionConfigValidator additionally rejects known
   # development values and secrets shorter than 64 characters in prod.
   jwtSecret: ${JWT_SECRET}
-  jwtExpirationMs: ${JWT_EXPIRATION_MS:86400000}
+  jwtExpirationMs: ${JWT_EXPIRATION_MS:1800000}
   auth:
     password-reset-token-minutes: ${PASSWORD_RESET_TOKEN_MINUTES:30}
     email-verification-token-hours: ${EMAIL_VERIFICATION_TOKEN_HOURS:24}

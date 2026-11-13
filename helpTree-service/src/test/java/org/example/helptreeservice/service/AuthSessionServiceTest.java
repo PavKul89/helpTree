@@ -313,6 +313,7 @@ class AuthSessionServiceTest {
 
         IssuedTokens issued = service.rotateRefreshToken("old-raw", "198.51.100.7", "Android");
 
+        assertEquals("access-token", issued.accessToken());
         assertEquals("new-raw-token", issued.refreshToken());
         assertEquals(session.getId(), issued.sessionId());
         assertNotNull(oldToken.getRevokedAt());

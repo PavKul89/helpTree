@@ -1,12 +1,13 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import type { User } from '../types';
 import { authApi } from '../api/authApi';
+import { clearAuthTokens } from '../api/axios';
 import { notifyWalletUpdated, walletApi } from '../api/walletApi';
 
 interface AuthContextType {
   user: User | null;
   token: string | null;
-  login: (token: string, user: User) => void;
+  login: (accessToken: string, refreshToken: string, user: User) => void;
   logout: () => void;
   setUser: (user: User | null) => void;
   isLoading: boolean;
@@ -18,6 +19,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const handleLogout = () => {
+      setToken(null);
+      setUser(null);
+    };
+    const handleTokenRefresh = () => {
+      setToken(localStorage.getItem('accessToken'));
+    };
+    window.addEventListener('auth:logout', handleLogout);
+    window.addEventListener('auth:tokens-refreshed', handleTokenRefresh);
+    return () => {
+      window.removeEventListener('auth:logout', handleLogout);
+      window.removeEventListener('auth:tokens-refreshed', handleTokenRefresh);
+    };
+  }, []);
 
   useEffect(() => {
     const savedToken = localStorage.getItem('accessToken');
@@ -32,7 +49,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             .catch(() => {});
         })
         .catch(() => {
-          localStorage.removeItem('accessToken');
+          clearAuthTokens();
           setToken(null);
         })
         .finally(() => setIsLoading(false));
@@ -41,9 +58,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, []);
 
-  const login = (newToken: string, newUser: User) => {
-    localStorage.setItem('accessToken', newToken);
-    setToken(newToken);
+  const login = (accessToken: string, refreshToken: string, newUser: User) => {
+    localStorage.setItem('accessToken', accessToken);
+    localStorage.setItem('refreshToken', refreshToken);
+    setToken(accessToken);
     setUser(newUser);
     walletApi
       .claimDailyBonus(newUser.id)
@@ -52,7 +70,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const logout = () => {
-    localStorage.removeItem('accessToken');
+    const accessToken = localStorage.getItem('accessToken') || localStorage.getItem('token');
+    const refreshToken = localStorage.getItem('refreshToken');
+    void authApi.logout(refreshToken, accessToken).catch((error: unknown) => {
+      console.warn('Не удалось завершить сессию на сервере', error);
+    });
+    clearAuthTokens();
     setToken(null);
     setUser(null);
   };

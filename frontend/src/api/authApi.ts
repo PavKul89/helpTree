@@ -2,6 +2,7 @@ import axios from 'axios';
 import type { PageResponse } from './pagination';
 import type { AuthResponse, LoginRequest, RegisterRequest, User, UserPublic, WsTicket } from '../types';
 import { API_URL } from '../config';
+import api, { refreshAccessToken } from './axios';
 
 export type ProfileVisibility = 'PUBLIC' | 'REGISTERED' | 'PRIVATE';
 export type DigestFrequency = 'INSTANT' | 'DAILY' | 'WEEKLY' | 'OFF';
@@ -101,27 +102,6 @@ export interface AccountSession {
   current: boolean;
 }
 
-const createAuthApi = () => {
-  const instance = axios.create({
-    baseURL: API_URL,
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  });
-
-  instance.interceptors.request.use((config) => {
-    const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  });
-
-  return instance;
-};
-
-const api = createAuthApi();
-
 export const authApi = {
   login: async (data: LoginRequest): Promise<AuthResponse> => {
     const response = await api.post<AuthResponse>('/api/auth/login', data);
@@ -129,8 +109,17 @@ export const authApi = {
   },
 
   getWsTicket: async (): Promise<WsTicket> => {
-    const response = await api.post<WsTicket>('/api/auth/ws-ticket');
-    return response.data;
+    try {
+      const response = await api.post<WsTicket>('/api/auth/ws-ticket');
+      return response.data;
+    } catch (error) {
+      if (!axios.isAxiosError(error) || error.response?.status !== 401) {
+        throw error;
+      }
+      await refreshAccessToken();
+      const response = await api.post<WsTicket>('/api/auth/ws-ticket');
+      return response.data;
+    }
   },
 
   register: async (data: RegisterRequest): Promise<AuthResponse> => {
@@ -167,6 +156,15 @@ export const authApi = {
 
   logoutAll: async (): Promise<void> => {
     await api.post('/api/auth/logout-all');
+  },
+
+  logout: async (refreshToken: string | null, accessToken: string | null): Promise<void> => {
+    if (!accessToken) return;
+    await api.post(
+      '/api/auth/logout',
+      { refreshToken },
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
   },
 
   // --------------------------------------------------- account preferences
@@ -230,12 +228,7 @@ export const authApi = {
   uploadAvatar: async (userId: number, file: File): Promise<string> => {
     const formData = new FormData();
     formData.append('file', file);
-    const response = await axios.post(`${API_URL}/api/users/${userId}/avatar`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-        Authorization: `Bearer ${localStorage.getItem('accessToken') || localStorage.getItem('token')}`,
-      },
-    });
+    const response = await api.post(`${API_URL}/api/users/${userId}/avatar`, formData);
     return response.data.url;
   },
 
