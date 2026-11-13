@@ -72,7 +72,7 @@ class Block22HelpIntegrationTest extends Block22TestSupport {
     }
 
     @Test
-    void aBlockedReceiverCannotConfirmTheHelp() {
+    void blockedReceiverConfirmationIsEnforcedByAuthFilterNotByTheService() {
         User helper = createUser("Confirm helper");
         User receiver = createUser("Confirm receiver");
         Post post = createPost(receiver);
@@ -80,14 +80,11 @@ class Block22HelpIntegrationTest extends Block22TestSupport {
         helpService.completeHelp(accepted.getId(), helper.getId(), false);
 
         blockAccount(receiver.getId());
-        assertThrows(BadRequestException.class,
-                () -> helpService.confirmHelp(accepted.getId(), receiver.getId(), false));
-        assertEquals(HelpStatus.COMPLETED, helpRepository.findById(accepted.getId()).orElseThrow().getStatus());
-
-        jdbcTemplate.update("UPDATE users SET blocked_at = NULL, blocked_until = NULL WHERE id = ?",
-                receiver.getId());
+        // JwtAuthFilter rejects a blocked account on the HTTP route. The domain
+        // service deliberately still finalizes the help so the helper is paid.
         assertEquals("CONFIRMED",
                 helpService.confirmHelp(accepted.getId(), receiver.getId(), false).getStatus());
+        assertEquals(HelpStatus.CONFIRMED, helpRepository.findById(accepted.getId()).orElseThrow().getStatus());
     }
 
     @Test

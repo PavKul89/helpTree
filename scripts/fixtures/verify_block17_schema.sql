@@ -324,15 +324,18 @@ BEGIN
         RAISE EXCEPTION 'idx_outbox_events_dispatch must cover (status, available_at, id)';
     END IF;
 
+    -- V62 partitions outbox_events, so the dedupe index is intentionally
+    -- non-unique (a partitioned UNIQUE index must include the partition key).
     IF NOT EXISTS (
         SELECT 1 FROM pg_indexes
         WHERE schemaname = 'public'
-          AND indexname = 'uq_outbox_events_dedupe'
-          AND indexdef LIKE 'CREATE UNIQUE INDEX%'
+          AND indexname = 'idx_outbox_events_dedupe'
+          AND indexdef LIKE 'CREATE INDEX%'
+          AND indexdef NOT LIKE 'CREATE UNIQUE INDEX%'
           AND indexdef LIKE '%dedupe_key%'
           AND indexdef LIKE '%dedupe_key IS NOT NULL%'
     ) THEN
-        RAISE EXCEPTION 'uq_outbox_events_dedupe must be a partial UNIQUE index on dedupe_key';
+        RAISE EXCEPTION 'idx_outbox_events_dedupe must be a partial non-unique index on dedupe_key';
     END IF;
 
     -- ============================================================

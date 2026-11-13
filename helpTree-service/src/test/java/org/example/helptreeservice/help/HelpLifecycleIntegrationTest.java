@@ -406,7 +406,10 @@ class HelpLifecycleIntegrationTest {
 
         assertEquals("CONFIRMED", helpService.confirmHelp(
                 adminHelp.getId(), admin.getId(), true, "Проверка блокировки").getStatus());
-        slaScheduler.confirmStaleCompletedHelps();
+        // Call the per-help SLA transition directly: the scheduler is protected by
+        // a one-minute ShedLock, so another test may still hold its lock.
+        assertTrue(helpService.autoConfirmStaleCompletedHelp(
+                systemHelp.getId(), LocalDateTime.now().minusHours(168)));
 
         assertEquals(HelpStatus.CONFIRMED, reloadHelp(systemHelp).getStatus());
         assertSingleAward(adminHelpHelper.getId(), adminBlockedReceiver.getId(), adminPost.getId());
