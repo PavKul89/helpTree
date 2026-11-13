@@ -326,6 +326,7 @@ app:
     initial-delay-ms: ${METRICS_INITIAL_DELAY_MS:15000}
     prometheus:
       username: ${PROMETHEUS_SCRAPE_USERNAME:prometheus}
+      # Without a scrape password, Prometheus uses the regular admin-protected actuator chain.
       password: ${PROMETHEUS_SCRAPE_PASSWORD:}
   reports:
     # A report older than this marks an SLA breach in the moderation metric.

@@ -16,23 +16,25 @@
     <property name="CONSOLE_PATTERN"
               value="%d{yyyy-MM-dd HH:mm:ss.SSS} %highlight(%-5level) [%thread] %green([HELPTREE]) trace=%X{traceId:-} span=%X{spanId:-} request=%X{requestId:-} user=%X{userId:-} error=%X{errorType:-} %cyan(%logger{36}) - %msg%n"/>
 
-    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
-        <layout class="org.example.helptreeservice.logging.MaskingPatternLayout">
-            <pattern>${CONSOLE_PATTERN}</pattern>
-        </layout>
-    </appender>
-
-    <appender name="JSON" class="ch.qos.logback.core.ConsoleAppender">
-        <layout class="org.example.helptreeservice.logging.StructuredLogLayout"/>
-    </appender>
-
     <springProfile name="prod">
+        <appender name="JSON" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder class="ch.qos.logback.core.encoder.LayoutWrappingEncoder">
+                <layout class="org.example.helptreeservice.logging.StructuredLogLayout"/>
+            </encoder>
+        </appender>
         <root level="INFO">
             <appender-ref ref="JSON"/>
         </root>
     </springProfile>
 
     <springProfile name="!prod">
+        <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder class="ch.qos.logback.core.encoder.LayoutWrappingEncoder">
+                <layout class="org.example.helptreeservice.logging.MaskingPatternLayout">
+                    <pattern>${CONSOLE_PATTERN}</pattern>
+                </layout>
+            </encoder>
+        </appender>
         <root level="INFO">
             <appender-ref ref="CONSOLE"/>
         </root>

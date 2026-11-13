@@ -7,8 +7,12 @@ import org.example.helptreeservice.util.ApiErrorWriter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Condition;
+import org.springframework.context.annotation.ConditionContext;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
+import org.springframework.core.type.AnnotatedTypeMetadata;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.config.Customizer;
@@ -89,6 +93,7 @@ public class SecurityConfig {
 
     @Bean
     @Order(1)
+    @Conditional(PrometheusScrapeCredentialsConfigured.class)
     public SecurityFilterChain prometheusSecurityFilterChain(
             HttpSecurity http,
             PasswordEncoder passwordEncoder,
@@ -111,6 +116,15 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth.anyRequest().hasRole("PROMETHEUS"))
             .httpBasic(Customizer.withDefaults());
         return http.build();
+    }
+
+    public static class PrometheusScrapeCredentialsConfigured implements Condition {
+        @Override
+        public boolean matches(ConditionContext context, AnnotatedTypeMetadata metadata) {
+            String password = context.getEnvironment()
+                    .getProperty("app.metrics.prometheus.password");
+            return password != null && !password.isBlank();
+        }
     }
 
     @Bean
