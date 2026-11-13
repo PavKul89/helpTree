@@ -1,5 +1,6 @@
 package org.example.helptreeservice.scheduler;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.helptreeservice.service.ModerationService;
@@ -19,6 +20,8 @@ public class ModerationExpiryScheduler {
     private final ModerationService moderationService;
 
     @Scheduled(cron = "${app.moderation.expiry-cron:0 5 * * * *}")
+    @SchedulerLock(name = "ModerationExpiryScheduler_restoreExpiredHiddenContent",
+            lockAtMostFor = "PT55M", lockAtLeastFor = "PT1M")
     public void restoreExpiredHiddenContent() {
         try {
             int restored = moderationService.restoreExpiredHiddenContent();

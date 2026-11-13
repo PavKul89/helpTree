@@ -152,16 +152,17 @@ rate-limit в `Block22ReportIntegrationTest` создаёт собственну
 | Заблокированный/удалённый автор | Не может создать жалобу |
 | Rate limit | Третий write в окне получает 429 из общего хранилища, `verify(chain, times(2))` |
 
-### 22.8 Миграции — `Block22MigrationTest` (6 тестов, Testcontainers)
+### 22.8 Миграции — `Block22MigrationTest` (7 тестов, Testcontainers)
 
 | Сценарий | Проверка |
 | --- | --- |
-| Чистая PostgreSQL | Flyway прогоняет V1–V62 без ошибок |
+| Чистая PostgreSQL | Flyway прогоняет все миграции до V66 без ошибок |
 | Данные V40 | Загружается `scripts/fixtures/legacy_v40_data.sql`, затем миграции до последней версии |
 | Сохранность данных | Пользователи, посты, помощи и кошелёк сохраняются; рейтинг 0 → 3.0, `NULL debt` → 0 |
 | Проекции | Появляются строки `user_rating_stats`, ожидаемые для legacy-данных |
 | Уникальность и ограничения | Уникальные индексы действительно уникальны; ограничения отвергают некорректные данные |
 | Партиционирование | `messages` и `outbox_events` созданы как partitioned-таблицы (`pg_inherits`, `relkind = 'p'`) |
+| ShedLock | V66 создаёт таблицу, контракт которой проверяется `verify_block23_schema.sql` |
 
 Класс помечен `@Testcontainers(disabledWithoutDocker = true)`: без Docker он
 пропускается, а не падает.

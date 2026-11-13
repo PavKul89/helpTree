@@ -1,5 +1,6 @@
 package org.example.helptreeservice.service;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.helptreeservice.entity.UserRatingStats;
@@ -42,6 +43,8 @@ public class ScheduledRatingService {
      * the previous batch ended regardless of how the predicate changes.</p>
      */
     @Scheduled(cron = "${rating.calculation.cron:0 0/5 * * * ?}")
+    @SchedulerLock(name = "ScheduledRatingService_recalculateAllRatings",
+            lockAtMostFor = "PT4M50S", lockAtLeastFor = "PT0S")
     public void recalculateAllRatings() {
         log.info("Начало периодического пересчета рейтингов");
 
@@ -92,6 +95,8 @@ public class ScheduledRatingService {
     }
 
     @Scheduled(cron = "${rating.history.cleanup-cron:0 0 2 * * ?}")
+    @SchedulerLock(name = "ScheduledRatingService_cleanupOldHistory",
+            lockAtMostFor = "PT1H", lockAtLeastFor = "PT1M")
     public void cleanupOldHistory() {
         LocalDateTime cutoff = LocalDateTime.now().minusDays(Math.max(1, historyRetentionDays));
         log.info("Начало очистки истории рейтингов старше {} (retention={} дн.)",

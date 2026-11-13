@@ -1,5 +1,6 @@
 package org.example.helptreeservice.service;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.minio.ListObjectsArgs;
@@ -49,6 +50,8 @@ public class ImageCleanupService {
     private String bucket;
 
     @Scheduled(cron = "${upload.cleanup.cron:0 30 3 * * *}")
+    @SchedulerLock(name = "ImageCleanupService_scheduledCleanup",
+            lockAtMostFor = "PT1H", lockAtLeastFor = "PT1M")
     public void scheduledCleanup() {
         if (!properties.isEnabled()) {
             return;

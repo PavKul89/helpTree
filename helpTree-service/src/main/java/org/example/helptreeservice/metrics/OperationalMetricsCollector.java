@@ -1,5 +1,6 @@
 package org.example.helptreeservice.metrics;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.helptreeservice.enums.OutboxStatus;
@@ -53,6 +54,8 @@ public class OperationalMetricsCollector {
 
     @Scheduled(fixedDelayString = "${app.metrics.refresh-ms:60000}",
             initialDelayString = "${app.metrics.initial-delay-ms:15000}")
+    @SchedulerLock(name = "OperationalMetricsCollector_refresh",
+            lockAtMostFor = "PT10M", lockAtLeastFor = "PT0S")
     public void refresh() {
         probeDatabase();
         if (lastProbeFailed) {

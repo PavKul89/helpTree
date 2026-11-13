@@ -1,5 +1,6 @@
 package org.example.helptreeservice.scheduler;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.helptreeservice.service.GeocodingService;
@@ -18,6 +19,8 @@ public class GeocodingScheduler {
     private final GeocodingService geocodingService;
 
     @Scheduled(fixedDelayString = "${app.geocoding.worker-interval-ms:1100}")
+    @SchedulerLock(name = "GeocodingScheduler_processQueue",
+            lockAtMostFor = "PT10M", lockAtLeastFor = "PT0S")
     public void processQueue() {
         try {
             geocodingService.processPendingBatch();

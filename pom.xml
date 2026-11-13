@@ -26,6 +26,7 @@
 		<java.version>21</java.version>
 		<mapstruct.version>1.5.5.Final</mapstruct.version>
 		<jjwt.version>0.12.5</jjwt.version>
+		<shedlock.version>6.10.0</shedlock.version>
 		<maven-compiler-plugin.version>3.11.0</maven-compiler-plugin.version>
 		<lombok.version>1.18.38</lombok.version>
 		<micrometer-tracing.version>1.4.1</micrometer-tracing.version>
@@ -34,6 +35,16 @@
 	<dependencyManagement>
 		<dependencies>
 
+			<dependency>
+				<groupId>net.javacrumbs.shedlock</groupId>
+				<artifactId>shedlock-spring</artifactId>
+				<version>${shedlock.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>net.javacrumbs.shedlock</groupId>
+				<artifactId>shedlock-provider-jdbc-template</artifactId>
+				<version>${shedlock.version}</version>
+			</dependency>
 			<dependency>
 				<groupId>org.mapstruct</groupId>
 				<artifactId>mapstruct</artifactId>

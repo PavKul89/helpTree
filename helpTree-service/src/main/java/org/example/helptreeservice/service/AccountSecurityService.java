@@ -1,5 +1,6 @@
 package org.example.helptreeservice.service;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.helptreeservice.config.AuthConfig;
@@ -233,6 +234,8 @@ public class AccountSecurityService {
     }
 
     @Scheduled(cron = "0 30 * * * *")
+    @SchedulerLock(name = "AccountSecurityService_cleanupExpiredTokens",
+            lockAtMostFor = "PT55M", lockAtLeastFor = "PT1M")
     @Transactional
     public void cleanupExpiredTokens() {
         int deleted = accountTokenRepository.deleteExpiredBefore(LocalDateTime.now());

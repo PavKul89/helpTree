@@ -1,5 +1,6 @@
 package org.example.helptreeservice.service;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.helptreeservice.config.EconomyConfig;
@@ -52,6 +53,8 @@ public class WalletReconciliationService {
     }
 
     @Scheduled(cron = "${app.economy.reconciliation-cron:0 0 4 * * *}")
+    @SchedulerLock(name = "WalletReconciliationService_reconcile",
+            lockAtMostFor = "PT1H", lockAtLeastFor = "PT1M")
     public void reconcile() {
         if (!economyConfig.isReconciliationEnabled()) {
             return;

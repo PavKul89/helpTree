@@ -1,5 +1,6 @@
 package org.example.helptreeservice.service;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.helptreeservice.config.ChatProperties;
@@ -25,6 +26,8 @@ public class ChatRetentionScheduler {
     private final ChatProperties chatProperties;
 
     @Scheduled(cron = "${app.chat.retention-cron:0 30 3 * * *}")
+    @SchedulerLock(name = "ChatRetentionScheduler_purgeExpiredMessages",
+            lockAtMostFor = "PT1H", lockAtLeastFor = "PT1M")
     public void purgeExpiredMessages() {
         if (chatProperties.getRetentionDays() <= 0) {
             return;

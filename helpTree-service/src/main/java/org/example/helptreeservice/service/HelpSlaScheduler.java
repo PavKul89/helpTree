@@ -1,5 +1,6 @@
 package org.example.helptreeservice.service;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.helptreeservice.config.HelpProperties;
@@ -31,6 +32,8 @@ public class HelpSlaScheduler {
     private final HelpProperties helpProperties;
 
     @Scheduled(cron = "${app.help.reminder-cron:0 0 * * * *}")
+    @SchedulerLock(name = "HelpSlaScheduler_sendSlaReminders",
+            lockAtMostFor = "PT55M", lockAtLeastFor = "PT1M")
     public void sendSlaReminders() {
         if (!helpProperties.isSlaEnabled() || !helpProperties.isRemindersEnabled()) {
             return;
@@ -69,6 +72,8 @@ public class HelpSlaScheduler {
     }
 
     @Scheduled(cron = "${app.help.sla-cron:0 0 * * * *}")
+    @SchedulerLock(name = "HelpSlaScheduler_cancelStaleAcceptedHelps",
+            lockAtMostFor = "PT55M", lockAtLeastFor = "PT1M")
     public void cancelStaleAcceptedHelps() {
         if (!helpProperties.isSlaEnabled()) {
             return;
@@ -98,6 +103,8 @@ public class HelpSlaScheduler {
     }
 
     @Scheduled(cron = "${app.help.sla-cron:0 0 * * * *}")
+    @SchedulerLock(name = "HelpSlaScheduler_confirmStaleCompletedHelps",
+            lockAtMostFor = "PT55M", lockAtLeastFor = "PT1M")
     public void confirmStaleCompletedHelps() {
         if (!helpProperties.isSlaEnabled() || !helpProperties.isAutoConfirmEnabled()) {
             return;

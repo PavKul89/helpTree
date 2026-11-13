@@ -1,5 +1,6 @@
 package org.example.helptreeservice.scheduler;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.helptreeservice.config.RateLimitConfig;
@@ -23,6 +24,8 @@ public class RateLimitCleanupScheduler {
     private final RateLimitConfig config;
 
     @Scheduled(cron = "${app.rate-limit.cleanup-cron:0 */5 * * * *}")
+    @SchedulerLock(name = "RateLimitCleanupScheduler_cleanup",
+            lockAtMostFor = "PT4M50S", lockAtLeastFor = "PT0S")
     public void cleanup() {
         if (!config.isEnabled()) {
             return;

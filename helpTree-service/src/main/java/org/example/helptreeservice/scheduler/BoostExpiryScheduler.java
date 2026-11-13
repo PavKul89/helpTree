@@ -1,5 +1,6 @@
 package org.example.helptreeservice.scheduler;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.helptreeservice.service.PostService;
@@ -18,6 +19,8 @@ public class BoostExpiryScheduler {
     private final PostService postService;
 
     @Scheduled(cron = "${app.economy.boost-cleanup-cron:0 15 * * * *}")
+    @SchedulerLock(name = "BoostExpiryScheduler_clearExpiredBoosts",
+            lockAtMostFor = "PT55M", lockAtLeastFor = "PT1M")
     public void clearExpiredBoosts() {
         try {
             postService.clearExpiredBoosts();

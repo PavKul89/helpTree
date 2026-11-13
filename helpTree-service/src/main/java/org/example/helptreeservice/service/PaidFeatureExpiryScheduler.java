@@ -1,5 +1,6 @@
 package org.example.helptreeservice.service;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.helptreeservice.config.WalletProperties;
@@ -41,6 +42,8 @@ public class PaidFeatureExpiryScheduler {
     private final NotificationService notificationService;
 
     @Scheduled(cron = "${app.wallet.vip-reminder-cron:0 0 10 * * *}")
+    @SchedulerLock(name = "PaidFeatureExpiryScheduler_sendVipExpiryReminders",
+            lockAtMostFor = "PT1H", lockAtLeastFor = "PT1M")
     public void sendVipExpiryReminders() {
         Set<Integer> reminderDays = parseDays(walletProperties.getVipReminderDays());
         if (reminderDays.isEmpty()) {

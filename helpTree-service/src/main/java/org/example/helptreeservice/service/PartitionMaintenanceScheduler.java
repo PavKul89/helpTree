@@ -1,5 +1,6 @@
 package org.example.helptreeservice.service;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.helptreeservice.config.ChatProperties;
@@ -45,6 +46,8 @@ public class PartitionMaintenanceScheduler {
     private final ChatProperties chatProperties;
 
     @Scheduled(cron = "${app.partitions.cron:0 15 3 * * *}")
+    @SchedulerLock(name = "PartitionMaintenanceScheduler_maintain",
+            lockAtMostFor = "PT1H", lockAtLeastFor = "PT1M")
     public void maintain() {
         if (!properties.isEnabled()) {
             return;

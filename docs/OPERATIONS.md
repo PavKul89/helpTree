@@ -302,6 +302,36 @@ Gauge'и очередей и инвариантов обновляет `Operatio
 этом предыдущие значения gauge'ов сохраняются до следующего успешного
 обновления.
 
+### 5.1. Планировщики в нескольких экземплярах
+
+Планировщики используют общую таблицу `shedlock` в основной БД. Для одного
+экземпляра поведение не меняется; при нескольких экземплярах одну задачу
+выполняет только владелец блокировки. Миграция V66 создаёт таблицу, а
+`usingDbTime()` использует часы БД для сравнения сроков блокировки.
+
+| Задача | Период по умолчанию | `lockAtMostFor` |
+| --- | --- | --- |
+| Debt blocking | каждый час | 55 мин |
+| Moderation expiry | каждый час в :05 | 55 мин |
+| Geocoding queue | фиксированная задержка 1,1 с | 10 мин |
+| Notification outbox dispatch | каждую минуту | 50 с |
+| Notification outbox retention | ежедневно в 03:15 | 1 ч |
+| Rate-limit cleanup | каждые 5 мин | 4 мин 50 с |
+| Boost expiry | каждый час в :15 | 55 мин |
+| SLA reminders | каждый час | 55 мин |
+| Stale accepted-help cancellation | каждый час | 55 мин |
+| Stale completed-help confirmation | каждый час | 55 мин |
+| Image cleanup | ежедневно в 03:30 | 1 ч |
+| Wallet reconciliation | ежедневно в 04:00 | 1 ч |
+| Account-token cleanup | каждый час в :30 | 55 мин |
+| Auth-session cleanup | каждый час | 55 мин |
+| Rating recalculation | каждые 5 мин | 4 мин 50 с |
+| Rating history cleanup | ежедневно в 02:00 | 1 ч |
+| VIP expiry reminders | ежедневно в 10:00 | 1 ч |
+| Chat retention | ежедневно в 03:30 | 1 ч |
+| Partition maintenance | ежедневно в 03:15 | 1 ч |
+| Operational metrics refresh | фиксированная задержка 60 с | 10 мин |
+
 ---
 
 ## 6. Алерты

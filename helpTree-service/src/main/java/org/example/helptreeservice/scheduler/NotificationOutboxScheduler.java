@@ -1,5 +1,6 @@
 package org.example.helptreeservice.scheduler;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.helptreeservice.config.NotificationProperties;
@@ -26,6 +27,8 @@ public class NotificationOutboxScheduler {
     private final NotificationProperties notificationProperties;
 
     @Scheduled(cron = "${app.notifications.dispatch-cron:0 * * * * *}")
+    @SchedulerLock(name = "NotificationOutboxScheduler_dispatchNotifications",
+            lockAtMostFor = "PT50S", lockAtLeastFor = "PT0S")
     public void dispatchNotifications() {
         try {
             outboxDispatcher.dispatchDue();
@@ -35,6 +38,8 @@ public class NotificationOutboxScheduler {
     }
 
     @Scheduled(cron = "${app.notifications.retention-cron:0 15 3 * * *}")
+    @SchedulerLock(name = "NotificationOutboxScheduler_purgePublishedEvents",
+            lockAtMostFor = "PT1H", lockAtLeastFor = "PT1M")
     public void purgePublishedEvents() {
         int retentionDays = notificationProperties.getRetentionDays();
         if (retentionDays <= 0) {

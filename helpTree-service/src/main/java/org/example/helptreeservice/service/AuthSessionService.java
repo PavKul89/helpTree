@@ -1,5 +1,6 @@
 package org.example.helptreeservice.service;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.helptreeservice.config.AuthConfig;
@@ -339,6 +340,8 @@ public class AuthSessionService {
     }
 
     @Scheduled(cron = "0 0 * * * *")
+    @SchedulerLock(name = "AuthSessionService_cleanupExpiredSessions",
+            lockAtMostFor = "PT55M", lockAtLeastFor = "PT1M")
     @Transactional
     public void cleanupExpiredSessions() {
         LocalDateTime now = LocalDateTime.now();

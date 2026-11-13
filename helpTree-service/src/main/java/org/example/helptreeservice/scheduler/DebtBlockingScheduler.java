@@ -1,5 +1,6 @@
 package org.example.helptreeservice.scheduler;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.helptreeservice.service.UserService;
@@ -14,6 +15,8 @@ public class DebtBlockingScheduler {
     private final UserService userService;
 
     @Scheduled(cron = "0 0 * * * *")
+    @SchedulerLock(name = "DebtBlockingScheduler_checkAndBlockUsersWithDebt",
+            lockAtMostFor = "PT55M", lockAtLeastFor = "PT1M")
     public void checkAndBlockUsersWithDebt() {
         log.info("Запуск планировщика проверки блокировки пользователей за долг");
         try {

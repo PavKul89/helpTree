@@ -34,7 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Testcontainers(disabledWithoutDocker = true)
 class Block22MigrationTest {
 
-    private static final String LATEST_VERSION = "62";
+    private static final String LATEST_VERSION = "66";
 
     @Container
     static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16")
@@ -177,6 +177,11 @@ class Block22MigrationTest {
                 "V62 must create monthly message partitions");
     }
 
+    @Test
+    void shedlockSchemaMatchesItsFixtureContract() throws Exception {
+        jdbc.execute(Files.readString(shedlockFixturePath()));
+    }
+
     // --------------------------------------------------------------- helpers
 
     private static String currentVersion() {
@@ -217,5 +222,18 @@ class Block22MigrationTest {
             return repositoryRelative;
         }
         throw new IllegalStateException("legacy_v40_data.sql was not found from " + Path.of(".").toAbsolutePath());
+    }
+
+    private static Path shedlockFixturePath() {
+        Path moduleRelative = Path.of("..", "scripts", "fixtures", "verify_block23_schema.sql");
+        if (Files.exists(moduleRelative)) {
+            return moduleRelative;
+        }
+        Path repositoryRelative = Path.of("scripts", "fixtures", "verify_block23_schema.sql");
+        if (Files.exists(repositoryRelative)) {
+            return repositoryRelative;
+        }
+        throw new IllegalStateException(
+                "verify_block23_schema.sql was not found from " + Path.of(".").toAbsolutePath());
     }
 }
