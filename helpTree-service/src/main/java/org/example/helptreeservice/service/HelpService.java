@@ -2,6 +2,7 @@ package org.example.helptreeservice.service;
 
 
 import org.example.helptreeservice.config.EconomyConfig;
+import org.example.helptreeservice.config.HelpProperties;
 import org.example.helptreeservice.dto.helps.HelpHistoryEntryDto;
 import org.example.helptreeservice.dto.helps.HelpRequest;
 import org.example.helptreeservice.dto.helps.HelpResponse;
@@ -63,6 +64,7 @@ public class HelpService {
     private final UserBlockService userBlockService;
     private final NotificationService notificationService;
     private final AdminAuditService adminAuditService;
+    private final HelpProperties helpProperties;
 
     @Value("${app.graph.default-max-edges:500}")
     private int defaultMaxEdges;
@@ -307,6 +309,16 @@ public class HelpService {
                 .findFirst()
                 .orElseThrow(() -> new NotFoundException("Получатель не найден"));
 
+        LocalDateTime monthStart = now.toLocalDate().withDayOfMonth(1).atStartOfDay();
+        LocalDateTime monthEnd = monthStart.plusMonths(1);
+        long confirmedForPair = helpRepository.countConfirmedByPairInMonth(
+                helperId, receiverId, monthStart, monthEnd);
+        boolean rewardEligible = confirmedForPair < helpProperties.getMaxConfirmedPerPairPerMonth();
+        if (!rewardEligible) {
+            log.warn("Пара helperId={} -> receiverId={} превысила месячный лимит подтверждённых помощей ({})",
+                    helperId, receiverId, helpProperties.getMaxConfirmedPerPairPerMonth());
+        }
+
         help.setStatus(HelpStatus.CONFIRMED);
         help.setConfirmedAt(now);
         help.setUpdatedAt(now);
@@ -320,14 +332,18 @@ public class HelpService {
         userService.incrementHelpedCount(receiverId);
         userService.userHelpedSomeone(helperId);
 
-        walletService.addCoinsForHelp(helperId, receiverId, post.getId());
-        walletService.addCoinsForReceivedHelp(receiverId, helperId, post.getId());
+        if (rewardEligible) {
+            walletService.addCoinsForHelp(helperId, receiverId, post.getId());
+            walletService.addCoinsForReceivedHelp(receiverId, helperId, post.getId());
+        }
         achievementService.checkAndAwardAchievements(help.getHelper(), help);
         ratingService.recalculateUsers(List.of(helperId, receiverId));
 
-        String historyReason = role == HelpActorRole.SYSTEM
-                ? "Автоматическое подтверждение: получатель не ответил в установленный срок"
-                : null;
+        String historyReason = !rewardEligible
+                ? "Месячный лимит подтверждённых помощей для пары исчерпан; монеты не начислены"
+                : role == HelpActorRole.SYSTEM
+                        ? "Автоматическое подтверждение: получатель не ответил в установленный срок"
+                        : null;
         recordHistory(help, HelpStatus.COMPLETED, HelpStatus.CONFIRMED, actorId,
                 role, historyReason, now);
 

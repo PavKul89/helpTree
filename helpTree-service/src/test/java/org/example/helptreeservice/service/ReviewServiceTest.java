@@ -1,5 +1,6 @@
 package org.example.helptreeservice.service;
 
+import org.example.helptreeservice.config.HelpProperties;
 import org.example.helptreeservice.dto.reviews.CreateReviewRequest;
 import org.example.helptreeservice.dto.reviews.ReplyReviewRequest;
 import org.example.helptreeservice.dto.reviews.ReviewResponse;
@@ -60,7 +61,7 @@ class ReviewServiceTest {
         reviewService = new ReviewService(
                 reviewRepository, helpRepository, userRepository,
                 reviewMapper, userService, walletService, ratingService,
-                userBlockService, notificationService, adminAuditService);
+                userBlockService, notificationService, adminAuditService, new HelpProperties());
     }
 
     @Test
@@ -116,6 +117,10 @@ class ReviewServiceTest {
         when(userRepository.findById(2L)).thenReturn(Optional.of(receiver));
         when(helpRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(help));
         when(reviewRepository.existsByHelpAndFromUser(help, receiver)).thenReturn(false);
+        when(helpRepository.countConfirmedByPairInMonthThroughHelp(
+                eq(1L), eq(2L), any(LocalDateTime.class), any(LocalDateTime.class),
+                eq(help.getConfirmedAt()), eq(help.getId())))
+                .thenReturn(1L);
         when(reviewRepository.save(any(Review.class)))
                 .thenAnswer(invocation -> {
                     Review saved = invocation.getArgument(0);
@@ -128,6 +133,33 @@ class ReviewServiceTest {
 
         verify(reviewRepository).save(any(Review.class));
         verify(walletService).addCoinsForReview(1L, 77L);
+        verify(ratingService).recalculateUsers(List.of(1L));
+    }
+
+    @Test
+    void createReview_shouldKeepReviewButSkipBonusForHelpBeyondPairMonthlyLimit() {
+        User helper = user(1L);
+        User receiver = user(2L);
+        Help help = help(10L, HelpStatus.CONFIRMED, helper, receiver);
+        when(userRepository.findById(2L)).thenReturn(Optional.of(receiver));
+        when(helpRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(help));
+        when(reviewRepository.existsByHelpAndFromUser(help, receiver)).thenReturn(false);
+        when(reviewRepository.save(any(Review.class)))
+                .thenAnswer(invocation -> {
+                    Review saved = invocation.getArgument(0);
+                    saved.setId(77L);
+                    return saved;
+                });
+        when(helpRepository.countConfirmedByPairInMonthThroughHelp(
+                eq(1L), eq(2L), any(LocalDateTime.class), any(LocalDateTime.class),
+                eq(help.getConfirmedAt()), eq(help.getId())))
+                .thenReturn(3L);
+        when(reviewMapper.toResponse(any(Review.class))).thenReturn(ReviewResponse.builder().build());
+
+        reviewService.createReview(request(10L), 2L);
+
+        verify(reviewRepository).save(any(Review.class));
+        verify(walletService, never()).addCoinsForReview(anyLong(), anyLong());
         verify(ratingService).recalculateUsers(List.of(1L));
     }
 
@@ -383,6 +415,9 @@ class ReviewServiceTest {
         help.setHelper(helper);
         help.setReceiver(receiver);
         help.setStatus(status);
+        if (status == HelpStatus.CONFIRMED) {
+            help.setConfirmedAt(LocalDateTime.now());
+        }
         help.setDeleted(false);
         return help;
     }

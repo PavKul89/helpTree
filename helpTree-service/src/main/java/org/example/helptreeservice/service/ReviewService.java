@@ -1,5 +1,6 @@
 package org.example.helptreeservice.service;
 
+import org.example.helptreeservice.config.HelpProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.helptreeservice.dto.admin.AdminBulkResultDto;
@@ -54,6 +55,7 @@ public class ReviewService {
     private final UserBlockService userBlockService;
     private final NotificationService notificationService;
     private final AdminAuditService adminAuditService;
+    private final HelpProperties helpProperties;
 
     @Transactional
     public ReviewResponse createReview(CreateReviewRequest request, Long currentUserId) {
@@ -93,6 +95,13 @@ public class ReviewService {
         userBlockService.assertInteractionAllowed(fromUser.getId(), toUser.getId(), UserBlockScope.PROFILE,
                 "Один из пользователей ограничил отзывы");
 
+        Long helperId = help.getHelper().getId();
+        Long receiverId = help.getReceiver().getId();
+        List<Long> participantIds = helperId < receiverId
+                ? List.of(helperId, receiverId)
+                : List.of(receiverId, helperId);
+        userRepository.findAllByIdInForUpdate(participantIds);
+
         // Учитываем и soft-deleted отзывы: иначе удаление позволяло бы
         // создать отзыв заново и повторно получить +2 HC.
         if (reviewRepository.existsByHelpAndFromUser(help, fromUser)) {
@@ -110,8 +119,15 @@ public class ReviewService {
         Review savedReview = reviewRepository.save(review);
         log.info("Отзыв {} успешно создан", savedReview.getId());
 
-        walletService.addCoinsForReview(toUser.getId(), savedReview.getId());
-        log.info("Начислено 2 HC пользователю {} за отзыв {}", toUser.getId(), savedReview.getId());
+        boolean rewardEligible = isHelpWithinMonthlyPairLimit(help);
+        if (rewardEligible) {
+            walletService.addCoinsForReview(toUser.getId(), savedReview.getId());
+            log.info("Начислено 2 HC пользователю {} за отзыв {}", toUser.getId(), savedReview.getId());
+        } else {
+            log.warn("Бонус за отзыв {} не начислен: пара helperId={} -> receiverId={} "
+                            + "превысила месячный лимит подтверждённых помощей",
+                    savedReview.getId(), helperId, receiverId);
+        }
 
         // The review is part of the rating only after it is actually stored.
         reviewRepository.flush();
@@ -133,6 +149,24 @@ public class ReviewService {
                 "review:" + savedReview.getId()));
 
         return reviewMapper.toResponse(savedReview);
+    }
+
+    private boolean isHelpWithinMonthlyPairLimit(Help help) {
+        LocalDateTime confirmedAt = help.getConfirmedAt();
+        if (confirmedAt == null) {
+            log.warn("Бонус за отзыв по помощи {} не начислен: отсутствует confirmedAt", help.getId());
+            return false;
+        }
+
+        LocalDateTime monthStart = confirmedAt.toLocalDate().withDayOfMonth(1).atStartOfDay();
+        long position = helpRepository.countConfirmedByPairInMonthThroughHelp(
+                help.getHelper().getId(),
+                help.getReceiver().getId(),
+                monthStart,
+                monthStart.plusMonths(1),
+                confirmedAt,
+                help.getId());
+        return position > 0 && position <= helpProperties.getMaxConfirmedPerPairPerMonth();
     }
 
     /**

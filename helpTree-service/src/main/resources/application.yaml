@@ -240,6 +240,7 @@ app:
     # Restores content hidden by a temporary HIDE_CONTENT action.
     expiry-cron: "${MODERATION_EXPIRY_CRON:0 5 * * * *}"
   help:
+    max-confirmed-per-pair-per-month: ${HELP_MAX_CONFIRMED_PER_PAIR_PER_MONTH:2}
     # Stale ACCEPTED helps are cancelled after this many hours (default 7 days).
     sla-enabled: ${HELP_SLA_ENABLED:true}
     accepted-timeout-hours: ${HELP_ACCEPTED_TIMEOUT_HOURS:168}

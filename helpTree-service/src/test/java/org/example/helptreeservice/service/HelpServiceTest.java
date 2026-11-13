@@ -1,6 +1,7 @@
 package org.example.helptreeservice.service;
 
 import org.example.helptreeservice.config.EconomyConfig;
+import org.example.helptreeservice.config.HelpProperties;
 import org.example.helptreeservice.dto.helps.HelpHistoryEntryDto;
 import org.example.helptreeservice.dto.helps.HelpRequest;
 import org.example.helptreeservice.dto.helps.HelpResponse;
@@ -84,7 +85,8 @@ class HelpServiceTest {
                 helpGraphMetrics,
                 userBlockService,
                 notificationService,
-                adminAuditService
+                adminAuditService,
+                new HelpProperties()
         );
 
         lenient().when(helpMapper.toResponse(any(Help.class))).thenAnswer(invocation -> {
@@ -297,6 +299,38 @@ class HelpServiceTest {
         verify(achievementService).checkAndAwardAchievements(helper, help);
         verify(ratingService, times(1)).recalculateUsers(List.of(1L, 2L));
         verify(statusHistoryRepository).save(any(HelpStatusHistory.class));
+    }
+
+    @Test
+    void confirmHelp_shouldConfirmWithoutRewardsWhenPairMonthlyLimitIsReached() {
+        User helper = user(1L);
+        User receiver = user(2L);
+        Help help = help(5L, HelpStatus.COMPLETED, helper, receiver);
+        HelpProperties helpProperties = new HelpProperties();
+        helpProperties.setMaxConfirmedPerPairPerMonth(2);
+        helpService = new HelpService(
+                helpRepository, postRepository, userRepository, userService, helpMapper,
+                ratingService, achievementService, walletService, imageService,
+                new EconomyConfig(), statusHistoryRepository, helpGraphMetrics,
+                userBlockService, notificationService, adminAuditService, helpProperties);
+        when(helpRepository.findByIdForUpdate(5L)).thenReturn(Optional.of(help));
+        when(userRepository.findAllByIdInForUpdate(List.of(1L, 2L)))
+                .thenReturn(List.of(helper, receiver));
+        when(helpRepository.countConfirmedByPairInMonth(
+                eq(1L), eq(2L), any(LocalDateTime.class), any(LocalDateTime.class)))
+                .thenReturn(2L);
+
+        HelpResponse response = helpService.confirmHelp(5L, 2L, false);
+
+        assertEquals("CONFIRMED", response.getStatus());
+        verify(walletService, never()).addCoinsForHelp(anyLong(), anyLong(), anyLong());
+        verify(walletService, never()).addCoinsForReceivedHelp(anyLong(), anyLong(), anyLong());
+        verify(userService).incrementHelpedCount(2L);
+        verify(userService).userHelpedSomeone(1L);
+        ArgumentCaptor<HelpStatusHistory> history =
+                ArgumentCaptor.forClass(HelpStatusHistory.class);
+        verify(statusHistoryRepository).save(history.capture());
+        assertTrue(history.getValue().getReason().contains("лимит"));
     }
 
     @Test

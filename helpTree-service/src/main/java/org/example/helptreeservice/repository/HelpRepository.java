@@ -104,6 +104,27 @@ public interface HelpRepository extends JpaRepository<Help, Long> {
             + "AND (h.deleted = false OR h.deleted IS NULL)")
     long countByStatus(@Param("status") HelpStatus status);
 
+    @Query("SELECT COUNT(h) FROM Help h WHERE h.helper.id = :helperId "
+            + "AND h.receiver.id = :receiverId AND h.status = 'CONFIRMED' "
+            + "AND h.confirmedAt >= :monthStart AND h.confirmedAt < :monthEnd "
+            + "AND (h.deleted = false OR h.deleted IS NULL)")
+    long countConfirmedByPairInMonth(@Param("helperId") Long helperId,
+                                     @Param("receiverId") Long receiverId,
+                                     @Param("monthStart") LocalDateTime monthStart,
+                                     @Param("monthEnd") LocalDateTime monthEnd);
+
+    @Query("SELECT COUNT(h) FROM Help h WHERE h.helper.id = :helperId "
+            + "AND h.receiver.id = :receiverId AND h.status = 'CONFIRMED' "
+            + "AND h.confirmedAt >= :monthStart AND h.confirmedAt < :monthEnd "
+            + "AND (h.confirmedAt < :confirmedAt OR (h.confirmedAt = :confirmedAt AND h.id <= :helpId)) "
+            + "AND (h.deleted = false OR h.deleted IS NULL)")
+    long countConfirmedByPairInMonthThroughHelp(@Param("helperId") Long helperId,
+                                                @Param("receiverId") Long receiverId,
+                                                @Param("monthStart") LocalDateTime monthStart,
+                                                @Param("monthEnd") LocalDateTime monthEnd,
+                                                @Param("confirmedAt") LocalDateTime confirmedAt,
+                                                @Param("helpId") Long helpId);
+
     @Query("SELECT COUNT(h) FROM Help h WHERE h.status IN :statuses "
             + "AND (h.deleted = false OR h.deleted IS NULL)")
     long countByStatusIn(@Param("statuses") Collection<HelpStatus> statuses);

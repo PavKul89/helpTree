@@ -41,4 +41,7 @@ public class HelpProperties {
 
     /** Maximum number of helps processed by one reminder sweep. */
     private int reminderBatchSize = 200;
+
+    /** Maximum rewarded confirmed helps for one helper/receiver pair per calendar month. */
+    private int maxConfirmedPerPairPerMonth = 2;
 }

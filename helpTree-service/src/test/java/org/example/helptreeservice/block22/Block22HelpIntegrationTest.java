@@ -13,6 +13,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.time.LocalDateTime;
+import java.time.YearMonth;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -143,6 +145,49 @@ class Block22HelpIntegrationTest extends Block22TestSupport {
                 "Concurrent confirmations must award the helper exactly once");
         assertEquals(1, countTransactions(receiver.getId(), "HELP_RECEIVED", post.getId()),
                 "Concurrent confirmations must award the receiver exactly once");
+    }
+
+    @Test
+    void monthlyPairLimitSkipsThirdRewardAndResetsForNextMonth() {
+        User helper = createUser("Monthly helper");
+        User receiver = createUser("Monthly receiver");
+        User otherHelper = createUser("Monthly other helper");
+        User otherReceiver = createUser("Monthly other receiver");
+
+        HelpResponse first = createConfirmedHelp(helper, receiver);
+        HelpResponse second = createConfirmedHelp(helper, receiver);
+        HelpResponse third = createConfirmedHelp(helper, receiver);
+
+        assertEquals("CONFIRMED", first.getStatus());
+        assertEquals("CONFIRMED", second.getStatus());
+        assertEquals("CONFIRMED", third.getStatus());
+        assertEquals(2, countTransactions(helper.getId(), "HELP_GIVEN"));
+        assertEquals(2, countTransactions(receiver.getId(), "HELP_RECEIVED"));
+        assertEquals(1, jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM help_status_history WHERE help_id = ? "
+                        + "AND to_status = 'CONFIRMED' AND reason LIKE 'Месячный лимит%'",
+                Integer.class, third.getId()));
+
+        createConfirmedHelp(otherHelper, otherReceiver);
+        assertEquals(1, countTransactions(otherHelper.getId(), "HELP_GIVEN"),
+                "A different helper/receiver pair must have its own monthly limit");
+
+        LocalDateTime previousMonth = YearMonth.from(LocalDateTime.now())
+                .minusMonths(1).atDay(15).atStartOfDay();
+        int shifted = jdbcTemplate.update(
+                "UPDATE helps SET confirmed_at = ? WHERE helper_id = ? AND receiver_id = ? "
+                        + "AND status = 'CONFIRMED'",
+                previousMonth, helper.getId(), receiver.getId());
+        assertEquals(3, shifted);
+        setDebt(receiver, 0, 0);
+
+        createConfirmedHelp(helper, receiver);
+        createConfirmedHelp(helper, receiver);
+        assertEquals(4, countTransactions(helper.getId(), "HELP_GIVEN"),
+                "The pair limit must reset when the calendar month changes");
+        assertEquals(4, countTransactions(receiver.getId(), "HELP_RECEIVED"));
+        assertEquals(ledgerTotal(helper.getId()), reload(helper).getHelpCoins());
+        assertEquals(ledgerTotal(receiver.getId()), reload(receiver).getHelpCoins());
     }
 
     @Test
