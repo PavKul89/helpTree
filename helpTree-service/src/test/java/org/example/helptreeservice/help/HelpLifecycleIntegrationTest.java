@@ -350,6 +350,99 @@ class HelpLifecycleIntegrationTest {
     }
 
     @Test
+    void slaShouldAutoConfirmOnlyStaleCompletedHelpsAndAwardOnce() {
+        User staleHelper = createUser("Auto Confirm Stale Helper");
+        User receiver = createUser("Auto Confirm Receiver");
+        Post stalePost = createPost(receiver);
+        HelpResponse stale = helpService.acceptHelp(acceptRequest(stalePost), staleHelper.getId());
+        helpService.completeHelp(stale.getId(), staleHelper.getId(), false);
+        jdbcTemplate.update("UPDATE helps SET completed_at = ? WHERE id = ?",
+                LocalDateTime.now().minusHours(200), stale.getId());
+
+        User freshHelper = createUser("Auto Confirm Fresh Helper");
+        User freshReceiver = createUser("Auto Confirm Fresh Receiver");
+        Post freshPost = createPost(freshReceiver);
+        HelpResponse fresh = helpService.acceptHelp(acceptRequest(freshPost), freshHelper.getId());
+        helpService.completeHelp(fresh.getId(), freshHelper.getId(), false);
+
+        slaScheduler.confirmStaleCompletedHelps();
+        slaScheduler.confirmStaleCompletedHelps();
+
+        assertEquals(HelpStatus.CONFIRMED, reloadHelp(stale).getStatus());
+        assertEquals(PostStatus.COMPLETED, reloadPost(stalePost).getStatus());
+        assertSingleAward(staleHelper.getId(), receiver.getId(), stalePost.getId());
+        assertEquals(HelpStatus.COMPLETED, reloadHelp(fresh).getStatus());
+
+        List<HelpStatusHistory> history =
+                historyRepository.findByHelpIdOrderByCreatedAtAsc(stale.getId());
+        HelpStatusHistory confirmation = history.get(history.size() - 1);
+        assertEquals(HelpStatus.CONFIRMED, confirmation.getToStatus());
+        assertEquals("SYSTEM", confirmation.getActorRole().name());
+        assertEquals("Автоматическое подтверждение: получатель не ответил в установленный срок",
+                confirmation.getReason());
+    }
+
+    @Test
+    void adminAndAutomaticConfirmationShouldSucceedForBlockedReceivers() {
+        User admin = createUser("Blocked Receiver Admin");
+        User adminHelpHelper = createUser("Blocked Receiver Admin Helper");
+        User adminBlockedReceiver = createUser("Admin Blocked Receiver");
+        Post adminPost = createPost(adminBlockedReceiver);
+        HelpResponse adminHelp = helpService.acceptHelp(acceptRequest(adminPost), adminHelpHelper.getId());
+        helpService.completeHelp(adminHelp.getId(), adminHelpHelper.getId(), false);
+
+        User systemHelper = createUser("Blocked Receiver System Helper");
+        User systemBlockedReceiver = createUser("System Blocked Receiver");
+        Post systemPost = createPost(systemBlockedReceiver);
+        HelpResponse systemHelp = helpService.acceptHelp(acceptRequest(systemPost), systemHelper.getId());
+        helpService.completeHelp(systemHelp.getId(), systemHelper.getId(), false);
+        jdbcTemplate.update("UPDATE helps SET completed_at = ? WHERE id = ?",
+                LocalDateTime.now().minusHours(200), systemHelp.getId());
+
+        LocalDateTime blockedUntil = LocalDateTime.now().plusDays(1);
+        jdbcTemplate.update("UPDATE users SET blocked_at = ?, blocked_until = ? WHERE id IN (?, ?)",
+                LocalDateTime.now(), blockedUntil,
+                adminBlockedReceiver.getId(), systemBlockedReceiver.getId());
+
+        assertEquals("CONFIRMED", helpService.confirmHelp(
+                adminHelp.getId(), admin.getId(), true, "Проверка блокировки").getStatus());
+        slaScheduler.confirmStaleCompletedHelps();
+
+        assertEquals(HelpStatus.CONFIRMED, reloadHelp(systemHelp).getStatus());
+        assertSingleAward(adminHelpHelper.getId(), adminBlockedReceiver.getId(), adminPost.getId());
+        assertSingleAward(systemHelper.getId(), systemBlockedReceiver.getId(), systemPost.getId());
+    }
+
+    @Test
+    void concurrentManualAndAutomaticConfirmationShouldAwardExactlyOnce() throws Exception {
+        User helper = createUser("Concurrent Auto Confirm Helper");
+        User receiver = createUser("Concurrent Auto Confirm Receiver");
+        Post post = createPost(receiver);
+        HelpResponse accepted = helpService.acceptHelp(acceptRequest(post), helper.getId());
+        helpService.completeHelp(accepted.getId(), helper.getId(), false);
+        jdbcTemplate.update("UPDATE helps SET completed_at = ? WHERE id = ?",
+                LocalDateTime.now().minusHours(200), accepted.getId());
+
+        List<Object> results = runConcurrentlyAllowFailure(2, index -> {
+            if (index == 0) {
+                return helpService.confirmHelp(accepted.getId(), receiver.getId(), false);
+            }
+            slaScheduler.confirmStaleCompletedHelps();
+            return null;
+        });
+
+        results.stream()
+                .filter(RuntimeException.class::isInstance)
+                .forEach(exception -> fail("Concurrent confirmation failed", (Throwable) exception));
+        assertEquals(HelpStatus.CONFIRMED, reloadHelp(accepted).getStatus());
+        assertSingleAward(helper.getId(), receiver.getId(), post.getId());
+        long confirmations = historyRepository.findByHelpIdOrderByCreatedAtAsc(accepted.getId()).stream()
+                .filter(entry -> entry.getToStatus() == HelpStatus.CONFIRMED)
+                .count();
+        assertEquals(1L, confirmations);
+    }
+
+    @Test
     void concurrentCancellationsForTheSameHelperShouldNotLoseStats() throws Exception {
         User helper = createUser("Concurrent Cancel Helper");
         User receiver = createUser("Concurrent Cancel Receiver");

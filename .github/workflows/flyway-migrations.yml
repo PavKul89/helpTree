@@ -35,7 +35,7 @@ env:
 jobs:
   clean-database:
     name: Migrate and validate a clean database
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     services:
       postgres:
         image: postgres:16
@@ -51,7 +51,7 @@ jobs:
           --health-timeout 5s
           --health-retries 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: actions/setup-java@v4
         with:
@@ -84,10 +84,11 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block15_schema.sql
           psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block16_schema.sql
           psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block17_schema.sql
+          psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block19_schema.sql
 
   legacy-data-copy:
     name: Migrate a V40 data copy
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     services:
       postgres:
         image: postgres:16
@@ -103,7 +104,7 @@ jobs:
           --health-timeout 5s
           --health-retries 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: actions/setup-java@v4
         with:
@@ -141,3 +142,4 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block15_schema.sql
           psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block16_schema.sql
           psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block17_schema.sql
+          psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block19_schema.sql

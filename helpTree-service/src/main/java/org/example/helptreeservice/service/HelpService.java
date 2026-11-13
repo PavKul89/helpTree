@@ -246,7 +246,8 @@ public class HelpService {
     }
 
     /**
-     * 3. Получатель подтверждает, что помощь получена.
+     * 3. Получатель или администратор подтверждает получение помощи; SLA sweep
+     *    использует тот же переход для автоматического подтверждения.
      *
      * Единственная точка фиксации успешной помощи: финальный статус, статус
      * заявки, статистика, монеты, достижения и история обновляются здесь и
@@ -284,22 +285,27 @@ public class HelpService {
             throw new ConflictException("Подтвердить можно только помощь, отмеченную как выполненная");
         }
 
-        LocalDateTime now = LocalDateTime.now();
+        applyConfirmation(help, admin ? HelpActorRole.ADMIN : HelpActorRole.RECEIVER,
+                actorId, LocalDateTime.now());
 
-        // Блокируем обоих участников в детерминированном порядке: балансы и
-        // счётчики долга не должны потерять параллельные изменения.
+        log.info("Помощь успешно подтверждена: helpId={}", helpId);
+        auditOverride(admin, actorId, helpId, "CONFIRM", beforeStatus, HelpStatus.CONFIRMED, reason);
+        return helpMapper.toResponse(help);
+    }
+
+    private void applyConfirmation(Help help, HelpActorRole role, Long actorId, LocalDateTime now) {
+        Long helperId = help.getHelper().getId();
+        Long receiverId = help.getReceiver().getId();
+
+        // Lock both participants in a deterministic order for balances and debt counters.
         List<Long> userIds = helperId < receiverId
                 ? List.of(helperId, receiverId)
                 : List.of(receiverId, helperId);
         List<User> lockedUsers = userRepository.findAllByIdInForUpdate(userIds);
         User receiver = lockedUsers.stream()
-                .filter(u -> u.getId().equals(receiverId))
+                .filter(user -> user.getId().equals(receiverId))
                 .findFirst()
                 .orElseThrow(() -> new NotFoundException("Получатель не найден"));
-
-        if (isActivelyBlocked(receiver, now)) {
-            throw new BadRequestException("Нельзя подтвердить помощь заблокированному пользователю");
-        }
 
         help.setStatus(HelpStatus.CONFIRMED);
         help.setConfirmedAt(now);
@@ -317,26 +323,37 @@ public class HelpService {
         walletService.addCoinsForHelp(helperId, receiverId, post.getId());
         walletService.addCoinsForReceivedHelp(receiverId, helperId, post.getId());
         achievementService.checkAndAwardAchievements(help.getHelper(), help);
-        // Projection rebuild from the just-flushed CONFIRMED fact. Repeating a
-        // confirmation cannot double-count because nothing is incremented.
         ratingService.recalculateUsers(List.of(helperId, receiverId));
 
+        String historyReason = role == HelpActorRole.SYSTEM
+                ? "Автоматическое подтверждение: получатель не ответил в установленный срок"
+                : null;
         recordHistory(help, HelpStatus.COMPLETED, HelpStatus.CONFIRMED, actorId,
-                admin ? HelpActorRole.ADMIN : HelpActorRole.RECEIVER, null, now);
+                role, historyReason, now);
 
+        String helperMessage = role == HelpActorRole.SYSTEM
+                ? "Срок подтверждения истёк, помощь по заявке «" + postTitle(help)
+                        + "» подтверждена автоматически. Спасибо за помощь!"
+                : receiver.getName() + " подтвердил помощь по заявке «" + postTitle(help)
+                        + "». Спасибо за помощь!";
         notificationService.notify(NotificationCommand.of(
                 helperId,
                 NotificationType.HELP_CONFIRMED,
                 "Помощь подтверждена",
-                receiver.getName() + " подтвердил помощь по заявке «" + postTitle(help)
-                        + "». Спасибо за помощь!",
-                helpPayload(help, actorId, receiver.getName(),
-                        HelpStatus.CONFIRMED.name(), null),
+                helperMessage,
+                helpPayload(help, actorId, receiver.getName(), HelpStatus.CONFIRMED.name(), null),
                 "help:" + help.getId() + ":confirmed:helper"));
 
-        log.info("Помощь успешно подтверждена: helpId={}", helpId);
-        auditOverride(admin, actorId, helpId, "CONFIRM", beforeStatus, HelpStatus.CONFIRMED, reason);
-        return helpMapper.toResponse(help);
+        if (role == HelpActorRole.SYSTEM) {
+            notificationService.notify(NotificationCommand.of(
+                    receiverId,
+                    NotificationType.HELP_CONFIRMED,
+                    "Помощь подтверждена автоматически",
+                    "Помощь по заявке «" + postTitle(help)
+                            + "» подтверждена автоматически, так как вы не ответили в установленный срок.",
+                    helpPayload(help, null, receiver.getName(), HelpStatus.CONFIRMED.name(), null),
+                    "help:" + help.getId() + ":auto-confirmed:receiver"));
+        }
     }
 
     /**
@@ -430,6 +447,13 @@ public class HelpService {
                 HelpStatus.ACCEPTED, cutoff, PageRequest.of(0, batchSize));
     }
 
+    @Transactional(readOnly = true)
+    public List<Long> findStaleCompletedHelpIds(LocalDateTime cutoff, int limit) {
+        int batchSize = Math.max(1, Math.min(limit, MAX_SLA_BATCH_SIZE));
+        return helpRepository.findIdsByStatusAndCompletedAtBefore(
+                HelpStatus.COMPLETED, cutoff, PageRequest.of(0, batchSize));
+    }
+
     /**
      * Per-help transaction invoked by the SLA scheduler through the Spring proxy.
      * Rechecks the status under a row lock so a help completed at the same time
@@ -451,6 +475,28 @@ public class HelpService {
         String reason = "Автоматическая отмена: помощь не завершена в установленный срок";
         applyCancellation(help, HelpActorRole.SYSTEM, null, reason);
         log.info("SLA: помощь автоматически отменена helpId={}", helpId);
+        return true;
+    }
+
+    /**
+     * Per-help transaction invoked through the Spring proxy by the SLA scheduler.
+     * Rechecks status and completedAt under a row lock to serialize with manual confirmation.
+     */
+    @Transactional
+    public boolean autoConfirmStaleCompletedHelp(Long helpId, LocalDateTime cutoff) {
+        Help help = helpRepository.findByIdForUpdate(helpId).orElse(null);
+        if (help == null || Boolean.TRUE.equals(help.getDeleted())) {
+            return false;
+        }
+        if (help.getStatus() != HelpStatus.COMPLETED) {
+            return false;
+        }
+        if (help.getCompletedAt() == null || !help.getCompletedAt().isBefore(cutoff)) {
+            return false;
+        }
+
+        applyConfirmation(help, HelpActorRole.SYSTEM, null, LocalDateTime.now());
+        log.info("SLA: помощь автоматически подтверждена helpId={}", helpId);
         return true;
     }
 

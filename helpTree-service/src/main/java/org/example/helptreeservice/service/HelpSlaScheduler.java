@@ -10,7 +10,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * SLA sweeps for ACCEPTED helps.
+ * SLA sweeps for ACCEPTED and COMPLETED helps.
  *
  * <ul>
  *   <li>{@link #sendSlaReminders()} notifies both participants when 50% and 80%
@@ -18,6 +18,8 @@ import java.util.List;
  *       on the help row, so a restart or a second instance cannot duplicate it.</li>
  *   <li>{@link #cancelStaleAcceptedHelps()} keeps the existing automatic
  *       cancellation at 100% of the timeout.</li>
+ *   <li>{@link #confirmStaleCompletedHelps()} automatically confirms completed
+ *       helps after {@code completedTimeoutHours} have elapsed.</li>
  * </ul>
  */
 @Component
@@ -93,5 +95,35 @@ public class HelpSlaScheduler {
         }
 
         log.info("SLA: автоматически отменено {} из {} зависших ACCEPTED", cancelled, staleIds.size());
+    }
+
+    @Scheduled(cron = "${app.help.sla-cron:0 0 * * * *}")
+    public void confirmStaleCompletedHelps() {
+        if (!helpProperties.isSlaEnabled() || !helpProperties.isAutoConfirmEnabled()) {
+            return;
+        }
+
+        LocalDateTime cutoff = LocalDateTime.now()
+                .minusHours(helpProperties.getCompletedTimeoutHours());
+        List<Long> staleIds = helpService.findStaleCompletedHelpIds(
+                cutoff, helpProperties.getSlaBatchSize());
+
+        if (staleIds.isEmpty()) {
+            return;
+        }
+
+        int confirmed = 0;
+        for (Long helpId : staleIds) {
+            try {
+                if (helpService.autoConfirmStaleCompletedHelp(helpId, cutoff)) {
+                    confirmed++;
+                }
+            } catch (Exception e) {
+                log.error("Не удалось автоматически подтвердить помощь helpId={}", helpId, e);
+            }
+        }
+
+        log.info("SLA: автоматически подтверждено {} из {} зависших COMPLETED",
+                confirmed, staleIds.size());
     }
 }

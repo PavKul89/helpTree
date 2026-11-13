@@ -73,6 +73,7 @@ Durable intent. Статусы: `PENDING`, `PROCESSING`, `PUBLISHED`, `FAILED`, 
 | `HELP_ACCEPTED` | helper | `HelpService` | `help:{id}:accepted:helper` |
 | `HELP_COMPLETED` | receiver | `HelpService` | `help:{id}:completed:receiver` |
 | `HELP_CONFIRMED` | helper | `HelpService` | `help:{id}:confirmed:helper` |
+| `HELP_CONFIRMED` | receiver, при автоматическом подтверждении | `HelpService` | `help:{id}:auto-confirmed:receiver` |
 | `HELP_CANCELLED` | участники, кроме инициатора | `HelpService` | `help:{id}:cancelled:{userId}` |
 | `NEW_REVIEW` | получатель отзыва | `ReviewService` | `review:{reviewId}` |
 | `REVIEW_REPLIED` | автор отзыва | `ReviewService` | `review:{reviewId}:reply` |

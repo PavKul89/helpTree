@@ -22,6 +22,7 @@ import org.example.helptreeservice.repository.HelpStatusHistoryRepository;
 import org.example.helptreeservice.repository.PostRepository;
 import org.example.helptreeservice.repository.UserRepository;
 import org.example.helptreeservice.repository.projection.GraphUserProjection;
+import org.example.helptreeservice.service.notification.NotificationCommand;
 import org.example.helptreeservice.service.notification.NotificationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -34,6 +35,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -298,7 +300,7 @@ class HelpServiceTest {
     }
 
     @Test
-    void confirmHelp_shouldRejectBlockedReceiver() {
+    void confirmHelp_shouldNotDependOnReceiverBlockStatus() {
         User helper = user(1L);
         User receiver = user(2L);
         receiver.setBlockedUntil(LocalDateTime.now().plusDays(1));
@@ -307,11 +309,63 @@ class HelpServiceTest {
         when(userRepository.findAllByIdInForUpdate(List.of(1L, 2L)))
                 .thenReturn(List.of(helper, receiver));
 
-        assertThrows(BadRequestException.class,
-                () -> helpService.confirmHelp(5L, 2L, false));
-        assertEquals(HelpStatus.COMPLETED, help.getStatus());
+        HelpResponse response = helpService.confirmHelp(5L, 2L, false);
+
+        assertEquals("CONFIRMED", response.getStatus());
+        verify(walletService).addCoinsForHelp(1L, 2L, 10L);
+        verify(walletService).addCoinsForReceivedHelp(2L, 1L, 10L);
+    }
+
+    @Test
+    void autoConfirmStaleCompletedHelp_shouldRecordSystemConfirmationAndNotifyBothUsers() {
+        Help help = help(5L, HelpStatus.COMPLETED, user(1L), user(2L));
+        help.setCompletedAt(LocalDateTime.now().minusDays(8));
+        when(helpRepository.findByIdForUpdate(5L)).thenReturn(Optional.of(help));
+        when(userRepository.findAllByIdInForUpdate(List.of(1L, 2L)))
+                .thenReturn(List.of(help.getHelper(), help.getReceiver()));
+
+        boolean confirmed = helpService.autoConfirmStaleCompletedHelp(
+                5L, LocalDateTime.now().minusDays(7));
+
+        assertTrue(confirmed);
+        assertEquals(HelpStatus.CONFIRMED, help.getStatus());
+        verify(walletService).addCoinsForHelp(1L, 2L, 10L);
+        verify(walletService).addCoinsForReceivedHelp(2L, 1L, 10L);
+
+        ArgumentCaptor<HelpStatusHistory> history =
+                ArgumentCaptor.forClass(HelpStatusHistory.class);
+        verify(statusHistoryRepository).save(history.capture());
+        assertEquals(HelpActorRole.SYSTEM, history.getValue().getActorRole());
+        assertNull(history.getValue().getActorId());
+        assertEquals("Автоматическое подтверждение: получатель не ответил в установленный срок",
+                history.getValue().getReason());
+
+        ArgumentCaptor<NotificationCommand> notifications =
+                ArgumentCaptor.forClass(NotificationCommand.class);
+        verify(notificationService, times(2)).notify(notifications.capture());
+        Map<Long, String> dedupeKeys = notifications.getAllValues().stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        NotificationCommand::userId, NotificationCommand::dedupeKey));
+        assertEquals("help:5:confirmed:helper", dedupeKeys.get(1L));
+        assertEquals("help:5:auto-confirmed:receiver", dedupeKeys.get(2L));
+    }
+
+    @Test
+    void autoConfirmStaleCompletedHelp_shouldSkipFreshOrAlreadyConfirmedHelp() {
+        Help fresh = help(5L, HelpStatus.COMPLETED, user(1L), user(2L));
+        fresh.setCompletedAt(LocalDateTime.now().minusDays(1));
+        when(helpRepository.findByIdForUpdate(5L)).thenReturn(Optional.of(fresh));
+
+        assertFalse(helpService.autoConfirmStaleCompletedHelp(
+                5L, LocalDateTime.now().minusDays(7)));
+        assertEquals(HelpStatus.COMPLETED, fresh.getStatus());
         verifyNoInteractions(walletService, achievementService, ratingService, userService);
-        verify(helpRepository, never()).saveAndFlush(any(Help.class));
+
+        Help confirmed = help(6L, HelpStatus.CONFIRMED, user(1L), user(2L));
+        confirmed.setCompletedAt(LocalDateTime.now().minusDays(8));
+        when(helpRepository.findByIdForUpdate(6L)).thenReturn(Optional.of(confirmed));
+        assertFalse(helpService.autoConfirmStaleCompletedHelp(
+                6L, LocalDateTime.now().minusDays(7)));
     }
 
     @Test

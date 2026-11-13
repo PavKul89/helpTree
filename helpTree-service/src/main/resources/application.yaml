@@ -239,6 +239,8 @@ app:
     # Stale ACCEPTED helps are cancelled after this many hours (default 7 days).
     sla-enabled: ${HELP_SLA_ENABLED:true}
     accepted-timeout-hours: ${HELP_ACCEPTED_TIMEOUT_HOURS:168}
+    completed-timeout-hours: ${HELP_COMPLETED_TIMEOUT_HOURS:168}
+    auto-confirm-enabled: ${HELP_AUTO_CONFIRM_ENABLED:true}
     sla-cron: "${HELP_SLA_CRON:0 0 * * * *}"
     sla-batch-size: ${HELP_SLA_BATCH_SIZE:100}
     # Reminders are sent at 50% and 80% of the same timeout.

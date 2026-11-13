@@ -64,6 +64,14 @@ public interface HelpRepository extends JpaRepository<Help, Long> {
                                                   @Param("cutoff") LocalDateTime cutoff,
                                                   Pageable pageable);
 
+    @Query("SELECT h.id FROM Help h " +
+           "WHERE h.status = :status AND h.completedAt IS NOT NULL AND h.completedAt < :cutoff " +
+           "AND (h.deleted = false OR h.deleted IS NULL) " +
+           "ORDER BY h.completedAt ASC")
+    List<Long> findIdsByStatusAndCompletedAtBefore(@Param("status") HelpStatus status,
+                                                   @Param("cutoff") LocalDateTime cutoff,
+                                                   Pageable pageable);
+
     /**
      * Helps that crossed at least one reminder threshold and have not had that
      * reminder delivered yet. The 80% branch is checked independently so a help

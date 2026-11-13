@@ -12,6 +12,12 @@ public class HelpProperties {
     /** Stale ACCEPTED helps older than this are cancelled by the scheduler. */
     private long acceptedTimeoutHours = 168L;
 
+    /** COMPLETED helps older than this are confirmed by the scheduler. */
+    private long completedTimeoutHours = 168L;
+
+    /** Allows operators to disable automatic confirmation without a code change. */
+    private boolean autoConfirmEnabled = true;
+
     /** Allows operators to disable automatic cancellation without a code change. */
     private boolean slaEnabled = true;
 
