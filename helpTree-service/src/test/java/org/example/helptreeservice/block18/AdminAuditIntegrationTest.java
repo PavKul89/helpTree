@@ -54,6 +54,10 @@ class AdminAuditIntegrationTest {
     void cleanUp() {
         jdbcTemplate.update("DELETE FROM admin_audit_log WHERE request_id LIKE ?",
                 REQUEST_PREFIX + "%");
+        jdbcTemplate.update("DELETE FROM rating_history WHERE user_id IN "
+                + "(SELECT id FROM users WHERE email LIKE ?)", EMAIL_PREFIX + "%@test.local");
+        jdbcTemplate.update("DELETE FROM user_rating_stats WHERE user_id IN "
+                + "(SELECT id FROM users WHERE email LIKE ?)", EMAIL_PREFIX + "%@test.local");
         jdbcTemplate.update("DELETE FROM users WHERE email LIKE ?",
                 EMAIL_PREFIX + "%@test.local");
     }

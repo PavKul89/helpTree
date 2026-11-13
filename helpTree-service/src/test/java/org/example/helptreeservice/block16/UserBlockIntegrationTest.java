@@ -80,6 +80,8 @@ class UserBlockIntegrationTest {
                 + ") OR user2_id IN (" + in + ")");
         jdbcTemplate.update("DELETE FROM helps WHERE helper_id IN (" + in
                 + ") OR receiver_id IN (" + in + ")");
+        jdbcTemplate.update("DELETE FROM rating_history WHERE user_id IN (" + in + ")");
+        jdbcTemplate.update("DELETE FROM user_rating_stats WHERE user_id IN (" + in + ")");
         jdbcTemplate.update("DELETE FROM posts WHERE user_id IN (" + in + ")");
         jdbcTemplate.update("DELETE FROM users WHERE id IN (" + in + ")");
     }

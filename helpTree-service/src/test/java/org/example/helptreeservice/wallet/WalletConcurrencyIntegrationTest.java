@@ -70,6 +70,8 @@ class WalletConcurrencyIntegrationTest {
                 + "OR admin_id IN (" + in + ")");
         jdbcTemplate.update("DELETE FROM coin_transactions WHERE user_id IN (" + in + ") "
                 + "OR related_user_id IN (" + in + ")");
+        jdbcTemplate.update("DELETE FROM rating_history WHERE user_id IN (" + in + ")");
+        jdbcTemplate.update("DELETE FROM user_rating_stats WHERE user_id IN (" + in + ")");
         jdbcTemplate.update("DELETE FROM posts WHERE user_id IN (" + in + ")");
         jdbcTemplate.update("DELETE FROM users WHERE id IN (" + in + ")");
     }

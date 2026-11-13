@@ -65,6 +65,8 @@ class CommentThreadIntegrationTest {
         String in = ids.stream().map(String::valueOf).collect(Collectors.joining(","));
         jdbcTemplate.update("DELETE FROM reports WHERE reporter_id IN (" + in + ") OR resolved_by_id IN (" + in + ")");
         jdbcTemplate.update("DELETE FROM comments WHERE user_id IN (" + in + ") OR deleted_by_id IN (" + in + ")");
+        jdbcTemplate.update("DELETE FROM rating_history WHERE user_id IN (" + in + ")");
+        jdbcTemplate.update("DELETE FROM user_rating_stats WHERE user_id IN (" + in + ")");
         jdbcTemplate.update("DELETE FROM posts WHERE user_id IN (" + in + ")");
         jdbcTemplate.update("DELETE FROM users WHERE id IN (" + in + ")");
     }

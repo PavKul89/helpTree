@@ -83,6 +83,8 @@ class NotificationIntegrationTest {
                 DEDUPE_PREFIX + "%");
         jdbcTemplate.update("DELETE FROM notifications WHERE user_id IN (" + in + ")");
         jdbcTemplate.update("DELETE FROM notification_preferences WHERE user_id IN (" + in + ")");
+        jdbcTemplate.update("DELETE FROM rating_history WHERE user_id IN (" + in + ")");
+        jdbcTemplate.update("DELETE FROM user_rating_stats WHERE user_id IN (" + in + ")");
         jdbcTemplate.update("DELETE FROM users WHERE id IN (" + in + ")");
     }
 

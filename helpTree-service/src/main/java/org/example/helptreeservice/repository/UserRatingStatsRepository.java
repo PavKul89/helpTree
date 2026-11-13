@@ -36,6 +36,15 @@ public interface UserRatingStatsRepository extends JpaRepository<UserRatingStats
             + "VALUES (:userId, 0, 0, 0, 0, 3.0, 'STABLE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) "
             + "ON CONFLICT (user_id) DO NOTHING", nativeQuery = true)
     void insertIfAbsent(@Param("userId") Long userId);
+
+    /**
+     * Drops the projection row of an account that no longer exists. The table
+     * has no foreign key to {@code users}, so a physical delete would otherwise
+     * leave an always-stale row that the scheduled recalc retries forever.
+     */
+    @Modifying
+    @Query("DELETE FROM UserRatingStats s WHERE s.userId = :userId")
+    int deleteByUserId(@Param("userId") Long userId);
     
     @Query("SELECT s FROM UserRatingStats s JOIN User u ON u.id = s.userId " +
             "WHERE u.deleted = false ORDER BY s.currentRating DESC")

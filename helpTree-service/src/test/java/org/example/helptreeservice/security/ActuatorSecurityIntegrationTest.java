@@ -69,6 +69,14 @@ class ActuatorSecurityIntegrationTest {
                 DELETE FROM auth_sessions
                 WHERE user_id IN (SELECT id FROM users WHERE email LIKE ?)
                 """, EMAIL_PREFIX + "%" + EMAIL_SUFFIX);
+        jdbcTemplate.update("""
+                DELETE FROM rating_history
+                WHERE user_id IN (SELECT id FROM users WHERE email LIKE ?)
+                """, EMAIL_PREFIX + "%" + EMAIL_SUFFIX);
+        jdbcTemplate.update("""
+                DELETE FROM user_rating_stats
+                WHERE user_id IN (SELECT id FROM users WHERE email LIKE ?)
+                """, EMAIL_PREFIX + "%" + EMAIL_SUFFIX);
         jdbcTemplate.update("DELETE FROM users WHERE email LIKE ?",
                 EMAIL_PREFIX + "%" + EMAIL_SUFFIX);
     }

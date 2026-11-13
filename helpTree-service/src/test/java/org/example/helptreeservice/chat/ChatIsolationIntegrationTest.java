@@ -92,6 +92,8 @@ class ChatIsolationIntegrationTest {
         // chats cascade to messages and chat_user_state
         jdbcTemplate.update("DELETE FROM chats WHERE user1_id IN (" + ids
                 + ") OR user2_id IN (" + ids + ")");
+        jdbcTemplate.update("DELETE FROM rating_history WHERE user_id IN (" + ids + ")");
+        jdbcTemplate.update("DELETE FROM user_rating_stats WHERE user_id IN (" + ids + ")");
         jdbcTemplate.update("DELETE FROM users WHERE id IN (" + ids + ")");
         createdUserIds.clear();
     }

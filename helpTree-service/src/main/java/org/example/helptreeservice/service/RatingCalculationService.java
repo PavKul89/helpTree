@@ -86,7 +86,12 @@ public class RatingCalculationService {
     public Double calculateUserRating(Long userId, String reason) {
         User user = userRepository.findById(userId).orElse(null);
         if (user == null) {
-            log.warn("Расчет рейтинга пропущен: пользователь {} не найден", userId);
+            // user_rating_stats has no FK to users, so a physically deleted
+            // account leaves a row that never becomes fresh again and is
+            // retried by every scheduled sweep. Remove it once and stop.
+            int removed = statsRepository.deleteByUserId(userId);
+            log.info("Расчет рейтинга пропущен: пользователь {} не найден, "
+                    + "удалено строк проекции: {}", userId, removed);
             return null;
         }
 

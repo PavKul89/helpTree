@@ -249,6 +249,27 @@ class Block22ReviewIntegrationTest extends Block22TestSupport {
         assertTrue(top.stream().allMatch(item -> item.getUserId() != null && item.getUserName() != null));
     }
 
+    @Test
+    void aMissingAccountDropsItsRatingProjection() {
+        long deletedUserId = 9_000_000_001L;
+        jdbcTemplate.update("DELETE FROM user_rating_stats WHERE user_id = ?", deletedUserId);
+        jdbcTemplate.update("INSERT INTO user_rating_stats "
+                        + "(user_id, current_rating, rating_trend, last_calculated, updated_at) "
+                        + "VALUES (?, 3.0, 'STABLE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+                deletedUserId);
+
+        try {
+            ratingService.recalculateUsers(List.of(deletedUserId));
+
+            assertEquals(0L, jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM user_rating_stats WHERE user_id = ?",
+                    Long.class, deletedUserId),
+                    "An orphan projection row must be removed instead of retried forever");
+        } finally {
+            jdbcTemplate.update("DELETE FROM user_rating_stats WHERE user_id = ?", deletedUserId);
+        }
+    }
+
     // --------------------------------------------------------------- helpers
 
     private CreateReviewRequest reviewRequest(Long helpId, int rating, String comment) {

@@ -210,5 +210,8 @@ class RatingCalculationServiceTest {
 
         assertNull(service.calculateUserRating(99L));
         verify(statsRepository, never()).findByUserIdForUpdate(any());
+        // The projection has no FK to users, so the stale row must be dropped
+        // instead of being retried by every scheduled sweep.
+        verify(statsRepository).deleteByUserId(99L);
     }
 }
