@@ -48,12 +48,15 @@ BEGIN
             ('chk_users_debt_count_non_negative'),
             ('chk_users_help_coins_non_negative'),
             ('chk_chats_distinct_users'),
-            ('chk_chats_canonical_order'),
-            ('fk_chat_user_state_last_read')
+            ('chk_chats_canonical_order')
     ) AS expected(name)
     WHERE NOT EXISTS (
         SELECT 1 FROM pg_constraint WHERE conname = expected.name
     );
+
+    -- V62 intentionally drops fk_chat_user_state_last_read when messages are
+    -- partitioned by created_at: the column remains as historical state, but it
+    -- can no longer reference a single-column key in the partitioned table.
 
     IF missing IS NOT NULL THEN
         RAISE EXCEPTION 'Block 6 schema is missing constraint(s): %', missing;
