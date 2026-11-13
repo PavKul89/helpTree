@@ -43,6 +43,7 @@ public class HelpTreeMetrics {
     private final AtomicLong walletBalanceMismatches = new AtomicLong();
     private final AtomicLong outboxBacklog = new AtomicLong();
     private final AtomicLong outboxOldestAgeSeconds = new AtomicLong();
+    private final AtomicLong outboxDead = new AtomicLong();
     private final AtomicLong databaseUp = new AtomicLong(1);
     private final AtomicLong webSocketSessions = new AtomicLong();
 
@@ -55,6 +56,7 @@ public class HelpTreeMetrics {
         gauge("helptree.outbox.backlog", "Undelivered outbox events", outboxBacklog);
         gauge("helptree.outbox.oldest.age.seconds", "Age of the oldest undelivered outbox event",
                 outboxOldestAgeSeconds);
+        gauge("helptree.outbox.dead", "Outbox events requiring manual review", outboxDead);
         gauge("helptree.database.up", "1 when the last database probe succeeded", databaseUp);
         gauge("helptree.websocket.sessions", "Currently connected WebSocket sessions", webSocketSessions);
     }
@@ -172,6 +174,10 @@ public class HelpTreeMetrics {
     public void setOutboxState(long backlog, long oldestAgeSeconds) {
         outboxBacklog.set(backlog);
         outboxOldestAgeSeconds.set(oldestAgeSeconds);
+    }
+
+    public void setOutboxDead(long count) {
+        outboxDead.set(count);
     }
 
     public void setDatabaseUp(boolean up) {

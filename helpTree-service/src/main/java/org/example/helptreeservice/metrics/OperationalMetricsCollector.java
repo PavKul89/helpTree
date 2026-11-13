@@ -49,6 +49,7 @@ public class OperationalMetricsCollector {
     private long reportSlaHours;
 
     private volatile boolean lastProbeFailed;
+    private volatile long lastDeadOutboxCount = -1;
 
     @Scheduled(fixedDelayString = "${app.metrics.refresh-ms:60000}",
             initialDelayString = "${app.metrics.initial-delay-ms:15000}")
@@ -106,6 +107,12 @@ public class OperationalMetricsCollector {
                 ? 0
                 : Math.max(0, Duration.between(oldest, LocalDateTime.now()).toSeconds());
         metrics.setOutboxState(backlog, ageSeconds);
+        long dead = outboxEventRepository.countByStatus(OutboxStatus.DEAD);
+        metrics.setOutboxDead(dead);
+        if (dead > 0 && dead != lastDeadOutboxCount) {
+            log.warn("В outbox находится {} событий DEAD, требуется ручной разбор", dead);
+        }
+        lastDeadOutboxCount = dead;
     }
 
     private void refreshWalletMetrics() {

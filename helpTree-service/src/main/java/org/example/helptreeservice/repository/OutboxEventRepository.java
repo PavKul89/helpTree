@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.Collection;
@@ -65,6 +66,18 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, Long> 
                            @Param("reason") String reason);
 
     long countByStatus(OutboxStatus status);
+
+    @Modifying
+    @Transactional
+    @Query(value = "WITH expired AS ("
+            + "SELECT id, created_at FROM outbox_events "
+            + "WHERE status = 'PUBLISHED' AND published_at < :cutoff "
+            + "ORDER BY published_at, id LIMIT :batchSize FOR UPDATE SKIP LOCKED"
+            + ") DELETE FROM outbox_events e USING expired "
+            + "WHERE e.id = expired.id AND e.created_at = expired.created_at",
+            nativeQuery = true)
+    int deletePublishedBefore(@Param("cutoff") LocalDateTime cutoff,
+                              @Param("batchSize") int batchSize);
 
     long countByStatusIn(Collection<OutboxStatus> statuses);
 

@@ -3,6 +3,7 @@ package org.example.helptreeservice.block17;
 import org.example.helptreeservice.dto.notifications.NotificationDto;
 import org.example.helptreeservice.dto.notifications.NotificationPreferencesResponse;
 import org.example.helptreeservice.dto.notifications.UpdateNotificationPreferencesRequest;
+import org.example.helptreeservice.config.NotificationProperties;
 import org.example.helptreeservice.entity.Notification;
 import org.example.helptreeservice.entity.OutboxEvent;
 import org.example.helptreeservice.entity.User;
@@ -13,6 +14,7 @@ import org.example.helptreeservice.exception.NotFoundException;
 import org.example.helptreeservice.repository.NotificationRepository;
 import org.example.helptreeservice.repository.OutboxEventRepository;
 import org.example.helptreeservice.repository.UserRepository;
+import org.example.helptreeservice.scheduler.NotificationOutboxScheduler;
 import org.example.helptreeservice.service.notification.NotificationCommand;
 import org.example.helptreeservice.service.notification.NotificationService;
 import org.example.helptreeservice.service.notification.OutboxDeliveryService;
@@ -61,6 +63,8 @@ class NotificationIntegrationTest {
     @Autowired private OutboxService outboxService;
     @Autowired private OutboxDeliveryService outboxDeliveryService;
     @Autowired private OutboxEventRepository outboxEventRepository;
+    @Autowired private NotificationOutboxScheduler notificationOutboxScheduler;
+    @Autowired private NotificationProperties notificationProperties;
     @Autowired private UserRepository userRepository;
     @Autowired private JdbcTemplate jdbcTemplate;
     @Autowired private PlatformTransactionManager transactionManager;
@@ -229,6 +233,48 @@ class NotificationIntegrationTest {
                 outboxEventRepository.findById(first.getId()).orElseThrow().getStatus());
         // The released event is dispatchable again.
         assertNotNull(outboxService.claimById("block17-it-3", first.getId()));
+    }
+
+    @Test
+    void publishedRetentionDeletesOnlyOldPublishedRowsInBatches() {
+        notificationProperties.setRetentionDays(30);
+        LocalDateTime now = LocalDateTime.now();
+        OutboxEvent expired = saveRetentionEvent("retention:expired",
+                OutboxStatus.PUBLISHED, now.minusDays(40), now.minusDays(40));
+        OutboxEvent recent = saveRetentionEvent("retention:recent",
+                OutboxStatus.PUBLISHED, now, now);
+        OutboxEvent pending = saveRetentionEvent("retention:pending",
+                OutboxStatus.PENDING, now.minusDays(40), null);
+        OutboxEvent dead = saveRetentionEvent("retention:dead",
+                OutboxStatus.DEAD, now.minusDays(40), now.minusDays(40));
+
+        notificationOutboxScheduler.purgePublishedEvents();
+
+        assertTrue(outboxEventRepository.findById(expired.getId()).isEmpty());
+        assertEquals(OutboxStatus.PUBLISHED,
+                outboxEventRepository.findById(recent.getId()).orElseThrow().getStatus());
+        assertEquals(OutboxStatus.PENDING,
+                outboxEventRepository.findById(pending.getId()).orElseThrow().getStatus());
+        assertEquals(OutboxStatus.DEAD,
+                outboxEventRepository.findById(dead.getId()).orElseThrow().getStatus());
+    }
+
+    private OutboxEvent saveRetentionEvent(String key,
+                                           OutboxStatus status,
+                                           LocalDateTime createdAt,
+                                           LocalDateTime publishedAt) {
+        return outboxEventRepository.saveAndFlush(OutboxEvent.builder()
+                .aggregateType("NOTIFICATION")
+                .aggregateId(1L)
+                .eventType("NOTIFICATION_DELIVERY")
+                .payload(Map.of())
+                .dedupeKey(DEDUPE_PREFIX + key + ":" + UUID.randomUUID())
+                .status(status)
+                .attempts(0)
+                .availableAt(createdAt)
+                .createdAt(createdAt)
+                .publishedAt(publishedAt)
+                .build());
     }
 
     @Test

@@ -223,6 +223,10 @@ app:
     # Global switch. When false no notification row and no outbox intent is written.
     enabled: ${NOTIFICATIONS_ENABLED:true}
     dispatch-cron: "${NOTIFICATIONS_DISPATCH_CRON:0 * * * * *}"
+    retention-days: ${NOTIFICATIONS_RETENTION_DAYS:30}
+    retention-cron: "${NOTIFICATIONS_RETENTION_CRON:0 15 3 * * *}"
+    retention-batch-size: ${NOTIFICATIONS_RETENTION_BATCH_SIZE:500}
+    retention-max-batches-per-run: ${NOTIFICATIONS_RETENTION_MAX_BATCHES_PER_RUN:20}
     batch-size: ${NOTIFICATIONS_BATCH_SIZE:50}
     max-batches-per-run: ${NOTIFICATIONS_MAX_BATCHES_PER_RUN:10}
     max-attempts: ${NOTIFICATIONS_MAX_ATTEMPTS:5}

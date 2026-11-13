@@ -43,6 +43,15 @@ public class NotificationProperties {
      */
     private long processingTimeoutMinutes = 10;
 
+    /** Successfully published events are retained for this many days. */
+    private int retentionDays = 30;
+
+    /** Maximum published rows deleted in one transaction. */
+    private int retentionBatchSize = 500;
+
+    /** Maximum cleanup batches per scheduled run. */
+    private int retentionMaxBatchesPerRun = 20;
+
     /** Telegram transport stays disabled while this is blank. */
     private String telegramBotToken = "";
 
