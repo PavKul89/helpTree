@@ -22,9 +22,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.jpa.repository.Modifying;
 
+import java.lang.reflect.Method;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -390,6 +393,57 @@ class UserServiceTest {
         userService.unblockExpiredBlocks();
 
         verify(ratingService).recalculateUsers(List.of(1L, 2L), "Автоматическая разблокировка");
+    }
+
+    @Test
+    void unblockExpiredBlocks_shouldSnapshotExpiriesBeforeBulkUpdate() {
+        User expired = user(1L, false);
+        expired.setBlockedAt(LocalDateTime.now().minusDays(8));
+        expired.setBlockedUntil(LocalDateTime.now().minusDays(1));
+        when(userRepository.findIdsWithExpiredBlocks(any(LocalDateTime.class)))
+                .thenReturn(List.of(1L));
+        when(userRepository.findAllById(List.of(1L))).thenReturn(List.of(expired));
+        when(userRepository.unblockExpiredUsers(any(LocalDateTime.class))).thenReturn(1);
+
+        userService.unblockExpiredBlocks();
+
+        InOrder order = inOrder(userRepository);
+        order.verify(userRepository).findAllById(List.of(1L));
+        order.verify(userRepository).unblockExpiredUsers(any(LocalDateTime.class));
+    }
+
+    @Test
+    void unblockExpiredUsers_shouldClearAndFlushPersistenceContext() throws Exception {
+        Method method = UserRepository.class.getMethod("unblockExpiredUsers", LocalDateTime.class);
+        Modifying modifying = method.getAnnotation(Modifying.class);
+
+        assertNotNull(modifying);
+        assertTrue(modifying.clearAutomatically(),
+                "Stale managed users would restore the block columns during rating recalculation");
+        assertTrue(modifying.flushAutomatically());
+    }
+
+    @Test
+    void updateUserRating_shouldRejectInvalidValues() {
+        assertThrows(BadRequestException.class, () -> userService.updateUserRating(1L, null));
+        assertThrows(BadRequestException.class, () -> userService.updateUserRating(1L, Double.NaN));
+        assertThrows(BadRequestException.class, () -> userService.updateUserRating(1L, Double.POSITIVE_INFINITY));
+        assertThrows(BadRequestException.class, () -> userService.updateUserRating(1L, Double.NEGATIVE_INFINITY));
+        assertThrows(BadRequestException.class, () -> userService.updateUserRating(1L, -0.1));
+        assertThrows(BadRequestException.class, () -> userService.updateUserRating(1L, 5.1));
+        verifyNoInteractions(userRepository);
+    }
+
+    @Test
+    void updateUserRating_shouldAcceptRangeBoundaries() {
+        User user = user(1L, false);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        userService.updateUserRating(1L, 0.0);
+        assertEquals(0.0, user.getRating());
+
+        userService.updateUserRating(1L, 5.0);
+        assertEquals(5.0, user.getRating());
     }
 
     @Test

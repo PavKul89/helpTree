@@ -172,19 +172,12 @@ public class RatingCalculationService {
             rating -= DEBT_PENALTY;
         }
 
-        if (isActivelyBlocked(user)) {
+        if (user.isActivelyBlocked(LocalDateTime.now())) {
             rating -= BLOCK_PENALTY;
         }
 
         rating = Math.max(1.0, Math.min(5.0, rating));
         return Math.round(rating * 10.0) / 10.0;
-    }
-
-    private boolean isActivelyBlocked(User user) {
-        if (user.getBlockedUntil() != null) {
-            return user.getBlockedUntil().isAfter(LocalDateTime.now());
-        }
-        return user.getBlockedAt() != null;
     }
 
     private String determineTrend(Double oldRating, double newRating) {
@@ -212,7 +205,7 @@ public class RatingCalculationService {
                         + "\"averageReview\":%s,\"debt\":%d,\"blocked\":%s}",
                 confirmedHelps, cancelledHelps, activeHelps, reviewCount,
                 averageReviewRating != null ? averageReviewRating : "null",
-                debt, isActivelyBlocked(user));
+                debt, user.isActivelyBlocked(LocalDateTime.now()));
     }
 
     /**

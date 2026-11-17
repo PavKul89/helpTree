@@ -104,7 +104,7 @@ public class WalletService {
                 .vipUntil(user.getVipUntil())
                 .vipActive(user.isVip())
                 .nicknameColor(user.getNicknameColor())
-                .blocked(isActivelyBlocked(user, LocalDateTime.now()))
+                .blocked(user.isActivelyBlocked(LocalDateTime.now()))
                 .blockedAt(user.getBlockedAt())
                 .blockedUntil(user.getBlockedUntil())
                 .debtCount(nvl(user.getDebtCount()))
@@ -441,13 +441,13 @@ public class WalletService {
             validateExisting(existing.get(), -price, description, null, null);
             return result(TransactionType.ACCOUNT_UNBLOCK, price, currentBalance(user), false, null)
                     .debtCount(nvl(user.getDebtCount()))
-                    .blocked(isActivelyBlocked(user, LocalDateTime.now()))
+                    .blocked(user.isActivelyBlocked(LocalDateTime.now()))
                     .transactionId(existing.get().getId())
                     .build();
         }
 
         LocalDateTime now = LocalDateTime.now();
-        if (!isActivelyBlocked(user, now)) {
+        if (!user.isActivelyBlocked(now)) {
             throw new BadRequestException("Аккаунт не заблокирован");
         }
 
@@ -784,11 +784,6 @@ public class WalletService {
 
     private int nvl(Integer value) {
         return value != null ? value : 0;
-    }
-
-    private boolean isActivelyBlocked(User user, LocalDateTime now) {
-        return (user.getBlockedUntil() != null && user.getBlockedUntil().isAfter(now))
-                || user.getBlockedAt() != null;
     }
 
     private long positivePrice(long price, String operation) {

@@ -661,6 +661,9 @@ public class UserService {
 
     @CacheEvict(value = "userRating", key = "#id")
     public void updateUserRating(Long id, Double rating) {
+        if (rating == null || !Double.isFinite(rating) || rating < 0.0 || rating > 5.0) {
+            throw new BadRequestException("Рейтинг должен быть конечным числом в диапазоне от 0 до 5");
+        }
         log.info("Обновление рейтинга пользователя ID: {} на {}", id, rating);
         try {
             User user = getUserEntityById(id);
@@ -819,7 +822,7 @@ public class UserService {
         if (user == null) {
             return false;
         }
-        return user.getBlockedUntil() != null && user.getBlockedUntil().isAfter(LocalDateTime.now());
+        return user.isActivelyBlocked(LocalDateTime.now());
     }
 
     @Transactional
@@ -845,8 +848,8 @@ public class UserService {
     public void unblockExpiredBlocks() {
         log.info("Запуск авто-разблокировки пользователей с истёкшим сроком");
         LocalDateTime now = LocalDateTime.now();
-        // Read the ids before the bulk update: loading entities here would leave
-        // stale blocked values in the persistence context for the recalculation.
+        // Read the ids first: this is a scalar projection and does not manage
+        // entities with stale block values.
         List<Long> unblockedIds = userRepository.findIdsWithExpiredBlocks(now);
         if (unblockedIds.isEmpty()) {
             return;
@@ -854,6 +857,8 @@ public class UserService {
 
         // Snapshot the deadline before the bulk UPDATE clears it; the value is
         // part of the dedupe key so the same expiry notifies exactly once.
+        // unblockExpiredUsers() clears the persistence context, so the rating
+        // recalculation below reloads users with the block columns already NULL.
         Map<Long, LocalDateTime> expiries = new LinkedHashMap<>();
         for (User user : userRepository.findAllById(unblockedIds)) {
             expiries.put(user.getId(), user.getBlockedUntil());

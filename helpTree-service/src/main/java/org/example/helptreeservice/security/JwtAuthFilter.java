@@ -23,7 +23,6 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.List;
-import java.util.Set;
 
 /**
  * Authenticates requests with a signed access token and then revalidates it
@@ -39,23 +38,6 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
     private final AuthSessionService authSessionService;
-
-    private static final Set<String> PUBLIC_AUTH_POST_PATHS = Set.of(
-            "/api/auth/register",
-            "/api/auth/login",
-            "/api/auth/refresh",
-            "/api/auth/password/reset/request",
-            "/api/auth/password/reset/confirm",
-            "/api/auth/email/verification/confirm",
-            "/api/auth/email/change/confirm"
-    );
-
-    private static final Set<String> PUBLIC_EXACT_PATHS = Set.of(
-            "/actuator/info",
-            "/swagger-ui.html",
-            "/api/achievements",
-            "/api/activities"
-    );
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
@@ -202,61 +184,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     }
 
     private boolean isPublicPath(String path, String method) {
-        if (path.startsWith("/actuator/health")
-                && ("GET".equals(method) || "HEAD".equals(method))) {
-            return true;
-        }
-        if (PUBLIC_EXACT_PATHS.contains(path)) {
-            return true;
-        }
-        if (PUBLIC_AUTH_POST_PATHS.contains(path) && "POST".equals(method)) {
-            return true;
-        }
-        if (path.startsWith("/swagger-ui/")
-                || path.equals("/swagger-ui.html")
-                || path.equals("/v3/api-docs")
-                || path.equals("/v3/api-docs.yaml")
-                || path.startsWith("/v3/api-docs/")) {
-            return true;
-        }
-        if (path.startsWith("/ws/")) {
-            return true;
-        }
-        // View counting is available to guests too: the IP + User-Agent hash is
-        // the anonymous viewer key. The endpoint itself never exposes data.
-        if ("POST".equals(method) && path.matches("/api/posts/\\d+/views")) {
-            return true;
-        }
-        if ("GET".equals(method)) {
-            // `/api/posts/mine` is an authenticated owner view even though it
-            // shares the public `/api/posts/**` prefix.
-            if (path.startsWith("/api/posts/") && !"/api/posts/mine".equals(path)) {
-                return true;
-            }
-            if (path.equals("/api/posts")) {
-                return true;
-            }
-            if (path.equals("/api/stats")
-                    || path.equals("/api/users/public")
-                    || path.equals("/api/helps/graph")
-                    || path.equals("/api/helps/stats")) {
-                return true;
-            }
-            if (path.matches("/api/users/\\d+/public")
-                    || path.matches("/api/users/\\d+/activities")) {
-                return true;
-            }
-            if (path.startsWith("/api/reviews/")) {
-                return true;
-            }
-            // Only the aggregate rating and one user's rating are public. The
-            // calculation history requires authentication and owner/admin.
-            if (path.equals("/api/ratings/top")
-                    || path.matches("/api/ratings/user/\\d+")) {
-                return true;
-            }
-        }
-        return false;
+        return PublicRoutes.isPublic(path, method);
     }
 
     private void sendError(HttpServletRequest request,

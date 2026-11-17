@@ -31,6 +31,7 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -195,6 +196,14 @@ public class GlobalExceptionHandler {
                 ex.getMostSpecificCause().getMessage());
         return error(HttpStatus.CONFLICT, ErrorType.CONFLICT,
                 "Нарушение целостности данных. Возможно, запись уже существует.", request);
+    }
+
+    @ExceptionHandler(DateTimeParseException.class)
+    public ResponseEntity<ErrorResponse> handleDateTimeParse(DateTimeParseException ex, HttpServletRequest request) {
+        LogContext.setErrorType(ErrorType.BAD_REQUEST.getCode());
+        log.warn("Invalid date/time parameter for {}: {}", request.getRequestURI(), ex.getParsedString());
+        return error(HttpStatus.BAD_REQUEST, ErrorType.BAD_REQUEST,
+                "Некорректный формат даты и времени", request);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

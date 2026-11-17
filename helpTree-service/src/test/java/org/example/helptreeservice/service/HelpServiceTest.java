@@ -671,6 +671,23 @@ class HelpServiceTest {
         verify(helpRepository).findUserGraphEdges(1L, 10, 2000);
     }
 
+    @Test
+    void getNewResponsesCount_shouldRejectMalformedSinceParameter() {
+        BadRequestException ex = assertThrows(BadRequestException.class,
+                () -> helpService.getNewResponsesCount(1L, "not-a-date"));
+
+        assertTrue(ex.getMessage().contains("since"));
+        verifyNoInteractions(helpRepository);
+    }
+
+    @Test
+    void getNewResponsesCount_shouldAcceptIsoSinceParameter() {
+        when(helpRepository.countNewResponsesSince(eq(1L), any(LocalDateTime.class))).thenReturn(3L);
+
+        assertEquals(3L, helpService.getNewResponsesCount(1L, "2026-01-01T00:00:00"));
+        verify(helpRepository).countNewResponsesSince(eq(1L), any(LocalDateTime.class));
+    }
+
     private Object[] graphRow(Long helpId,
                               Long helperId,
                               String helperName,

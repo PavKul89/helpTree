@@ -178,7 +178,7 @@ public class AdminWalletController {
                 .vipUntil(user.getVipUntil())
                 .vipActive(user.getVipUntil() != null && user.getVipUntil().isAfter(now))
                 .blockedUntil(user.getBlockedUntil())
-                .blocked(user.getBlockedUntil() != null && user.getBlockedUntil().isAfter(now))
+                .blocked(user.isActivelyBlocked(now))
                 .nicknameColor(user.getNicknameColor())
                 .createdAt(user.getCreatedAt())
                 .build();

@@ -114,7 +114,14 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
     @Query("SELECT u.id FROM User u WHERE u.deleted = false AND u.blockedUntil IS NOT NULL AND u.blockedUntil < :now")
     List<Long> findIdsWithExpiredBlocks(@Param("now") LocalDateTime now);
 
-    @Modifying
+    /**
+     * Bulk-unblocks expired accounts. The persistence context must be flushed
+     * first and cleared afterwards: the caller snapshots deadlines from managed
+     * users, then recalculates ratings in the same transaction. Without
+     * {@code clearAutomatically} those stale entities would be flushed back by
+     * the rating recalculation and restore the cleared block columns.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("UPDATE User u SET u.blockedAt = NULL, u.blockedUntil = NULL, u.updatedAt = CURRENT_TIMESTAMP " +
            "WHERE u.deleted = false AND u.blockedUntil IS NOT NULL AND u.blockedUntil < :now")
     int unblockExpiredUsers(@Param("now") LocalDateTime now);

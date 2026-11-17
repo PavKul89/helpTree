@@ -101,6 +101,7 @@ class JwtAuthFilterTest {
         assertTrue(isPublic("/api/users/7/public", "GET"));
         assertTrue(isPublic("/api/users/7/activities", "GET"));
         assertTrue(isPublic("/api/activities", "GET"));
+        assertTrue(isPublic("/api/search", "GET"));
         assertTrue(isPublic("/api/ratings/top", "GET"));
         assertTrue(isPublic("/api/ratings/user/7", "GET"));
         assertTrue(isPublic("/api/helps/graph", "GET"));

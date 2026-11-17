@@ -147,6 +147,19 @@ public class User {
         return vipUntil != null && vipUntil.isAfter(LocalDateTime.now());
     }
 
+    /**
+     * Single definition of an active block. A deadline always wins: once it has
+     * passed the account is unblocked even if the cleanup job has not cleared
+     * {@code blockedAt} yet. A block without a deadline is permanent and stays
+     * active until it is removed explicitly.
+     */
+    public boolean isActivelyBlocked(LocalDateTime now) {
+        if (blockedUntil != null) {
+            return blockedUntil.isAfter(now);
+        }
+        return blockedAt != null;
+    }
+
     @PrePersist
     protected void onCreate() {
         LocalDateTime now = LocalDateTime.now();

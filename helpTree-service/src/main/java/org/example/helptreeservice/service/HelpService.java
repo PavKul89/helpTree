@@ -40,6 +40,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -125,10 +126,10 @@ public class HelpService {
 
         // Помощь — способ выйти из долга, поэтому для помощника ограничением
         // является именно активная блокировка, а не размер долга.
-        if (isActivelyBlocked(helper, now)) {
+        if (helper.isActivelyBlocked(now)) {
             throw new ForbiddenException("Ваш аккаунт заблокирован за долг. Помогите другим пользователям, чтобы разблокировать аккаунт.");
         }
-        if (isActivelyBlocked(receiver, now)) {
+        if (receiver.isActivelyBlocked(now)) {
             throw new BadRequestException("Автор поста заблокирован за долг. Нельзя откликнуться на его пост.");
         }
         checkReceiverDebt(receiver);
@@ -763,13 +764,6 @@ public class HelpService {
         };
     }
 
-    private boolean isActivelyBlocked(User user, LocalDateTime now) {
-        if (user.getBlockedUntil() != null) {
-            return user.getBlockedUntil().isAfter(now);
-        }
-        return user.getBlockedAt() != null;
-    }
-
     private void checkReceiverDebt(User receiver) {
         int debt = receiver.getDebtCount() != null ? receiver.getDebtCount() : 0;
         int helped = receiver.getHelpedCount() != null ? receiver.getHelpedCount() : 0;
@@ -860,7 +854,11 @@ public class HelpService {
 
         LocalDateTime since;
         if (sinceParam != null && !sinceParam.isEmpty()) {
-            since = LocalDateTime.parse(sinceParam);
+            try {
+                since = LocalDateTime.parse(sinceParam);
+            } catch (DateTimeParseException e) {
+                throw new BadRequestException("Параметр 'since' должен быть в формате ISO-8601, например 2026-01-01T00:00:00");
+            }
         } else {
             User user = userRepository.findById(userId)
                     .orElseThrow(() -> new NotFoundException("Пользователь не найден с id: " + userId));

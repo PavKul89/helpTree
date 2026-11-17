@@ -24,6 +24,8 @@ import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -211,6 +213,20 @@ class GlobalExceptionHandlerTest {
                 response.getBody().getMessage());
         assertFalse(response.getBody().getMessage().contains("SQL"));
         assertFalse(response.getBody().getMessage().contains("uk_users_email"));
+    }
+
+    @Test
+    void dateTimeParse_shouldReturn400InsteadOf500() {
+        DateTimeParseException ex = assertThrows(DateTimeParseException.class,
+                () -> LocalDateTime.parse("not-a-date"));
+
+        ResponseEntity<ErrorResponse> response = handler.handleDateTimeParse(
+                ex, request("/api/helps/new-responses/count"));
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertEquals(ErrorType.BAD_REQUEST.getCode(), response.getBody().getCode());
+        assertEquals("Некорректный формат даты и времени", response.getBody().getMessage());
+        assertFalse(response.getBody().getMessage().contains("not-a-date"));
     }
 
     @Test

@@ -13,7 +13,6 @@ import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
 import org.springframework.core.type.AnnotatedTypeMetadata;
-import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -137,34 +136,19 @@ public class SecurityConfig {
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
             .addFilterAfter(rateLimiterFilter, JwtAuthFilter.class)
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()
-                // Everything else is administrative: metrics, loggers and any
-                // endpoint exposed later must never be readable anonymously.
+                // One registry drives both the JWT filter and this chain, so a
+                // route cannot be public here while the filter still returns 401.
+                .requestMatchers(PublicRoutes.REQUEST_MATCHER).permitAll()
+                // Everything else under /actuator is administrative: metrics,
+                // loggers and any endpoint exposed later must never be readable
+                // anonymously.
                 .requestMatchers("/actuator/**").hasRole("ADMIN")
-                .requestMatchers("/swagger-ui/**", "/v3/api-docs", "/v3/api-docs.yaml", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
-                .requestMatchers("/ws/**").permitAll()
-                .requestMatchers(HttpMethod.POST,
-                        "/api/auth/register",
-                        "/api/auth/login",
-                        "/api/auth/refresh",
-                        "/api/auth/password/reset/request",
-                        "/api/auth/password/reset/confirm",
-                        "/api/auth/email/verification/confirm",
-                        "/api/auth/email/change/confirm").permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/posts/**").permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/stats").permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/search").permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/users/public").permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/users/*/public").permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/helps/graph").permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/helps/stats").permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/reviews/**").permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/ratings/**").permitAll()
-                .requestMatchers("/api/achievements").permitAll()
-                .requestMatchers("/api/activities").permitAll()
                 // Defense in depth: the admin controllers re-check the role, but a
                 // misconfigured controller can never be reached by a non-admin.
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                // /internal/** is ADMIN-only in JwtAuthFilter as well; keep an
+                // explicit rule here so the two chains cannot drift apart.
+                .requestMatchers("/internal/**").hasRole("ADMIN")
                 .anyRequest().authenticated()
             )
             .exceptionHandling(exceptions -> exceptions
