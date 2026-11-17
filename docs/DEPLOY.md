@@ -1,8 +1,8 @@
 # Production deployment
 
 The production stack is built from the repository root and publishes only
-Caddy's HTTP/HTTPS ports. PostgreSQL, the backend, Silo, Prometheus, Grafana,
-Jaeger and the frontend stay on a private Docker network.
+Caddy's HTTP/HTTPS ports. PostgreSQL, the backend, Silo, Prometheus,
+Alertmanager, Grafana, Jaeger and the frontend stay on a private Docker network.
 
 ## First deployment
 
@@ -13,9 +13,11 @@ Jaeger and the frontend stay on a private Docker network.
    server's public IP. Let's Encrypt must be able to reach ports 80/443.
 3. Copy `.env.example` to `.env`. Set `DOMAIN`, `ACME_EMAIL`, distinct strong
    values for `DB_PASS`, `JWT_SECRET`, `SILO_SECRET_KEY`,
-   `PROMETHEUS_SCRAPE_PASSWORD`, `GRAFANA_ADMIN_PASSWORD`, and
-   `ADMIN_PASSWORD`. Generate each secret with `openssl rand -base64 64`;
-   choose a non-default `SILO_ACCESS_KEY` and a valid `ADMIN_EMAIL`.
+   `PROMETHEUS_SCRAPE_PASSWORD`, `GRAFANA_ADMIN_PASSWORD`,
+   `ALERTMANAGER_WEBHOOK_URL`, and `ADMIN_PASSWORD`. Generate each secret with
+   `openssl rand -base64 64`; choose a non-default `SILO_ACCESS_KEY` and a
+   valid `ADMIN_EMAIL`. The webhook URL is where Alertmanager sends critical
+   and warning alerts; keep it secret if it embeds a token.
 4. On the first deployment only, set `ADMIN_BOOTSTRAP_ENABLED=true` to create
    the initial administrator. After confirming that account can sign in,
    set it back to `false` and recreate the backend container.

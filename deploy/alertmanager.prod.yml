@@ -1,0 +1,44 @@
+# Production Alertmanager routing.
+#
+# The webhook URL is injected at container start from
+# ALERTMANAGER_WEBHOOK_URL. Treat the value as a secret when the URL contains a
+# bearer token. Alertmanager does not expand environment variables in its config
+# file, so docker-compose.prod.yml renders this template before starting it.
+
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: incident-webhook
+  group_by: ['alertname', 'severity', 'component']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers:
+        - severity = critical
+      receiver: incident-webhook
+      group_wait: 10s
+      repeat_interval: 1h
+      continue: false
+    - matchers:
+        - severity = warning
+      receiver: incident-webhook
+      group_wait: 1m
+      repeat_interval: 4h
+
+inhibit_rules:
+  # A critical alert on a component suppresses its warnings: the on-call
+  # engineer already has the more actionable page.
+  - source_matchers:
+      - severity = critical
+    target_matchers:
+      - severity = warning
+    equal: ['alertname', 'component']
+
+receivers:
+  - name: incident-webhook
+    webhook_configs:
+      - url: '__ALERTMANAGER_WEBHOOK_URL__'
+        send_resolved: true
+        max_alerts: 0

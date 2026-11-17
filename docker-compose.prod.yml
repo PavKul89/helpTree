@@ -179,6 +179,8 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+      alertmanager:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:9090/-/healthy"]
       interval: 20s
@@ -187,6 +189,37 @@ services:
     networks:
       - helptree
     mem_limit: 512m
+    logging: *default-logging
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    restart: unless-stopped
+    environment:
+      ALERTMANAGER_WEBHOOK_URL: ${ALERTMANAGER_WEBHOOK_URL:?Set ALERTMANAGER_WEBHOOK_URL in .env}
+    volumes:
+      - ./deploy/alertmanager.prod.yml:/etc/alertmanager/alertmanager.template.yml:ro
+      - alertmanager_data:/alertmanager
+    command:
+      - /bin/sh
+      - -c
+      - |
+        WEBHOOK=$(printf '%s' "$${ALERTMANAGER_WEBHOOK_URL}" | sed 's/[\\&|]/\\&/g')
+        sed "s|__ALERTMANAGER_WEBHOOK_URL__|$${WEBHOOK}|g" \
+          /etc/alertmanager/alertmanager.template.yml \
+          > /etc/alertmanager/alertmanager.yml
+        exec /bin/alertmanager \
+          --config.file=/etc/alertmanager/alertmanager.yml \
+          --storage.path=/alertmanager
+    expose:
+      - "9093"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:9093/-/healthy"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+    networks:
+      - helptree
+    mem_limit: 128m
     logging: *default-logging
 
   grafana:
@@ -238,6 +271,7 @@ volumes:
   postgres_data:
   silo_data:
   prometheus_data:
+  alertmanager_data:
   grafana_data:
 
 secrets:

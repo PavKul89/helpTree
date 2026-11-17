@@ -336,10 +336,15 @@ Gauge'и очередей и инвариантов обновляет `Operatio
 
 ## 6. Алерты
 
-Правила лежат в `monitoring/alerts.yml`, маршрутизация — в
-`monitoring/alertmanager.yml`. Prometheus читает их из
-`/etc/prometheus/alerts.yml` (volume в `docker-compose.yml`), Alertmanager
-доступен на `:9093`.
+Правила лежат в `monitoring/alerts.yml`. Prometheus читает их из
+`/etc/prometheus/alerts.yml` (volume в обоих compose-файлах) и отправляет
+алерты в Alertmanager на `alertmanager:9093`.
+
+- В dev `docker-compose.yml` используется `monitoring/alertmanager.yml` с
+  локальным webhook-заглушкой; UI доступен на `:9093`.
+- В проде `docker-compose.prod.yml` поднимает Alertmanager из
+  `deploy/alertmanager.prod.yml` без публикации портов. Webhook подставляется
+  из `ALERTMANAGER_WEBHOOK_URL` при старте контейнера.
 
 | Алерт | Условие | Severity |
 | --- | --- | --- |
@@ -365,11 +370,11 @@ critical-правила: они покрывают безопасность, ц�
 
 ### 6.1. Маршрутизация
 
-`alertmanager.yml` отправляет всё в `default-webhook`. Замените URL на
-корпоративный incident-bridge (Slack/PagerDuty/Opsgenie/email). Critical
-повторяется раз в час, warning — раз в 4 часа. `send_resolved: true`
-закрывает инцидент автоматически. Секреты вебхука храните в secret store, а
-не в файле.
+Dev-конфиг отправляет всё в `default-webhook`; продовый конфиг — в
+`incident-webhook` с URL из `ALERTMANAGER_WEBHOOK_URL`. Укажите корпоративный
+incident-bridge (Slack/PagerDuty/Opsgenie/email). Critical повторяется раз в
+час, warning — раз в 4 часа. `send_resolved: true` закрывает инцидент
+автоматически. Секреты вебхука храните в secret store, а не в файле.
 
 Пример email-получателя (раскомментируйте и настройте `global.smtp_*`):
 
