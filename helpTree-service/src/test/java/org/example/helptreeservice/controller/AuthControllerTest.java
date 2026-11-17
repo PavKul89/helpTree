@@ -4,12 +4,15 @@ import org.example.helptreeservice.dto.auth.LogoutRequest;
 import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.UnauthorizedException;
 import org.example.helptreeservice.security.ClientInfoResolver;
+import org.example.helptreeservice.service.AuthCookieService;
 import org.example.helptreeservice.service.AuthService;
 import org.example.helptreeservice.service.AuthorizationService;
 import org.example.helptreeservice.service.AuthorizationService.UserContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -33,6 +36,8 @@ class AuthControllerTest {
     private AuthorizationService authorizationService;
     @Mock
     private ClientInfoResolver clientInfoResolver;
+    @Mock
+    private AuthCookieService authCookieService;
 
     @InjectMocks
     private AuthController controller;
@@ -76,7 +81,8 @@ class AuthControllerTest {
     @Test
     void logout_shouldRequireAuthenticatedUser() {
         assertThrows(UnauthorizedException.class,
-                () -> controller.logout(new LogoutRequest()));
+                () -> controller.logout(new LogoutRequest(),
+                        new MockHttpServletRequest(), new MockHttpServletResponse()));
 
         verify(authService, never()).logout(any(), any(), any());
     }
@@ -87,7 +93,8 @@ class AuthControllerTest {
                 .thenReturn(new UserContext(1L, "USER", "user@test.com"));
 
         assertThrows(UnauthorizedException.class,
-                () -> controller.logout(new LogoutRequest()));
+                () -> controller.logout(new LogoutRequest(),
+                        new MockHttpServletRequest(), new MockHttpServletResponse()));
 
         verify(authService, never()).logout(any(), any(), any());
     }
@@ -101,9 +108,10 @@ class AuthControllerTest {
         LogoutRequest request = new LogoutRequest();
         request.setRefreshToken("refresh");
 
-        controller.logout(request);
+        controller.logout(request, new MockHttpServletRequest(), new MockHttpServletResponse());
 
         verify(authService).logout(1L, sessionId, "refresh");
+        verify(authCookieService).clear(any(MockHttpServletResponse.class));
     }
 
     @Test
@@ -111,9 +119,10 @@ class AuthControllerTest {
         when(authorizationService.getCurrentUser())
                 .thenReturn(new UserContext(7L, "USER", "user@test.com"));
 
-        controller.logoutAll();
+        controller.logoutAll(new MockHttpServletResponse());
 
         verify(authService).logoutAll(7L);
+        verify(authCookieService).clear(any(MockHttpServletResponse.class));
     }
 
     @Test

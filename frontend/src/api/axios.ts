@@ -2,6 +2,8 @@ import axios from 'axios';
 import type { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { API_URL } from '../config';
 import type { AuthResponse } from '../types';
+import { readCsrfToken } from './csrf';
+import { getAccessToken, purgeLegacyTokens, setAccessToken } from './tokenStore';
 
 export { API_URL };
 
@@ -17,9 +19,8 @@ const api = axios.create({
 let refreshPromise: Promise<string> | null = null;
 
 export const clearAuthTokens = () => {
-  localStorage.removeItem('accessToken');
-  localStorage.removeItem('refreshToken');
-  localStorage.removeItem('token');
+  setAccessToken(null);
+  purgeLegacyTokens();
   window.dispatchEvent(new Event('auth:logout'));
 };
 
@@ -32,29 +33,40 @@ const redirectToLogin = () => {
   }
 };
 
-export const refreshAccessToken = (): Promise<string> => {
+interface RefreshOptions {
+  /** Initial session restore must not bounce anonymous visitors to /login. */
+  silent?: boolean;
+}
+
+export const refreshAccessToken = (options: RefreshOptions = {}): Promise<string> => {
   if (!refreshPromise) {
-    const refreshToken = localStorage.getItem('refreshToken');
-    if (!refreshToken) {
+    const csrfToken = readCsrfToken();
+    if (!csrfToken) {
       clearAuthTokens();
-      redirectToLogin();
-      return Promise.reject(new Error('Refresh token is not available'));
+      if (!options.silent) redirectToLogin();
+      return Promise.reject(new Error('CSRF token is not available'));
     }
 
     refreshPromise = axios
-      .post<AuthResponse>(`${API_URL}/api/auth/refresh`, { refreshToken })
-      .then(({ data }) => {
-        if (!data.accessToken || !data.refreshToken) {
-          throw new Error('Refresh response did not contain both tokens');
+      .post<AuthResponse>(
+        `${API_URL}/api/auth/refresh`,
+        {},
+        {
+          withCredentials: true,
+          headers: { 'X-CSRF-Token': csrfToken },
         }
-        localStorage.setItem('accessToken', data.accessToken);
-        localStorage.setItem('refreshToken', data.refreshToken);
+      )
+      .then(({ data }) => {
+        if (!data.accessToken) {
+          throw new Error('Refresh response did not contain an access token');
+        }
+        setAccessToken(data.accessToken);
         window.dispatchEvent(new Event('auth:tokens-refreshed'));
         return data.accessToken;
       })
       .catch((error: unknown) => {
         clearAuthTokens();
-        redirectToLogin();
+        if (!options.silent) redirectToLogin();
         throw error;
       })
       .finally(() => {
@@ -65,7 +77,7 @@ export const refreshAccessToken = (): Promise<string> => {
 };
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
+  const token = getAccessToken();
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
     (config as RetriableRequestConfig)._sentAccessToken = token;
@@ -89,7 +101,7 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    const currentAccessToken = localStorage.getItem('accessToken') || localStorage.getItem('token');
+    const currentAccessToken = getAccessToken();
     if (!currentAccessToken) {
       return Promise.reject(error);
     }

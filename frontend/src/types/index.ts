@@ -256,7 +256,6 @@ export interface AuthResponse {
   email: string;
   role: 'USER' | 'ADMIN';
   expiresIn: number;
-  refreshToken: string;
 }
 
 export interface LoginRequest {

@@ -1,13 +1,14 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import type { User } from '../types';
 import { authApi } from '../api/authApi';
-import { clearAuthTokens } from '../api/axios';
+import { clearAuthTokens, refreshAccessToken } from '../api/axios';
+import { getAccessToken, setAccessToken } from '../api/tokenStore';
 import { notifyWalletUpdated, walletApi } from '../api/walletApi';
 
 interface AuthContextType {
   user: User | null;
   token: string | null;
-  login: (accessToken: string, refreshToken: string, user: User) => void;
+  login: (accessToken: string, user: User) => void;
   logout: () => void;
   setUser: (user: User | null) => void;
   isLoading: boolean;
@@ -26,7 +27,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setUser(null);
     };
     const handleTokenRefresh = () => {
-      setToken(localStorage.getItem('accessToken'));
+      setToken(getAccessToken());
     };
     window.addEventListener('auth:logout', handleLogout);
     window.addEventListener('auth:tokens-refreshed', handleTokenRefresh);
@@ -37,30 +38,35 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   useEffect(() => {
-    const savedToken = localStorage.getItem('accessToken');
-    if (savedToken) {
-      setToken(savedToken);
-      authApi.getCurrentUser()
-        .then((userData) => {
+    let cancelled = false;
+
+    // No token in storage any more: restore the session from the HttpOnly
+    // cookie. A 401 here simply means "anonymous" and must not redirect.
+    refreshAccessToken({ silent: true })
+      .then((accessToken) => {
+        if (cancelled) return;
+        setToken(accessToken);
+        return authApi.getCurrentUser().then((userData) => {
+          if (cancelled) return;
           setUser(userData);
           walletApi
             .claimDailyBonus(userData.id)
             .then((bonus) => notifyWalletUpdated(bonus.balance))
             .catch(() => {});
-        })
-        .catch(() => {
-          clearAuthTokens();
-          setToken(null);
-        })
-        .finally(() => setIsLoading(false));
-    } else {
-      setIsLoading(false);
-    }
+        });
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const login = (accessToken: string, refreshToken: string, newUser: User) => {
-    localStorage.setItem('accessToken', accessToken);
-    localStorage.setItem('refreshToken', refreshToken);
+  const login = (accessToken: string, newUser: User) => {
+    setAccessToken(accessToken);
     setToken(accessToken);
     setUser(newUser);
     walletApi
@@ -70,9 +76,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const logout = () => {
-    const accessToken = localStorage.getItem('accessToken') || localStorage.getItem('token');
-    const refreshToken = localStorage.getItem('refreshToken');
-    void authApi.logout(refreshToken, accessToken).catch((error: unknown) => {
+    void authApi.logout().catch((error: unknown) => {
       console.warn('Не удалось завершить сессию на сервере', error);
     });
     clearAuthTokens();

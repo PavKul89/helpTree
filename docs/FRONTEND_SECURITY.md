@@ -1,54 +1,50 @@
-# Безопасность frontend: токены и зависимости
+# Безопасность frontend: токены, cookie и CSRF
 
-## Хранение токенов
+## Текущая схема
 
-Сейчас оба токена хранятся в `localStorage`:
+Токены больше не хранятся в `localStorage`.
 
-- `accessToken` — короткоживущий токен доступа;
-- `refreshToken` — долгоживущий токен обновления;
-- `token` — совместимый legacy-ключ, который читают перехватчики и WebSocket.
+- **Refresh-токен** выдаётся бэкендом только в `Set-Cookie` с атрибутами
+  `HttpOnly; Secure; SameSite=Strict; Path=/api/auth`. JavaScript не может его
+  прочитать. Cookie попадает только на auth-маршруты.
+- **Access-токен** живёт только в памяти (`frontend/src/api/tokenStore.ts`) и
+  передаётся в заголовке `Authorization: Bearer ...`. После перезагрузки
+  страницы сессия восстанавливается тихим вызовом `/api/auth/refresh`.
+- **CSRF**. Поскольку refresh — единственный мутирующий эндпоинт, который
+  аутентифицируется автоматически прикладываемой cookie, он защищён
+  double-submit: бэкенд дополнительно ставит читаемую cookie `helptree_csrf`,
+  SPA возвращает её значение в заголовке `X-CSRF-Token`, фильтр сравнивает
+  значения в constant-time и дополнительно проверяет `Origin` по списку
+  `CORS_ORIGINS`. CSRF-токен ротируется при каждом refresh.
+- **Logout** / `logout-all` очищают обе cookie на сервере, а не только память SPA.
 
-Это осознанный остаточный риск, а не имитация защиты. Любой успешный XSS в
-браузере может прочитать оба значения. В коде приложения нет
-`dangerouslySetInnerHTML`, `innerHTML`, `eval` и `document.write`, а зависимости
-обновлены, но полностью исключить XSS на стороне SPA нельзя.
+Поле `refreshToken` больше **не сериализуется** в `AuthResponse` (`@JsonIgnore`).
+`RefreshTokenRequest` в теле `/api/auth/refresh` сохранён для небраузерных
+клиентов, но браузерный клиент не может получить refresh-токен из ответа.
 
-## Почему токены пока не перенесены в httpOnly cookie
+## Что по-прежнему нельзя забывать
 
-Текущий бэкенд-контракт ожидает токены в JSON:
+- `style-src` в CSP содержит `'unsafe-inline'` — React использует инлайн-style.
+  Полный отказ от него потребует nonce/hash на сборке.
+- Внешние источники в CSP (`images.unsplash.com`, тайлы карт, Google Fonts,
+  `corsproxy.io`) разрешены явно. При добавлении нового домена его нужно добавить
+  в `Content-Security-Policy` в `deploy/Caddyfile`, иначе ресурс будет заблокирован.
+- `Content-Security-Policy` выставляется только на основной домен, но не на
+  `storage.${DOMAIN}`: консоль MinIO использует инлайн-скрипты и сломалась бы.
+- XSS по-прежнему опасен для access-токена в памяти (он доступен выполняемому
+  JavaScript в текущей вкладке), но не даёт долгоживущего refresh-токена и не
+  сохраняется между перезагрузками.
 
-- `POST /api/auth/refresh` принимает `refreshToken` в теле запроса;
-- `POST /api/auth/logout` принимает `refreshToken` в теле и `accessToken` в
-  заголовке `Authorization`;
-- WebSocket-подключение использует `Authorization: Bearer ...` и отдельный
-  ticket из `GET /api/auth/ws-ticket`.
+## Что сделано ранее
 
-Простое переименование ключей в `localStorage` или запись фиктивной cookie
-ничего не изменит для злоумышленника. Полный переход требует изменений и
-бэкенда, и frontend:
-
-1. бэкенд выставляет refresh-токен в `Set-Cookie: HttpOnly; Secure;
-   SameSite=Strict` и принимает его от браузера автоматически;
-2. добавляется защита от CSRF для операций refresh/logout;
-3. WebSocket-handshake перестаёт зависеть от токена в JavaScript и использует
-   cookie/ticket;
-4. frontend удаляет токены из `localStorage` и перестаёт передавать их вручную.
-
-Пока эти изменения не сделаны, перенос в cookie без изменения API привёл бы к
-рассинхрону контрактов, а не к реальному повышению безопасности.
-
-## Что уже сделано
-
-- `axios` обновлён до `1.21.1`, `react-router-dom` — до `7.18.5` (исправлены
-  уязвимые версии этих runtime-зависимостей).
+- `axios` обновлён до `1.21.1`, `react-router-dom` — до `7.18.5`.
 - Устаревший `react-scripts` заменён на Vite + Jest. `npm audit` показывает
   `0 vulnerabilities`.
-- Сохранён контракт `REACT_APP_API_URL` / `REACT_APP_WS_URL`: Vite инъецирует
-  эти значения на этапе сборки, Docker build args и документация не менялись.
-- Тесты и production-сборка проверяются в CI и Docker.
+- Сохранён контракт `REACT_APP_API_URL` / `REACT_APP_WS_URL`.
 
-## Рекомендуемый следующий шаг
+## Проверки
 
-Реализовать cookie-based refresh с CSRF-защитой на бэкенде и только после этого
-убрать токены из JavaScript-хранилища. До тех пор риск XSS → кража токена
-остаётся принятым.
+- `npm test` — refresh, CSRF-заголовок, одиночный refresh promise, WebSocket-ticket retry.
+- `npm run typecheck`.
+- Backend: `AuthCookieServiceTest`, `RefreshCsrfFilterTest`, `SecurityConfigTest`,
+  `AuthControllerTest`.

@@ -78,7 +78,7 @@ export const RegisterPage = () => {
         city: values.city.trim(),
       });
 
-      login(response.accessToken, response.refreshToken, {
+      login(response.accessToken, {
         id: response.userId,
         email: response.email,
         name: values.name.trim(),

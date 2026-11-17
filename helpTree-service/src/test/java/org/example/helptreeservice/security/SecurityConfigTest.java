@@ -1,6 +1,7 @@
 package org.example.helptreeservice.security;
 
 import org.example.helptreeservice.filter.RateLimiterFilter;
+import org.example.helptreeservice.filter.RefreshCsrfFilter;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.ConditionContext;
@@ -17,7 +18,7 @@ class SecurityConfigTest {
     @Test
     void jwtFilterIsRegisteredOnlyInsideSpringSecurityChain() {
         SecurityConfig securityConfig = new SecurityConfig(
-                mock(JwtAuthFilter.class), mock(RateLimiterFilter.class));
+                mock(JwtAuthFilter.class), mock(RateLimiterFilter.class), mock(RefreshCsrfFilter.class));
 
         FilterRegistrationBean<JwtAuthFilter> registration =
                 securityConfig.jwtAuthFilterRegistration();
@@ -28,10 +29,21 @@ class SecurityConfigTest {
     @Test
     void rateLimiterFilterIsRegisteredOnlyInsideSpringSecurityChain() {
         SecurityConfig securityConfig = new SecurityConfig(
-                mock(JwtAuthFilter.class), mock(RateLimiterFilter.class));
+                mock(JwtAuthFilter.class), mock(RateLimiterFilter.class), mock(RefreshCsrfFilter.class));
 
         FilterRegistrationBean<RateLimiterFilter> registration =
                 securityConfig.rateLimiterFilterRegistration();
+
+        assertFalse(registration.isEnabled());
+    }
+
+    @Test
+    void csrfFilterIsRegisteredOnlyInsideSpringSecurityChain() {
+        SecurityConfig securityConfig = new SecurityConfig(
+                mock(JwtAuthFilter.class), mock(RateLimiterFilter.class), mock(RefreshCsrfFilter.class));
+
+        FilterRegistrationBean<RefreshCsrfFilter> registration =
+                securityConfig.refreshCsrfFilterRegistration();
 
         assertFalse(registration.isEnabled());
     }

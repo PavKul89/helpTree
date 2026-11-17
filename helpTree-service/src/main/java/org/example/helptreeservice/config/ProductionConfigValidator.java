@@ -44,6 +44,7 @@ public class ProductionConfigValidator implements InitializingBean {
         validateBootstrapAdmin(errors);
         validateActuator(errors);
         validateOrigins(errors, warnings);
+        validateAuthCookies(errors);
         validateOperations(warnings);
         validateLimits(errors);
 
@@ -171,6 +172,28 @@ public class ProductionConfigValidator implements InitializingBean {
         }
         if (!frontend.toLowerCase(Locale.ROOT).startsWith("https://")) {
             warnings.add("FRONTEND_BASE_URL should use https in production");
+        }
+    }
+
+    /**
+     * The refresh cookie is the only credential the browser sends implicitly.
+     * Production must not weaken Secure or SameSite, otherwise the CSRF filter
+     * would be the only remaining barrier.
+     */
+    private void validateAuthCookies(List<String> errors) {
+        boolean secure = environment.getProperty("app.auth.refresh-cookie-secure",
+                Boolean.class, true);
+        if (!secure) {
+            errors.add("AUTH_COOKIE_SECURE must be true in production");
+        }
+        String sameSite = environment.getProperty("app.auth.refresh-cookie-same-site", "Strict");
+        if (!"Strict".equalsIgnoreCase(sameSite)) {
+            errors.add("AUTH_COOKIE_SAME_SITE must be Strict in production");
+        }
+        String refreshName = environment.getProperty("app.auth.refresh-cookie-name", "helptree_refresh");
+        String csrfName = environment.getProperty("app.auth.csrf-cookie-name", "helptree_csrf");
+        if (refreshName.equalsIgnoreCase(csrfName)) {
+            errors.add("AUTH_REFRESH_COOKIE_NAME and AUTH_CSRF_COOKIE_NAME must differ");
         }
     }
 

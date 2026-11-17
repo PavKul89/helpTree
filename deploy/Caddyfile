@@ -7,6 +7,10 @@
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "strict-origin-when-cross-origin"
+		# The refresh token is HttpOnly; CSP is the second layer that stops an
+		# injected script from running and exfiltrating the in-memory access token.
+		# 'unsafe-inline' in style-src is required by React inline style props.
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://images.unsplash.com https://storage.{$DOMAIN} https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org; connect-src 'self' wss://{$DOMAIN} https://storage.{$DOMAIN} https://corsproxy.io https://nominatim.openstreetmap.org; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
 	}
 
 	@backend path /api/* /ws/*

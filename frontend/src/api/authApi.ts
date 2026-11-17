@@ -3,6 +3,7 @@ import type { PageResponse } from './pagination';
 import type { AuthResponse, LoginRequest, RegisterRequest, User, UserPublic, WsTicket } from '../types';
 import { API_URL } from '../config';
 import api, { refreshAccessToken } from './axios';
+import { getAccessToken } from './tokenStore';
 
 export type ProfileVisibility = 'PUBLIC' | 'REGISTERED' | 'PRIVATE';
 export type DigestFrequency = 'INSTANT' | 'DAILY' | 'WEEKLY' | 'OFF';
@@ -158,13 +159,11 @@ export const authApi = {
     await api.post('/api/auth/logout-all');
   },
 
-  logout: async (refreshToken: string | null, accessToken: string | null): Promise<void> => {
-    if (!accessToken) return;
-    await api.post(
-      '/api/auth/logout',
-      { refreshToken },
-      { headers: { Authorization: `Bearer ${accessToken}` } }
-    );
+  logout: async (): Promise<void> => {
+    if (!getAccessToken()) return;
+    // The HttpOnly cookie is attached automatically; the Bearer header comes
+    // from the request interceptor.
+    await api.post('/api/auth/logout', {}, { withCredentials: true });
   },
 
   // --------------------------------------------------- account preferences

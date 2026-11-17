@@ -2,6 +2,7 @@ package org.example.helptreeservice.security;
 
 import org.example.helptreeservice.enums.ErrorType;
 import org.example.helptreeservice.filter.RateLimiterFilter;
+import org.example.helptreeservice.filter.RefreshCsrfFilter;
 import org.example.helptreeservice.security.JwtAuthFilter;
 import org.example.helptreeservice.util.ApiErrorWriter;
 import org.springframework.beans.factory.annotation.Value;
@@ -39,13 +40,16 @@ public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
     private final RateLimiterFilter rateLimiterFilter;
+    private final RefreshCsrfFilter refreshCsrfFilter;
 
     @Value("${app.cors.allowed-origins:http://localhost:3000,http://localhost:3001,http://localhost:5173}")
     private String allowedOrigins;
 
-    public SecurityConfig(JwtAuthFilter jwtAuthFilter, RateLimiterFilter rateLimiterFilter) {
+    public SecurityConfig(JwtAuthFilter jwtAuthFilter, RateLimiterFilter rateLimiterFilter,
+                          RefreshCsrfFilter refreshCsrfFilter) {
         this.jwtAuthFilter = jwtAuthFilter;
         this.rateLimiterFilter = rateLimiterFilter;
+        this.refreshCsrfFilter = refreshCsrfFilter;
     }
 
     @Bean
@@ -65,6 +69,14 @@ public class SecurityConfig {
     public FilterRegistrationBean<RateLimiterFilter> rateLimiterFilterRegistration() {
         FilterRegistrationBean<RateLimiterFilter> registration =
                 new FilterRegistrationBean<>(rateLimiterFilter);
+        registration.setEnabled(false);
+        return registration;
+    }
+
+    @Bean
+    public FilterRegistrationBean<RefreshCsrfFilter> refreshCsrfFilterRegistration() {
+        FilterRegistrationBean<RefreshCsrfFilter> registration =
+                new FilterRegistrationBean<>(refreshCsrfFilter);
         registration.setEnabled(false);
         return registration;
     }
@@ -134,6 +146,7 @@ public class SecurityConfig {
             .csrf(AbstractHttpConfigurer::disable)
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
+            .addFilterBefore(refreshCsrfFilter, JwtAuthFilter.class)
             .addFilterAfter(rateLimiterFilter, JwtAuthFilter.class)
             .authorizeHttpRequests(auth -> auth
                 // One registry drives both the JWT filter and this chain, so a

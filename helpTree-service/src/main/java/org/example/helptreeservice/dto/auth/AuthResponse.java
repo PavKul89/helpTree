@@ -1,5 +1,6 @@
 package org.example.helptreeservice.dto.auth;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -10,6 +11,8 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 public class AuthResponse {
     private String accessToken;
+    /** Internal transport only: exposed to the browser as an HttpOnly cookie. */
+    @JsonIgnore
     private String refreshToken;
     private Long userId;
     private String email;

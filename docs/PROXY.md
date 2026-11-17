@@ -45,3 +45,14 @@ only from the proxy on the private application network.
 - [ ] Configure the proxy to overwrite `X-Forwarded-For` and `X-Real-IP` using
       `$remote_addr`; do not append client-provided forwarded values.
 - [ ] Forward the WebSocket `Upgrade` and `Connection` headers for `/ws/`.
+
+## Auth cookies and CSP
+
+`deploy/Caddyfile` sends `Strict-Transport-Security`, `X-Content-Type-Options`,
+`Referrer-Policy` and `Content-Security-Policy`. The CSP allows only the
+application origin for scripts plus the explicitly used asset and tile domains;
+every new external resource must be added there or it will be blocked. Do not
+apply this CSP to the MinIO console on `storage.${DOMAIN}` — it relies on inline
+scripts. The refresh cookie is scoped to `/api/auth` and uses `Secure` and
+`SameSite=Strict`; `ProductionConfigValidator` refuses to start in production if
+either is weakened.

@@ -185,6 +185,16 @@ app:
   jwtSecret: ${JWT_SECRET}
   jwtExpirationMs: ${JWT_EXPIRATION_MS:1800000}
   auth:
+    # Refresh token lives in an HttpOnly cookie, never in a JSON response or
+    # browser storage. The companion CSRF cookie is readable by the SPA and is
+    # echoed in X-CSRF-Token on /api/auth/refresh (double submit).
+    refresh-cookie-name: ${AUTH_REFRESH_COOKIE_NAME:helptree_refresh}
+    refresh-cookie-path: ${AUTH_REFRESH_COOKIE_PATH:/api/auth}
+    refresh-cookie-secure: ${AUTH_COOKIE_SECURE:true}
+    refresh-cookie-same-site: ${AUTH_COOKIE_SAME_SITE:Strict}
+    csrf-cookie-name: ${AUTH_CSRF_COOKIE_NAME:helptree_csrf}
+    csrf-cookie-path: ${AUTH_CSRF_COOKIE_PATH:/}
+    csrf-header-name: ${AUTH_CSRF_HEADER_NAME:X-CSRF-Token}
     password-reset-token-minutes: ${PASSWORD_RESET_TOKEN_MINUTES:30}
     email-verification-token-hours: ${EMAIL_VERIFICATION_TOKEN_HOURS:24}
     email-change-token-hours: ${EMAIL_CHANGE_TOKEN_HOURS:24}

@@ -1,6 +1,7 @@
 package org.example.helptreeservice.controller;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirements;
@@ -20,8 +21,10 @@ import org.example.helptreeservice.dto.auth.RefreshTokenRequest;
 import org.example.helptreeservice.dto.auth.SessionDto;
 import org.example.helptreeservice.dto.auth.WsTicketResponse;
 import org.example.helptreeservice.dto.users.CreateUserRequest;
+import org.example.helptreeservice.exception.BadRequestException;
 import org.example.helptreeservice.exception.UnauthorizedException;
 import org.example.helptreeservice.security.ClientInfoResolver;
+import org.example.helptreeservice.service.AuthCookieService;
 import org.example.helptreeservice.service.AuthService;
 import org.example.helptreeservice.service.AuthSessionService;
 import org.example.helptreeservice.service.AuthorizationService;
@@ -50,57 +53,81 @@ public class AuthController {
     private final AuthService authService;
     private final AuthorizationService authorizationService;
     private final ClientInfoResolver clientInfoResolver;
+    private final AuthCookieService authCookieService;
 
     @PostMapping("/register")
     @Operation(summary = "Зарегистрировать аккаунт",
-            description = "Создаёт пользователя и сразу возвращает пару access/refresh токенов.")
+            description = "Создаёт пользователя, возвращает access token в теле и refresh token в HttpOnly cookie.")
     @SecurityRequirements
-    public ResponseEntity<AuthResponse> register(@Valid @RequestBody CreateUserRequest request) {
+    public ResponseEntity<AuthResponse> register(@Valid @RequestBody CreateUserRequest request,
+                                                  HttpServletResponse httpResponse) {
         AuthResponse response = authService.register(request);
+        authCookieService.writeTokens(httpResponse, response.getRefreshToken(), authCookieService.newCsrfToken());
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @PostMapping("/login")
     @Operation(summary = "Войти по email и паролю",
-            description = "Возвращает access/refresh токены. Защищено распределённым rate limit.")
+            description = "Возвращает access token в теле и обновляет HttpOnly refresh cookie. "
+                    + "Защищено распределённым rate limit.")
     @SecurityRequirements
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request,
-                                              HttpServletRequest httpRequest) {
+                                              HttpServletRequest httpRequest,
+                                              HttpServletResponse httpResponse) {
         AuthResponse response = authService.login(
                 request,
                 clientInfoResolver.resolveIp(httpRequest),
                 clientInfoResolver.resolveUserAgent(httpRequest));
+        authCookieService.writeTokens(httpResponse, response.getRefreshToken(), authCookieService.newCsrfToken());
         return ResponseEntity.ok(response);
     }
 
     @PostMapping("/refresh")
     @Operation(summary = "Обновить access token",
-            description = "Принимает refresh token и возвращает новую пару токенов.")
+            description = "Браузер передаёт refresh token в HttpOnly cookie и CSRF-токен в заголовке. "
+                    + "Явный refreshToken в теле сохранён для небраузерных клиентов.")
     @SecurityRequirements
-    public ResponseEntity<AuthResponse> refresh(@Valid @RequestBody RefreshTokenRequest request,
-                                                HttpServletRequest httpRequest) {
+    public ResponseEntity<AuthResponse> refresh(@RequestBody(required = false) RefreshTokenRequest request,
+                                                HttpServletRequest httpRequest,
+                                                HttpServletResponse httpResponse) {
+        String cookieToken = authCookieService.readRefreshToken(httpRequest);
+        String bodyToken = request != null ? request.getRefreshToken() : null;
+        String rawToken = cookieToken != null && !cookieToken.isBlank() ? cookieToken : bodyToken;
+        if (rawToken == null || rawToken.isBlank()) {
+            throw new BadRequestException("Refresh токен обязателен");
+        }
+
         AuthResponse response = authService.refresh(
-                request.getRefreshToken(),
+                rawToken,
                 clientInfoResolver.resolveIp(httpRequest),
                 clientInfoResolver.resolveUserAgent(httpRequest));
+        // Rotate the CSRF token together with the refresh token so a stolen
+        // double-submit value cannot be replayed after the next refresh.
+        authCookieService.writeTokens(httpResponse, response.getRefreshToken(), authCookieService.newCsrfToken());
         return ResponseEntity.ok(response);
     }
 
     @PostMapping("/logout")
     @Operation(summary = "Завершить текущую сессию")
-    public ResponseEntity<Void> logout(@RequestBody(required = false) LogoutRequest request) {
+    public ResponseEntity<Void> logout(@RequestBody(required = false) LogoutRequest request,
+                                       HttpServletRequest httpRequest,
+                                       HttpServletResponse httpResponse) {
         UserContext user = requireCurrentUser();
         UUID sessionId = requireCurrentSession();
-        authService.logout(user.getUserId(), sessionId,
-                request != null ? request.getRefreshToken() : null);
+        String refreshToken = request != null && request.getRefreshToken() != null
+                ? request.getRefreshToken()
+                : authCookieService.readRefreshToken(httpRequest);
+        authService.logout(user.getUserId(), sessionId, refreshToken);
+        authCookieService.clear(httpResponse);
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/logout-all")
     @Operation(summary = "Завершить все сессии пользователя")
-    public ResponseEntity<Void> logoutAll() {
+    public ResponseEntity<Void> logoutAll(HttpServletResponse httpResponse) {
         UserContext user = requireCurrentUser();
         authService.logoutAll(user.getUserId());
+        authCookieService.clear(httpResponse);
         return ResponseEntity.noContent().build();
     }
 

@@ -3,6 +3,7 @@ import { Client, StompSubscription } from '@stomp/stompjs';
 import { WS_URL } from '../config';
 import { authApi } from '../api/authApi';
 import { refreshAccessToken } from '../api/axios';
+import { getAccessToken } from '../api/tokenStore';
 import type { Chat, Message, Notification, WsMessageEnvelope } from '../types';
 
 export type WsMessageType =
@@ -213,7 +214,7 @@ export function useWebSocketChat(options: UseWebSocketChatOptions) {
     if (!userId) return;
     if (clientRef.current?.active) return;
 
-    const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
+    const token = getAccessToken();
     if (!token) return;
 
     const client = new Client({
@@ -228,7 +229,7 @@ export function useWebSocketChat(options: UseWebSocketChatOptions) {
           const wsTicket = await authApi.getWsTicket();
           const separator = WS_URL.includes('?') ? '&' : '?';
           client.brokerURL = `${WS_URL}${separator}ticket=${encodeURIComponent(wsTicket.ticket)}`;
-          const currentToken = localStorage.getItem('accessToken') || localStorage.getItem('token');
+          const currentToken = getAccessToken();
           if (currentToken) {
             client.connectHeaders.Authorization = `Bearer ${currentToken}`;
           }
