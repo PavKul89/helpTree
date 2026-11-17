@@ -37,7 +37,7 @@ $env:INTEGRATION_TEST = 'true'
 Set-Location frontend
 npm ci
 $env:CI = 'true'
-npm test -- --watchAll=false
+npm test
 npm run build
 ```
 

@@ -74,8 +74,7 @@ export const AdminDashboardPage: React.FC = () => {
             stats: statsResult.status === 'fulfilled' ? statsResult.value : null,
             helpStats: helpStatsResult.status === 'fulfilled' ? helpStatsResult.value : null,
             statusCounts: statusCountsResult.status === 'fulfilled' ? statusCountsResult.value : null,
-            userSummary: userSummaryResult.status === 'fulfilled' ? userSummaryResult.value : null
-              ?? null,
+            userSummary: userSummaryResult.status === 'fulfilled' ? userSummaryResult.value : null,
             loadedAt: new Date(),
             failures,
           });

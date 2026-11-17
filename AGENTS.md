@@ -5,7 +5,7 @@
 This repo is a two-part app:
 
 - `helpTree-service/` is the Spring Boot 4 backend (Java 21, Maven multi-module parent at the repo root).
-- `frontend/` is a React + TypeScript SPA built with `react-scripts`.
+- `frontend/` is a React + TypeScript SPA built with Vite and tested with Jest.
 - Root `docker-compose.yml` runs Postgres, Prometheus, Alertmanager, Grafana, Jaeger, and Silo/MinIO.
 
 The root Maven project is `helpTree-parent` in `pom.xml`; the only application module is `helpTree-service`.
@@ -132,10 +132,10 @@ Prefer the project’s existing test entry points:
 
 ```bash
 ./mvnw -pl helpTree-service test
-cd frontend && npm test -- --watchAll=false
+cd frontend && npm test
 ```
 
-The frontend uses React Testing Library and CRA/Jest conventions (`testing-library/react`, `@testing-library/jest-dom`). The backend uses Spring Boot test starters and Testcontainers for migration/integration tests where relevant.
+The frontend uses React Testing Library with Jest/jsdom (`testing-library/react`, `@testing-library/jest-dom`). The backend uses Spring Boot test starters and Testcontainers for migration/integration tests where relevant.
 
 ## Editing guidance for AI agents
 
