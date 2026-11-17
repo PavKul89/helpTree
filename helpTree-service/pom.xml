@@ -17,8 +17,11 @@
     <description>Main service for helpTree application</description>
 
     <properties>
-        <!-- Opt-in only: baselining a non-empty schema can silently skip V1. -->
-        <flyway.baseline-on-migrate>false</flyway.baseline-on-migrate>
+        <!-- Opt-in only: baselining a non-empty schema can silently skip V1.
+             Do not use a flyway.* prefix here: the Maven plugin forwards every
+             flyway.* project property to Flyway as a config key and rejects
+             kebab-case names such as flyway.baseline-on-migrate. -->
+        <helptree.flyway.baseline-on-migrate>false</helptree.flyway.baseline-on-migrate>
     </properties>
 
     <!-- ================================================= -->
@@ -244,7 +247,7 @@
                     <locations>
                         <location>filesystem:${project.basedir}/src/main/resources/db/migration</location>
                     </locations>
-                    <baselineOnMigrate>${flyway.baseline-on-migrate}</baselineOnMigrate>
+                    <baselineOnMigrate>${helptree.flyway.baseline-on-migrate}</baselineOnMigrate>
                     <cleanDisabled>true</cleanDisabled>
                 </configuration>
                 <dependencies>
