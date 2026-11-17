@@ -62,7 +62,9 @@ spring:
 
   flyway:
     enabled: true
-    baseline-on-migrate: true
+    # Opt-in for a one-time legacy bootstrap only. Leaving it enabled on an
+    # unexpected non-empty schema would baseline at V1 and silently skip it.
+    baseline-on-migrate: ${FLYWAY_BASELINE_ON_MIGRATE:false}
     validate-on-migrate: true
     clean-disabled: true
     out-of-order: false

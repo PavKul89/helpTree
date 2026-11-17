@@ -4,6 +4,8 @@ import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
@@ -13,9 +15,13 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import javax.sql.DataSource;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -34,7 +40,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Testcontainers(disabledWithoutDocker = true)
 class Block22MigrationTest {
 
-    private static final String LATEST_VERSION = "66";
+    private static final Pattern MIGRATION_FILE = Pattern.compile("^V(\\d+)__.+\\.sql$");
+    private static final String LATEST_VERSION = latestMigrationVersion();
 
     @Container
     static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16")
@@ -72,7 +79,8 @@ class Block22MigrationTest {
         toLatest.migrate();
         toLatest.validate();
 
-        assertEquals(LATEST_VERSION, currentVersion());
+        assertEquals(LATEST_VERSION, currentVersion(),
+                "The rehearsal must cover the newest migration on the test classpath");
     }
 
     @Test
@@ -183,6 +191,35 @@ class Block22MigrationTest {
     }
 
     // --------------------------------------------------------------- helpers
+
+    /**
+     * Discovers the newest Flyway version from the migration files on the test
+     * classpath. Hardcoding it here made the rehearsal silently stop validating
+     * new migrations as soon as a V67+ file was added.
+     */
+    private static String latestMigrationVersion() {
+        try {
+            Resource[] migrations = new PathMatchingResourcePatternResolver()
+                    .getResources("classpath*:db/migration/V*.sql");
+            int latest = 0;
+            for (Resource migration : migrations) {
+                String filename = migration.getFilename();
+                if (filename == null) {
+                    continue;
+                }
+                Matcher matcher = MIGRATION_FILE.matcher(filename);
+                if (matcher.matches()) {
+                    latest = Math.max(latest, Integer.parseInt(matcher.group(1)));
+                }
+            }
+            if (latest == 0) {
+                throw new IllegalStateException("No Flyway migrations found on the test classpath");
+            }
+            return String.valueOf(latest);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Cannot discover Flyway migrations", e);
+        }
+    }
 
     private static String currentVersion() {
         return jdbc.queryForObject(

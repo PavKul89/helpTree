@@ -33,6 +33,10 @@ ShedLock для блокировки планировщиков между эк�
    - на копии существующей базы с данными.
 5. `spring.flyway.validate-on-migrate=true`, `clean-disabled=true`,
    `out-of-order=false` включены в `application.yaml`.
+   `baseline-on-migrate` по умолчанию выключен. Включайте его только на время
+   одноразового перевода legacy-базы без `flyway_schema_history`
+   (`FLYWAY_BASELINE_ON_MIGRATE=true`), затем сразу выключайте: иначе Flyway
+   может забазировать неожиданную схему на V1 и молча пропустить миграцию.
 6. CI workflow `.github/workflows/flyway-migrations.yml` выполняет
    `flyway:migrate` на пустой БД, затем `flyway:validate`, а также миграцию
    копии V40-данных с проверкой сохранности строк. Отдельный `validate` на

@@ -16,6 +16,11 @@
     <name>helpTree-service</name>
     <description>Main service for helpTree application</description>
 
+    <properties>
+        <!-- Opt-in only: baselining a non-empty schema can silently skip V1. -->
+        <flyway.baseline-on-migrate>false</flyway.baseline-on-migrate>
+    </properties>
+
     <!-- ================================================= -->
     <!-- Зависимости -->
     <!-- ================================================= -->
@@ -239,7 +244,7 @@
                     <locations>
                         <location>filesystem:${project.basedir}/src/main/resources/db/migration</location>
                     </locations>
-                    <baselineOnMigrate>true</baselineOnMigrate>
+                    <baselineOnMigrate>${flyway.baseline-on-migrate}</baselineOnMigrate>
                     <cleanDisabled>true</cleanDisabled>
                 </configuration>
                 <dependencies>

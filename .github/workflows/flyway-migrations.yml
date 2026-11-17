@@ -84,6 +84,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block15_schema.sql
           psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block16_schema.sql
           psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block17_schema.sql
+          psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block18_schema.sql
           psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block19_schema.sql
           psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block23_schema.sql
 
@@ -143,5 +144,6 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block15_schema.sql
           psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block16_schema.sql
           psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block17_schema.sql
+          psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block18_schema.sql
           psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block19_schema.sql
           psql -v ON_ERROR_STOP=1 -f scripts/fixtures/verify_block23_schema.sql

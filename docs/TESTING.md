@@ -15,18 +15,21 @@
 
 Предварительно должны быть доступны:
 
-- PostgreSQL с базой `helpTree_db` (пользователь `helpTree` / пароль `helpTree`);
+- PostgreSQL с базой из `.env` (`DB_URL`, `DB_USER`, `DB_PASS`);
 - Docker — только для `Block22MigrationTest` (образ `postgres:16`).
 
 ```powershell
 # Интеграционные тесты против локальной БД
+Get-Content .env | Where-Object { $_ -match '^[A-Za-z_][A-Za-z0-9_]*=' } | ForEach-Object {
+    $parts = $_ -split '=', 2
+    [System.Environment]::SetEnvironmentVariable($parts[0].Trim(), $parts[1].Trim(), 'Process')
+}
 $env:INTEGRATION_TEST = 'true'
 .\mvnw.cmd -B -pl helpTree-service test
 ```
 
-Поднимите PostgreSQL на `localhost:5432` с базой `helpTree_db` и учётными
-данными `helpTree` / `helpTree` перед запуском. Без `INTEGRATION_TEST=true`
-интеграционные классы пропускаются.
+Перед запуском поднимите PostgreSQL с теми же значениями, что указаны в `.env`.
+Без `INTEGRATION_TEST=true` интеграционные классы пропускаются.
 
 Фронтенд:
 
@@ -76,7 +79,7 @@ rate-limit в `Block22ReportIntegrationTest` создаёт собственну
 | Telegram ID и избранное | Доступ только владельцу или ADMIN |
 | Чужие ресурсы | `AuthorizationService` с реальными атрибутами запроса не даёт управлять чужими объектами |
 
-### 22.2 Помощь — `Block22HelpIntegrationTest` (7 тестов)
+### 22.2 Помощь — `Block22HelpIntegrationTest` (8 тестов)
 
 | Сценарий | Проверка |
 | --- | --- |
@@ -87,6 +90,7 @@ rate-limit в `Block22ReportIntegrationTest` создаёт собственну
 | Конкурентный confirm (4 потока) | Награда начисляется ровно один раз, все ответы `CONFIRMED` |
 | Роли | Получатель не завершает помощь, helper не подтверждает |
 | Завершение/отмена | Завершённую помощь нельзя отменить, подтверждение — единственная точка награды |
+| Месячный лимит пары | Третья награда за месяц пропускается, в следующем месяце счётчик сбрасывается |
 
 ### 22.3 Кошелёк — `Block22WalletIntegrationTest` (7 тестов)
 
@@ -112,7 +116,7 @@ rate-limit в `Block22ReportIntegrationTest` создаёт собственну
 | Блок `MESSAGES` | Запрещает новые сообщения в паре и не мешает общаться с третьими лицами |
 | Чужие события | Подписка/отправка в чужой чат не создаёт событий |
 
-### 22.5 Отзывы и рейтинг — `Block22ReviewIntegrationTest` (8 тестов)
+### 22.5 Отзывы и рейтинг — `Block22ReviewIntegrationTest` (9 тестов)
 
 | Сценарий | Проверка |
 | --- | --- |
@@ -124,6 +128,7 @@ rate-limit в `Block22ReportIntegrationTest` создаёт собственну
 | Ответ и удаление | Ответ только получателю, удаление только автору |
 | Административное удаление | Нужны ADMIN и причина; пишется `REVIEW_DELETED` в `admin_audit_log` |
 | Топ рейтинга | Не содержит `null` и удалённых пользователей |
+| Удалённый аккаунт | Проекция рейтинга удалённого пользователя исчезает |
 
 ### 22.6 Комментарии — `Block22CommentIntegrationTest` (8 тестов)
 
@@ -156,7 +161,7 @@ rate-limit в `Block22ReportIntegrationTest` создаёт собственну
 
 | Сценарий | Проверка |
 | --- | --- |
-| Чистая PostgreSQL | Flyway прогоняет все миграции до V66 без ошибок |
+| Чистая PostgreSQL | Flyway прогоняет все миграции до последней версии из `db/migration` (сейчас V66) без ошибок |
 | Данные V40 | Загружается `scripts/fixtures/legacy_v40_data.sql`, затем миграции до последней версии |
 | Сохранность данных | Пользователи, посты, помощи и кошелёк сохраняются; рейтинг 0 → 3.0, `NULL debt` → 0 |
 | Проекции | Появляются строки `user_rating_stats`, ожидаемые для legacy-данных |
@@ -192,17 +197,17 @@ rate-limit в `Block22ReportIntegrationTest` создаёт собственну
 
 ```
 Block22SecurityIntegrationTest    9
-Block22HelpIntegrationTest        7
+Block22HelpIntegrationTest        8
 Block22WalletIntegrationTest      7
 Block22ChatIntegrationTest        7
-Block22ReviewIntegrationTest      8
+Block22ReviewIntegrationTest      9
 Block22CommentIntegrationTest     8
 Block22ReportIntegrationTest      9
-Block22MigrationTest              6
+Block22MigrationTest              7
 Block22ContractTest               8
 Block22EndToEndIntegrationTest    4
 -------------------------------------
-итого                            73
+итого                            76
 ```
 
-Все 73 теста проходят на PostgreSQL 16.15 и Docker с `postgres:16`.
+Все 76 тестов проходят на PostgreSQL 16.15 и Docker с `postgres:16`.
